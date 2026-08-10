@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Data / large artifacts — never in git
+mtype.txt
+*.h5
+*.npz
+*.npy
+samples/
+dataset_*/
+
+# Notebook checkpoints & extraction artifacts
+.ipynb_checkpoints/
+_code_cells.py
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Local calibration / caches
+.hifusim/
+
+# Source notebook stays in Drive/Colab, not in git (11 MB)
+hifu_pred_dx300_t128.ipynb
