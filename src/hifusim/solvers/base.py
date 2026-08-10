@@ -87,6 +87,7 @@ class SolverResult:
     converged_period: int
     settle_capped: bool
     convergence_history: list[tuple[int, float, float]]  # (period, peak, rel_change)
+    phasors: dict[int, np.ndarray] = field(default_factory=dict)  # harmonic n -> phasor
     meta: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -98,6 +99,15 @@ class SolverResult:
     def phase(self) -> np.ndarray:
         """Derived phase [rad] (constant global offset; relative phase exact)."""
         return np.angle(self.phasor).astype(np.float32)
+
+    def harmonic_amp(self, n: int) -> np.ndarray:
+        """Derived |phasor| of harmonic ``n`` (requested via ``harmonics=`` at run)."""
+        if n not in self.phasors:
+            raise KeyError(
+                f"harmonic {n} was not recorded (available: {sorted(self.phasors)}); "
+                f"pass harmonics=(1, {n}) to run()."
+            )
+        return np.abs(self.phasors[n]).astype(np.float32)
 
 
 def interior_slices(shape: tuple[int, ...], margin: int) -> tuple[slice, ...]:

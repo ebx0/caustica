@@ -1,0 +1,232 @@
+"""Shared CW k-space PSTD engine used by the `linear` and `westervelt` solvers.
+
+One implementation, one set of numerics: the two native solvers differ ONLY
+in whether the Westervelt nonlinear term enters the pressure update. Keeping
+a single engine guarantees the M5 gate "beta=0 => westervelt == linear"
+structurally (identical code path when the medium is linear) and gives the
+future GPU work (M7) a single surface to optimize.
+
+Scheme per time step (dt), all states float32 on the chosen backend:
+
+    u_i <- (u_i - dt/rho * IFFT{ i k_i kappa FFT{p} }) * e^{-alpha c dt} * sponge
+    p   <- (p - (rho c^2 dt + 2 beta dt p) * IFFT{ kappa sum_i i k_i FFT{u_i} })
+           * e^{-alpha c dt} * sponge
+    p[src] += p0 * ramp(t) * sin(omega t - phase)
+
+The nonlinear term is the notebook's validated form: dp_nl = -2 beta dt p
+(div u), i.e. the local Westervelt correction to the equation of state.
+Absorption is applied symmetrically to p and u (spatial decay = alpha; see
+the M4 devlog entry for the alpha/2 pitfall this avoids).
+
+Steady-state harmonics: the record window accumulates a leakage-free
+single-bin DFT at n*f0 for every requested harmonic n (exact-period dt makes
+all integer harmonics leakage-free in one pass).
+"""
+
+from __future__ import annotations
+
+import logging
+from itertools import product
+from math import ceil, floor
+
+import numpy as np
+
+from hifusim.core.backend import get_backend
+from hifusim.core.grid import Grid
+from hifusim.medium import Medium
+from hifusim.solvers.base import CWRunSpec, SolverResult, interior_slices
+from hifusim.solvers.kspace import operators as ops
+from hifusim.sources import CWSource, ramp_envelope
+
+log = logging.getLogger("hifusim")
+
+
+def run_cw_kspace_pstd(
+    solver_name: str,
+    grid: Grid,
+    medium: Medium,
+    source: CWSource,
+    spec: CWRunSpec,
+    backend: str = "auto",
+    record_region: tuple[slice, ...] | None = None,
+    reference_point: tuple[int, ...] | None = None,
+    nonlinear: bool = False,
+    harmonics: tuple[int, ...] = (1,),
+) -> SolverResult:
+    """Execute one steady-state CW solve (see module docstring for the scheme)."""
+    harmonics = tuple(dict.fromkeys(int(h) for h in harmonics))
+    if not harmonics or harmonics[0] != 1 or any(h < 1 for h in harmonics):
+        raise ValueError(f"harmonics must start with 1 (fundamental), got {harmonics}")
+
+    b = get_backend(backend)
+    xp, fft = b.xp, b.fft
+    nd = grid.ndim
+    dx = grid.dx
+    period = 1.0 / source.f0
+    omega = 2.0 * np.pi * source.f0
+    c_max, c_min = medium.c_max, medium.c_min
+
+    # ---- exact-period dt under the CFL limit (notebook policy) ----
+    dt_cfl = spec.cfl * dx / c_max
+    spp = max(2, int(floor(period / dt_cfl)))
+    dt = period / spp
+    while dt * c_max / dx > spec.cfl_hard_max + 1e-12 and spp < 1024:
+        spp += 1
+        dt = period / spp
+
+    # ---- padded FFT domain; property maps edge-replicated ----
+    active = tuple(slice(0, n) for n in grid.shape)
+    padded = ops.pad_shape(grid.shape)
+    dt_over_rho = xp.asarray(dt / ops.pad_volume(medium.rho, padded), dtype=xp.float32)
+    rhoc2_dt = xp.asarray(
+        ops.pad_volume(medium.rho * medium.c.astype(np.float64) ** 2, padded) * dt,
+        dtype=xp.float32,
+    )
+    absorb = xp.asarray(
+        np.exp(-ops.pad_volume(medium.alpha * medium.c, padded) * dt), dtype=xp.float32
+    )
+    beta2_dt = None
+    if nonlinear and not medium.is_linear:
+        beta2_dt = xp.asarray(ops.pad_volume(medium.beta, padded) * (2.0 * dt), dtype=xp.float32)
+
+    ks = ops.k_vectors(padded, dx, xp)
+    kappa = ops.kappa_sinc(ks, c_ref=c_max, dt=dt, xp=xp)
+    deriv = ops.spectral_derivative_factors(ks, kappa, xp)
+    del ks, kappa
+
+    pml_edge = grid.pml.edge if grid.pml is not None else 2.0
+    if grid.pml_vox == 0:
+        log.warning(
+            "grid has no PML: the FFT domain is PERIODIC and waves wrap around, "
+            "producing standing-wave interference. Attach a PMLSpec to the Grid "
+            "unless periodic boundaries are intended."
+        )
+    sponge = ops.sponge_volume(padded, grid.pml_vox, pml_edge, xp)
+
+    p = xp.zeros(padded, dtype=xp.float32)
+    u = [xp.zeros(padded, dtype=xp.float32) for _ in range(nd)]
+
+    src_idx = tuple(xp.asarray(source.indices[:, d]) for d in range(nd))
+    src_ph = xp.asarray(source.phases, dtype=xp.float32)
+    amp = float(source.amplitude)
+
+    # ---- time of flight: farthest reference the wave must reach ----
+    src_pos = source.indices.astype(np.float64) * dx
+    if reference_point is not None:
+        refs = np.asarray(reference_point, np.float64)[None, :] * dx
+    else:  # conservative default: the wave must reach every domain corner
+        refs = np.array(list(product(*((0, n - 1) for n in grid.shape))), np.float64) * dx
+    dmax = max(float(np.sqrt(((src_pos - r) ** 2).sum(axis=1)).max()) for r in refs)
+    tof_periods = max(1, int(ceil(dmax / c_min / period)))
+
+    # ---- convergence monitoring region (interior, PML shaved) ----
+    margin = grid.pml_vox + 2
+    if any(n <= 2 * margin for n in grid.shape):
+        margin = 0
+    conv = interior_slices(grid.shape, margin)
+
+    def step(n: int) -> None:
+        pk = fft.rfftn(p)
+        for i in range(nd):
+            grad_i = fft.irfftn(deriv[i] * pk, s=padded)
+            u[i] -= dt_over_rho * grad_i
+            u[i] *= absorb
+            u[i] *= sponge
+        acc = None
+        for i in range(nd):
+            term = deriv[i] * fft.rfftn(u[i])
+            acc = term if acc is None else acc + term
+        divu = fft.irfftn(acc, s=padded)
+        p_local = p
+        if beta2_dt is None:
+            p_local -= rhoc2_dt * divu
+        else:
+            # Westervelt: dp = -(rho c^2 dt) div u - 2 beta dt p div u
+            p_local -= (rhoc2_dt + beta2_dt * p_local) * divu
+        p_local *= absorb
+        p_local *= sponge
+        t = n * dt
+        env = ramp_envelope(t, period, source.ramp_periods)
+        p_local[src_idx] += xp.float32(amp * env) * xp.sin(xp.float32(omega * t) - src_ph)
+
+    # ---- settle until the per-period peak stops moving ----
+    eff_min = tof_periods + spec.min_settle_periods
+    eff_max = tof_periods + spec.max_settle_periods
+    n = 0
+    prev_peak: float | None = None
+    converged_period = eff_max
+    history: list[tuple[int, float, float]] = []
+    periods_done = 0
+    for period_idx in range(1, eff_max + 1):
+        period_peak = xp.zeros((), dtype=xp.float32)
+        for _ in range(spp):
+            step(n)
+            n += 1
+            xp.maximum(period_peak, xp.abs(p[conv]).max(), out=period_peak)
+        peak = float(period_peak)
+        periods_done = period_idx
+        if period_idx >= tof_periods:
+            rel = (
+                abs(peak - prev_peak) / max(prev_peak, 1e-9)
+                if prev_peak is not None
+                else float("nan")
+            )
+            history.append((period_idx, peak, rel))
+        if period_idx >= eff_min and prev_peak is not None:
+            rel = abs(peak - prev_peak) / max(prev_peak, 1e-9)
+            if peak > 0.0 and rel < spec.convergence_tol:
+                converged_period = period_idx
+                break
+        prev_peak = peak
+
+    # ---- honor an explicit t_end floor (production contract hook) ----
+    if spec.t_end_min_us is not None:
+        need_periods = ceil(spec.t_end_min_us * 1e-6 / period) - spec.n_record_periods
+        while periods_done < need_periods:
+            for _ in range(spp):
+                step(n)
+                n += 1
+            periods_done += 1
+
+    # ---- record window: leakage-free single-bin DFTs + time peak ----
+    rec = record_region if record_region is not None else active
+    for sl, n_ax in zip(rec, grid.shape, strict=True):
+        if not (0 <= (sl.start or 0) and (sl.stop or n_ax) <= n_ax):
+            raise ValueError(f"record_region {rec} exceeds active grid {grid.shape}")
+    rec_steps = spec.n_record_periods * spp
+    buffers = {h: xp.zeros(p[rec].shape, dtype=xp.complex64) for h in harmonics}
+    pmax = xp.zeros(p[rec].shape, dtype=xp.float32)
+    for _ in range(rec_steps):
+        step(n)
+        t = n * dt
+        pa = p[rec]
+        for h in harmonics:
+            buffers[h] += pa * xp.exp(xp.complex64(-1j * h * omega * t))
+        xp.maximum(pmax, xp.abs(pa), out=pmax)
+        n += 1
+    for h in harmonics:
+        buffers[h] *= xp.complex64(2.0 / rec_steps)
+
+    phasors = {h: b.to_numpy(buffers[h]) for h in harmonics}
+    return SolverResult(
+        phasor=phasors[1],
+        p_max=b.to_numpy(pmax),
+        region=rec,
+        dt=dt,
+        spp=spp,
+        steps_total=n,
+        t_end_s=n * dt,
+        tof_periods=tof_periods,
+        converged_period=converged_period,
+        settle_capped=converged_period >= eff_max,
+        convergence_history=history,
+        phasors=phasors,
+        meta={
+            "solver": solver_name,
+            "backend": b.name,
+            "padded_shape": padded,
+            "c_ref": c_max,
+            "nonlinear_active": beta2_dt is not None,
+            "source": source.label,
+        },
+    )
