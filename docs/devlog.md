@@ -57,3 +57,53 @@
   Kriterler MILESTONES M4'te; düzlem dalga dispersiyon testi ilk yazılacak test.
 - git deposu init edildi ama **commit atılmadı** (kullanıcı isteğiyle atılacak).
 - `_code_cells.py` (notebook dökümü) referans olarak duruyor; .gitignore'da.
+
+---
+
+## 2026-08-10 — Oturum 4 (Fable): M4 + M4b tamamlandı; İKİ FİZİK KEŞFİ
+
+### Yapılanlar
+- Kullanıcı izniyle git commit akışı başladı: `bc715cd` (M0–M3), `71d9a5a` (M4+M4b).
+- Kullanıcı kararı işlendi: **k-Wave registry'de doğrudan çözücü** (`get("kwave")`) ve
+  doğrulamanın merkezinde (MILESTONES M4b eklendi, M12 onun üstüne oturuyor).
+- `solvers/` paketi: `base.py` (SolverCaps + CWRunSpec + SolverResult + kurulum-anında
+  yetenek doğrulama), `registry.py` (entry-point plugin desteği), `kspace/operators.py`
+  (2-3-5-smooth pad, k-vektörler, kappa, sponge), `kspace/linear.py` (boyut-agnostik
+  lineer çözücü), `kwave_adapter.py` (k-wave-python 0.6.2, CPU/OMP binary).
+- `sources.py` (CWSource + plane/bowl builder'ları; duplicate-voxel reddi),
+  `spectral.py` (tek fazor implementasyonu — çözücü, adaptör ve testler aynı kodu kullanır).
+- `Backend.fft` eklendi: numpy yolunda scipy.fft (dtype-koruyan), cupy yolunda cupyx.scipy.fft.
+  (numpy.fft float32'yi complex128'e terfi ettiriyor — fp32 GPU paritesi için kritik.)
+
+### KEŞİF 1 — Notebook'un absorpsiyonu etiketin YARISI
+M4 absorpsiyon testi (ölçülen α ≈ konfigüre α) İLK KOŞUDA %50 sapma yakaladı.
+Analiz: üstel sönüm `exp(-α·c·dt)` YALNIZ basınca uygulanırsa dispersiyon bağıntısı
+k = ω/c + i·α/2 verir (enerji eşbölüşümü: kaybın yarısı u'da, o sönümsüz) → uzamsal
+sönüm α/2. Kaynak notebook (v6–v12) tam olarak böyle yapıyor → **dx300_t128 dataseti
+doku absorpsiyonunun etikettekinin yarısını gördü** (deri 15→7.5, yağ 6→3, kas 10→5 Np/m
+efektif). Dataset kendi içinde tutarlı; ama fiziksel yorum/karşılaştırma yapılırken bu
+bilinmeli. KÜTÜPHANEDE DÜZELTİLDİ: sönüm p VE u'ya simetrik (ω→ω+iα·c ikamesi, tam üstel,
+faz hızı değişmez); ölçülen α artık <%1 doğrulukta.
+
+### KEŞİF 2 — PML'siz grid = periyodik sınır tuzağı
+k-Wave karşılaştırma testinde grid'i PML'siz kurunca alan ±%40 duran-dalga desenine
+boğuldu (FFT periyodik sarma). Çözücüye loud warning eklendi ("attach a PMLSpec unless
+periodic boundaries are intended"). Test PML'le düzeltildi.
+
+### Kanıt (milestone geçişleri)
+- **77 test yeşil (11.6 s), ruff temiz.** M4 kapıları: dispersiyon <%0.1 (k-space+kappa
+  ile ~kesin), absorpsiyon <%1 (fix sonrası), PML ripple <%3, saf CW fazor 1e-9 doğruluk,
+  200-periyot kararlılık (drift <%1), 3D çanak vs O'Neil: odak ≤1 voxel, eksenel r>0.99,
+  −6dB eksenel+lateral genişlikler <%5 (lateral referansı Rayleigh).
+- **M4b canlı çapraz doğrulama: `linear` vs `kwave` (gerçek OMP binary, Windows yerel),
+  2D su, normalize alan korelasyonu r > 0.99, tepe konumu ≤1 voxel.** Birim dönüşümleri
+  (Np/m↔dB/cm, β↔B/A) testli. kwave yokken süit skip'lerle yeşil kalıyor.
+- Test-tasarım dersleri: ölçüm bölgesi ASLA sponge içine taşmamalı (O'Neil eksenel
+  penceresi PML'e değince r 0.974'e düşüyordu; domain z 96→120 + pencere sınırı);
+  −6dB genişlik ölçümü distal kesişimi tam içermeli.
+
+### Sonraki adım
+- **M5**: `westervelt` çözücüsü (β terimi + p_max + 2f0; linear'dan türetilmiş tek
+  fark nonlineer basınç güncellemesi). Kapılar: β=0 ≡ linear (<1e-6), Fubini A2/A1 <%5
+  (σ≤0.3), amp/p_max tavan değişmezi. Ardından M6 arrays (spiral port).
+- GitHub'a çıkış: kullanıcı `gh auth login` yapınca repo oluşturulup push edilecek.
