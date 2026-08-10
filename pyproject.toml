@@ -26,6 +26,7 @@ dependencies = [
 
 [project.optional-dependencies]
 gpu = ["cupy-cuda12x>=13.0"]
+kwave = ["k-wave-python>=0.6"]
 dev = ["pytest>=8", "pytest-cov", "ruff>=0.4"]
 
 [tool.setuptools.packages.find]
@@ -37,6 +38,7 @@ addopts = "-q -ra"
 markers = [
     "slow: long-running physics validation tests",
     "gpu: tests that require CuPy + an NVIDIA GPU (skipped when unavailable)",
+    "kwave: tests that require k-wave-python + its precompiled binary",
 ]
 
 [tool.ruff]

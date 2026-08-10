@@ -59,10 +59,12 @@ gelecekteki "anlık beam önizleme"si de bu modüldür.
 
 ## Faz Grubu B — Çözücüler (CPU referans → GPU)
 
-### M4 — Lineer k-space PSTD çözücüsü (numpy; 1D/2D/3D) `[ ]`
+### M4 — Lineer k-space PSTD çözücüsü (numpy; 1D/2D/3D) `[x]` (2026-08-10)
 Boyut-agnostik ilk tam dalga çözücü; CW + steady-state fazor çıkarımı.
-- [ ] `solvers.base.SolverBase` + yetenek deklarasyonu + `solvers.registry`
-- [ ] 1. mertebe kuple denklemler (p, u), k-space gradyan/diverjans, kappa sinc düzeltmesi, exact-period dt, Gaussian sponge PML, CW kaynak enjeksiyonu (ramp'li), tek-bin DFT fazor + p_max
+- [x] `solvers.base.SolverBase` + yetenek deklarasyonu + `solvers.registry` (entry-point plugin desteğiyle)
+- [x] 1. mertebe kuple denklemler (p, u), k-space gradyan/diverjans, kappa sinc düzeltmesi, exact-period dt, Gaussian sponge PML, CW kaynak enjeksiyonu (ramp'li), tek-bin DFT fazor + p_max
+- FİZİK DÜZELTMESİ (testin yakaladığı, notebook'tan sapma): üstel absorpsiyon artık p VE u'ya simetrik uygulanıyor. Yalnız p sönümlenince uzamsal sönüm α/2 çıkıyor (dispersiyon analizi + enerji eşbölüşümü) — yani KAYNAK NOTEBOOK'UN dataseti etikettekinin YARISI kadar absorpsiyon gördü (dataset içi tutarlı; fiziksel yorum için kayda geçirildi)
+- UYARI eklendi: PML'siz grid → periyodik sınır (dalga sarmalar); çözücü loud warning veriyor
 - Başarı kriterleri:
   - Düzlem dalga (1D/2D/3D, periyodik yönde): faz hızı hatası < %0.1 @ 4 ppw, 50 periyot
   - Üstel absorpsiyon: ölçülen α, konfigüre α'dan < %1 sapar
@@ -70,6 +72,22 @@ Boyut-agnostik ilk tam dalga çözücü; CW + steady-state fazor çıkarımı.
   - Küçük 3D odaklı çanak (su, lineer) vs O'Neil: normalize eksenel profil r > 0.99; −6dB eksenel/lateral genişlik farkı < %5; odak konumu < 1 voxel
   - Fazor çıkarımı: saf CW sinüs girişinde genlik hatası < %0.5 (sızıntısızlık)
   - Kararlılık: 200 periyot koşuda enerji patlaması yok (peak drift < %1)
+
+### M4b — `kwave` çözücü adaptörü (CPU/OMP) `[x]` (2026-08-10)
+Kullanıcı kararı (2026-08-10, tur 4): k-Wave, registry'de DOĞRUDAN bir çözücü seçeneğidir
+(`hs.solvers.get("kwave")`) ve doğrulama zincirinin MERKEZİ referanslarından biridir —
+analitik süit (O'Neil/Rayleigh/Fubini) + k-Wave çapraz karşılaştırması birlikte "doğru" tanımıdır.
+- [x] `k-wave-python` opsiyonel bağımlılık (`pip install hifusim[kwave]`); yokken registry kaydı
+      duruyor, `run()` eyleme geçirilebilir hata veriyor; testler auto-skip (importorskip + binary-yok skip)
+- [x] Adaptör: Grid/Medium/CWSource → kWaveGrid/kWaveMedium/kSource+kSensor eşlemesi;
+      CW sürüş sinyali sentezi; kayıt penceresinden tek-bin DFT fazor çıkarımı (bizim kontratla aynı; Fortran-order maskeleme testli)
+- [x] Birim dönüşümleri AÇIK ve testli: alpha Np/m ↔ dB/(MHz^y cm) (y=0 frekans-bağımsız),
+      beta ↔ B/A (BonA = 2(beta-1))
+- Başarı kriterleri:
+  - Küçük 2D su senaryosu: `kwave` çözücüsü koşar, fazor alanı döner (şekil kontratı bizimkiyle aynı)
+  - Aynı senaryoda `linear` vs `kwave`: normalize fokal desen r > 0.99 (ilk çapraz doğrulama)
+  - k-Wave kurulu değilken tüm süit yeşil kalır (skip'ler raporlanır)
+  - Binary tipi/sürümü sonuç meta'sına damgalanır
 
 ### M5 — Westervelt nonlineerlik + p_max/2f0 `[ ]`
 - [ ] β terimi, p_max takibi, opsiyonel 2f0 fazor, `westervelt` çözücüsü registry'de
@@ -131,8 +149,8 @@ Boyut-agnostik ilk tam dalga çözücü; CW + steady-state fazor çıkarımı.
   - Sweep: 3-noktalı p0 taraması uçtan uca koşar, birleşik rapor üretir
   - **v1 ön-etiketi**: M4–M11 kriterlerinin tamamı yeşil → isim kararı + GitHub public + `v0.1` tag
 
-### M12 — k-Wave karşılaştırma harness'i `[ ]`
-- [ ] `kwave-python` (CPU/OMP) entegrasyonu; T0 sanity kapısı (homojen su — GPU binary'yi her ortamda önce bundan geçir; kalırsa "environment-broken" damgası); karşılaştırma metrikleri (relL2, Pearson, odak konum/amp, −6dB genişlikler, sidelobe)
+### M12 — k-Wave karşılaştırma harness'i (M4b adaptörünün üstünde) `[ ]`
+- [ ] M4b'deki `kwave` çözücüsünü kullanan sistematik harness; T0 sanity kapısı (homojen su — GPU binary'yi her ortamda önce bundan geçir; kalırsa "environment-broken" damgası); karşılaştırma metrikleri (relL2, Pearson, odak konum/amp, −6dB genişlikler, sidelobe)
 - Başarı kriterleri:
   - Küçük grid lineer su çanağı: hifusim vs k-Wave CPU → relL2 < %3, r > 0.99, odak konumu < 1 voxel
   - Heterojen küçük fantom (2 doku): relL2 < %5, odak basınç farkı < %10 (ITRUSST koridoru)
@@ -233,5 +251,6 @@ Boyut-agnostik ilk tam dalga çözücü; CW + steady-state fazor çıkarımı.
 
 ## Sıradaki iş (canlı)
 
-- **Şimdi**: M4 — lineer k-space PSTD çözücüsü (numpy, boyut-agnostik).
-- M0–M3 kriter kanıtları: `pytest` çıktısı (devlog 2026-08-10 girişi) + bu dosyadaki işaretler.
+- **Şimdi**: M5 — Westervelt nonlineerlik (+ p_max/2f0), ardından M6 arrays.
+- M0–M4b kriter kanıtları: 77 test yeşil (devlog 2026-08-10 girişleri). Canlı k-Wave çapraz
+  doğrulaması: linear vs kwave 2D su, normalize alan korelasyonu r > 0.99 (yerel OMP binary).
