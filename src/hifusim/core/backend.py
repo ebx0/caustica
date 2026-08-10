@@ -62,6 +62,23 @@ class Backend:
     def is_gpu(self) -> bool:
         return self.name == "cupy"
 
+    @property
+    def fft(self) -> ModuleType:
+        """dtype-preserving FFT module for this backend.
+
+        numpy.fft always upcasts float32 -> complex128, which would break
+        fp32 production parity between CPU and GPU; scipy.fft (pocketfft)
+        and cupyx.scipy.fft both keep float32/complex64. Solvers must use
+        ``backend.fft``, never ``numpy.fft``.
+        """
+        if self.is_gpu:
+            import cupyx.scipy.fft as cufft  # noqa: PLC0415 (lazy on purpose)
+
+            return cufft
+        import scipy.fft as spfft  # noqa: PLC0415 (lazy on purpose)
+
+        return spfft
+
     def asarray(self, a: Any, dtype: Any = None) -> Any:
         """Move/convert ``a`` onto this backend."""
         return self.xp.asarray(a, dtype=dtype)
