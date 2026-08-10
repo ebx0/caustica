@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hifusim"
+version = "0.1.0.dev0"
+description = "GPU-accelerated multi-solver acoustic simulation library for HIFU / therapeutic ultrasound (k-space PSTD: Westervelt, linear; KZK planned)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "hifusim developers" }]
+keywords = ["HIFU", "ultrasound", "acoustics", "simulation", "PSTD", "Westervelt", "k-space"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = [
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "pydantic>=2.7",
+    "h5py>=3.9",
+]
+
+[project.optional-dependencies]
+gpu = ["cupy-cuda12x>=13.0"]
+dev = ["pytest>=8", "pytest-cov", "ruff>=0.4"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q -ra"
+markers = [
+    "slow: long-running physics validation tests",
+    "gpu: tests that require CuPy + an NVIDIA GPU (skipped when unavailable)",
+]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "NPY"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests legitimately use "magic" reference constants inline.
+"tests/*" = ["E741"]
