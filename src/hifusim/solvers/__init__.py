@@ -21,6 +21,7 @@ from hifusim.solvers.base import (
 
 # Importing the solver modules IS the built-in registration step.
 from hifusim.solvers.kspace.linear import LinearKSpacePSTD
+from hifusim.solvers.kspace.westervelt import WesterveltKSpacePSTD
 from hifusim.solvers.kwave_adapter import KWaveSolver
 from hifusim.solvers.registry import available, get, register
 
@@ -32,6 +33,7 @@ __all__ = [
     "SolverCapabilityError",
     "SolverCaps",
     "SolverResult",
+    "WesterveltKSpacePSTD",
     "available",
     "get",
     "interior_slices",

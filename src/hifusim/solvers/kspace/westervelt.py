@@ -1,11 +1,15 @@
-"""Linear k-space PSTD solver (registry name: ``"linear"``).
+"""Westervelt nonlinear k-space PSTD solver (registry name: ``"westervelt"``).
 
-Thin wrapper over the shared engine (:mod:`hifusim.solvers.kspace.engine`)
-with the nonlinear term disabled and a linear-only capability declaration:
-handing it a nonlinear medium fails at setup with a pointer to `westervelt`.
-Use it for validation runs and fast parameter sweeps — it skips the
-nonlinear update entirely. The engine docstring documents the numerics
-(including the symmetric-absorption fix over the source notebook).
+The reference full-wave solver of the library — the direct descendant of the
+production notebook's engine. Shares every line of numerics with `linear`
+through :mod:`hifusim.solvers.kspace.engine`; the only difference is the
+Westervelt term ``dp_nl = -2 beta dt p (div u)`` in the pressure update,
+which produces harmonic growth and shock steepening.
+
+Accepts linear media too (beta = 0 volumes take the identical code path as
+`linear`, which is exactly the M5 equivalence gate). Request harmonic
+phasors with ``harmonics=(1, 2)`` to capture the 2f0 field in the same
+record pass (leakage-free thanks to the exact-period dt policy).
 """
 
 from __future__ import annotations
@@ -21,13 +25,13 @@ from hifusim.sources import CWSource
 
 
 @register
-class LinearKSpacePSTD(SolverBase):
-    """Linear full-wave k-space PSTD (1/2/3-D, CW steady state)."""
+class WesterveltKSpacePSTD(SolverBase):
+    """Nonlinear (Westervelt) full-wave k-space PSTD (1/2/3-D, CW steady state)."""
 
-    name = "linear"
+    name = "westervelt"
     caps = SolverCaps(
         ndim=frozenset({1, 2, 3}),
-        nonlinear=False,
+        nonlinear=True,
         drive=frozenset({"cw"}),
         backends=frozenset({"numpy", "cupy"}),
     )
@@ -57,6 +61,6 @@ class LinearKSpacePSTD(SolverBase):
             backend=backend,
             record_region=record_region,
             reference_point=reference_point,
-            nonlinear=False,
+            nonlinear=True,
             harmonics=harmonics,
         )

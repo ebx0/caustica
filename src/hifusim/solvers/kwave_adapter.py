@@ -25,6 +25,7 @@ Differences from the native solvers (documented, not hidden):
 
 from __future__ import annotations
 
+import warnings
 from itertools import product
 from math import ceil
 from typing import Any
@@ -80,11 +81,15 @@ class KWaveSolver(SolverBase):
         use_gpu_binary: bool = False,
         record_region: tuple[slice, ...] | None = None,
         reference_point: tuple[int, ...] | None = None,
+        harmonics: tuple[int, ...] = (1,),
         **kwargs: Any,
     ) -> SolverResult:
         if kwargs:
             raise TypeError(f"unknown run() options: {sorted(kwargs)}")
         spec = spec or CWRunSpec()
+        harmonics = tuple(dict.fromkeys(int(h) for h in harmonics))
+        if not harmonics or harmonics[0] != 1 or any(h < 1 for h in harmonics):
+            raise ValueError(f"harmonics must start with 1 (fundamental), got {harmonics}")
         self.validate(grid, medium, source)
         try:
             from kwave.kgrid import kWaveGrid
@@ -170,14 +175,25 @@ class KWaveSolver(SolverBase):
             is_gpu_simulation=use_gpu_binary, show_sim_log=False
         )
         run_fn = kspaceFirstOrder2D if nd == 2 else kspaceFirstOrder3D
-        sensor_data = run_fn(
-            kgrid=kgrid,
-            source=ksource,
-            sensor=sensor,
-            medium=kmedium,
-            simulation_options=sim_options,
-            execution_options=exec_options,
-        )
+        with warnings.catch_warnings():
+            # k-wave-python 0.6.x: the dimension-specific entry points are the
+            # documented stable API but emit a FutureWarning; the Windows
+            # executor also warns that a custom binary name overrides the GPU
+            # flag (we set the flag explicitly ourselves). Both are benign and
+            # would otherwise flood every validation run.
+            warnings.filterwarnings("ignore", category=FutureWarning, module=r"kwave.*")
+            warnings.filterwarnings("ignore", category=DeprecationWarning, module=r"kwave.*")
+            warnings.filterwarnings(
+                "ignore", message=".*Custom binary name set.*", category=UserWarning
+            )
+            sensor_data = run_fn(
+                kgrid=kgrid,
+                source=ksource,
+                sensor=sensor,
+                medium=kmedium,
+                simulation_options=sim_options,
+                execution_options=exec_options,
+            )
 
         p_rec = np.asarray(sensor_data["p"])
         n_points = int(np.prod(grid.shape))
@@ -189,21 +205,25 @@ class KWaveSolver(SolverBase):
                 f"expected ({n_points}, {rec_steps}) or transposed."
             )
 
-        # ---- back to the hifusim phasor contract ----
+        # ---- back to the hifusim phasor contract (per requested harmonic) ----
         t0 = (sensor.record_start_index - 1) * dt
-        phasor_pts = single_bin_phasor(p_rec, dt=dt, f0=source.f0, t0=t0, axis=1)
         pmax_pts = np.abs(p_rec).max(axis=1)
 
-        phasor = np.zeros(grid.shape, dtype=np.complex64)
-        pmax = np.zeros(grid.shape, dtype=np.float32)
         full_order = np.flatnonzero(np.ones(grid.shape, dtype=bool).flatten(order="F"))
         full_coords = np.unravel_index(full_order, grid.shape, order="F")
-        phasor[full_coords] = phasor_pts.astype(np.complex64)
+        rec = record_region if record_region is not None else tuple(slice(0, n) for n in grid.shape)
+
+        phasors: dict[int, np.ndarray] = {}
+        for h in harmonics:
+            pts = single_bin_phasor(p_rec, dt=dt, f0=h * source.f0, t0=t0, axis=1)
+            vol = np.zeros(grid.shape, dtype=np.complex64)
+            vol[full_coords] = pts.astype(np.complex64)
+            phasors[h] = vol[rec]
+        pmax = np.zeros(grid.shape, dtype=np.float32)
         pmax[full_coords] = pmax_pts.astype(np.float32)
 
-        rec = record_region if record_region is not None else tuple(slice(0, n) for n in grid.shape)
         return SolverResult(
-            phasor=phasor[rec],
+            phasor=phasors[1],
             p_max=pmax[rec],
             region=rec,
             dt=dt,
@@ -214,6 +234,7 @@ class KWaveSolver(SolverBase):
             converged_period=settle_periods,
             settle_capped=False,
             convergence_history=[],
+            phasors=phasors,
             meta={
                 "solver": self.name,
                 "backend": "kwave-omp" if not use_gpu_binary else "kwave-cuda",

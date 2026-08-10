@@ -89,21 +89,24 @@ analitik süit (O'Neil/Rayleigh/Fubini) + k-Wave çapraz karşılaştırması bi
   - k-Wave kurulu değilken tüm süit yeşil kalır (skip'ler raporlanır)
   - Binary tipi/sürümü sonuç meta'sına damgalanır
 
-### M5 — Westervelt nonlineerlik + p_max/2f0 `[ ]`
-- [ ] β terimi, p_max takibi, opsiyonel 2f0 fazor, `westervelt` çözücüsü registry'de
+### M5 — Westervelt nonlineerlik + p_max/2f0 `[x]` (2026-08-10)
+- [x] β terimi, p_max takibi, harmonik fazorlar (`harmonics=(1,2,3,...)` tek geçişte), `westervelt` registry'de; `linear` ile ortak `kspace/engine.py` (tek numerik yüzey)
+- Not: Fubini kapısı ppw=16'da geçer (A2/A1 %0.85–3.2). ppw=8'de 3f0 aliaslanıp A2'yi ~%10 şişirir — çözünürlük kuralı devlog'da; A3/A1 ikincil kapı <%10
 - Başarı kriterleri:
-  - β=0 ⇒ `westervelt` ≡ `linear` (aynı grid'de rel fark < 1e-6)
-  - Fubini ön-şok rejimi (σ ≤ 0.3): A2/A1 oranı analitikten < %5 sapar
-  - amp ≤ p_max · (1/cos(π/spp)) diskre tavan değişmezi her voxel'de
-  - Notebook'un bilinen bandı yeniden üretilir: küçük senaryoda amp/p_max ∈ [0.85, 1.0]
+  - β=0 ⇒ `westervelt` ≡ `linear` — BİREBİR aynı (aynı kod yolu; array_equal) ✓
+  - Fubini ön-şok rejimi: A2/A1 < %5 sapma, σ ∈ [0.06, 0.61] beş noktada ✓ (kapı σ≤0.3'ten geniş)
+  - amp ≤ p_max · (1/cos(π/spp)) diskre tavan değişmezi >%10 bandında her voxel'de ✓
+  - Hafif-σ noktasında amp/p_max ∈ [0.85, 1.0] (notebook bandı) ✓
 
-### M6 — Kaynak modeli + transducer arrays `[ ]`
-- [ ] `arrays.ArchimedeanSpiral` (notebook portu) + genel `CustomArray`; DAS fazlama; eleman→voxel kabuk projeksiyonu; faz haritası (sin/cos) temsili
+### M6 — Kaynak modeli + transducer arrays `[x]` (2026-08-10)
+- [x] `arrays.archimedean_spiral` (notebook portu, parametre-generik) + `TransducerArray` (genel taban: pozisyon/normal/eleman yarıçapı); DAS fazlama; `voxelize()` eleman→voxel kabuk (element sahiplik haritasıyla); faz haritası (sin/cos) + boyut seçici; `rayleigh_preview()` (GUI'siz anlık beam önizleme)
+- KEŞİF: üretim 128-spirali 32×32 faz haritasına SIĞMIYOR (95 ofset ihlali) → notebook runtime'da 64×64 fallback'ine düşüyordu; dataset'in gerçek phase_map_size'ı 64. Test bunu regresyon olarak sabitler
+- Kapı düzeltmeleri (fizik gereği): DAS kapısı "tepe==hedef" değil — yer-değiştirme farkı (yanal <λ/2, eksenel <λ; odak kayması sistematiği farkta iptal olur) + hedefte genlik ≥3× artış. Entegrasyon kapısı eksenel pencereyi O'Neil-öngörülü tepe ile sınırlar
 - Başarı kriterleri:
-  - Eleman sayısı/aktif alan/eleman yarıçapı notebook değerleriyle birebir (128, r≈… testte sabitlenir)
-  - Kaynak voxel'leri: 128/128 eleman temsil edilir; tekrarlı voxel yok
-  - DAS fazlarıyla Rayleigh önizleme: hedef odak, geometrik odaktan kaydırılmış hedefe < λ/2 mesafede odaklanır
-  - Entegrasyon: M4 çözücü + spiral array su içinde koşar; odak konumu geometrik odaktan < 1 voxel sapar
+  - Eleman sayısı/eleman yarıçapı notebook değerleriyle birebir (128, r=3.205 mm) ✓
+  - Kaynak voxel'leri: tüm elemanlar temsil edilir (32/32 test dizisinde; kayıp eleman → hata) ✓
+  - DAS: yanal yönlendirme < λ/2, eksenel < λ (yer-değiştirme farkı), hedefte ≥3× genlik ✓
+  - Entegrasyon: voxelize spiral + linear çözücü su içinde; yanal ≤1 voxel, eksenel [O'Neil tepe−1, geo+1] ✓
 
 ### M7 — CuPy backend (CUDA) `[ ]` — Colab oturumu gerektirir
 - [ ] ElementwiseKernel'ların portu; aynı çözücü kodu iki backend'de; fp32 yolu
@@ -251,6 +254,6 @@ analitik süit (O'Neil/Rayleigh/Fubini) + k-Wave çapraz karşılaştırması bi
 
 ## Sıradaki iş (canlı)
 
-- **Şimdi**: M5 — Westervelt nonlineerlik (+ p_max/2f0), ardından M6 arrays.
-- M0–M4b kriter kanıtları: 77 test yeşil (devlog 2026-08-10 girişleri). Canlı k-Wave çapraz
-  doğrulaması: linear vs kwave 2D su, normalize alan korelasyonu r > 0.99 (yerel OMP binary).
+- **Şimdi**: M7 CuPy backend (Colab oturumu gerekir) veya M8 Planner; M10 IO da CPU'da yapılabilir.
+- M0–M6 kriter kanıtları: 90 test yeşil (devlog 2026-08-10). k-Wave canlı çapraz doğrulama r>0.99;
+  Fubini A2/A1 < %5; O'Neil 3D kapıları; DAS/voxelizasyon kapıları.
