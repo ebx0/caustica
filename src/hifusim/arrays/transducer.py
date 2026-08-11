@@ -125,6 +125,11 @@ class TransducerArray:
             ex = int(np.round(p0[0] / dx_mm)) + apex_vox[0]
             ey = int(np.round(p0[1] / dx_mm)) + apex_vox[1]
             ez = int(np.round(p0[2] / dx_mm)) + apex_vox[2]
+            # Verbatim notebook port: the disc test runs in the xy-plane and
+            # z is sheared onto the element plane afterwards, so a tilted
+            # element's patch has area ~pi r^2 / cos(tilt) (~14% extra at the
+            # production rim, ~28 deg). Kept for dataset parity; an
+            # in-plane-projected test is the M12 candidate fix.
             for ox in range(-r_vox, r_vox + 1):
                 for oy in range(-r_vox, r_vox + 1):
                     if (ox * dx_mm) ** 2 + (oy * dx_mm) ** 2 <= (self.elem_radius * 1e3) ** 2:

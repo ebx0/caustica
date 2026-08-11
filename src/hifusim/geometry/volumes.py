@@ -20,18 +20,59 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
-from scipy.ndimage import zoom
 
 RESAMPLE_METHODS = ("nearest", "smooth")
 
 
-@dataclass(frozen=True)
+def _axis_samples(n_in: int, n_out: int, ratio: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Exact resample positions ``j * ratio`` along one axis.
+
+    Returns clamped lower/upper neighbor indices and the linear weight.
+    Positions are ABSOLUTE fractional input indices — never the
+    endpoint-aligned rescale that ``scipy.ndimage.zoom(grid_mode=False)``
+    applies, which stretches content by ``(n_out-1)/((n_in-1)*ratio)``
+    (review finding, 2026-08-11: a 0.5->0.3 mm phantom resample drifted a
+    full voxel at 18 mm depth).
+    """
+    pos = np.arange(n_out, dtype=np.float64) * ratio
+    i0 = np.clip(np.floor(pos).astype(np.intp), 0, n_in - 1)
+    i1 = np.minimum(i0 + 1, n_in - 1)
+    w = np.clip(pos - i0, 0.0, 1.0).astype(np.float32)
+    return i0, i1, w
+
+
+def _resample_linear(vol: np.ndarray, out_shape: tuple[int, ...], ratio: float) -> np.ndarray:
+    """Separable linear interpolation of ``vol`` at exact positions."""
+    out = vol
+    for ax, m in enumerate(out_shape):
+        i0, i1, w = _axis_samples(vol.shape[ax], m, ratio)
+        a0 = np.take(out, i0, axis=ax)
+        a1 = np.take(out, i1, axis=ax)
+        sh = [1] * out.ndim
+        sh[ax] = m
+        w = w.reshape(sh)
+        out = a0 * (1.0 - w) + a1 * w
+    return out
+
+
+@dataclass(frozen=True, eq=False)
 class LabelVolume:
     """Integer label volume with isotropic spacing [m] and physical origin."""
 
     labels: np.ndarray
     dx: float
     origin: tuple[float, ...] = field(default=None)  # type: ignore[assignment]
+
+    def __eq__(self, other: object) -> bool:
+        # dataclass-default __eq__ would compare the ndarray field and raise
+        # "truth value of an array is ambiguous" (review finding, 2026-08-11)
+        if not isinstance(other, LabelVolume):
+            return NotImplemented
+        return (
+            self.dx == other.dx
+            and self.origin == other.origin
+            and np.array_equal(self.labels, other.labels)
+        )
 
     def __post_init__(self) -> None:
         lab = np.asarray(self.labels)
@@ -64,27 +105,32 @@ class LabelVolume:
         return tuple(int(v) for v in np.unique(self.labels))
 
     def resample(self, dx_new: float, method: str = "nearest") -> LabelVolume:
-        """Return the volume resampled to spacing ``dx_new`` [m]."""
+        """Return the volume resampled to spacing ``dx_new`` [m].
+
+        Output voxel ``j`` samples the input at the EXACT physical position
+        ``origin + j*dx_new`` (origin = first voxel center, preserved), so
+        interfaces stay where the source data put them. Output shape is
+        ``round(n * dx / dx_new)`` per axis (same physical extent).
+        """
         if dx_new <= 0:
             raise ValueError(f"dx_new must be > 0, got {dx_new}")
         if method not in RESAMPLE_METHODS:
             raise ValueError(f"unknown method {method!r}; pick from {RESAMPLE_METHODS}")
-        factor = self.dx / dx_new
-        if abs(factor - 1.0) < 1e-12:
+        ratio = dx_new / self.dx
+        if abs(ratio - 1.0) < 1e-12:
             return self
+        out_shape = tuple(max(1, int(round(n * self.dx / dx_new))) for n in self.shape)
         if method == "nearest":
-            out = zoom(self.labels, zoom=factor, order=0, mode="nearest")
+            idx = [
+                np.clip(np.round(np.arange(m) * ratio).astype(np.intp), 0, n - 1)
+                for m, n in zip(out_shape, self.shape, strict=True)
+            ]
+            out = self.labels[np.ix_(*idx)]
         else:  # smooth: one-hot linear + argmax (never invents labels)
-            present = self.label_set
             best_score = None
             out = None
-            for lab in present:
-                score = zoom(
-                    (self.labels == lab).astype(np.float32),
-                    zoom=factor,
-                    order=1,
-                    mode="nearest",
-                )
+            for lab in self.label_set:
+                score = _resample_linear((self.labels == lab).astype(np.float32), out_shape, ratio)
                 if out is None:
                     out = np.full(score.shape, lab, dtype=self.labels.dtype)
                     best_score = score
@@ -126,12 +172,34 @@ def load_labels_txt(
     the float volume into integer labels — the ONLY part that knows what
     the numbers mean. Because parsing 100+ MB of text is slow, the result
     is cached as ``<path>.labels.npz`` next to the source (``cache=True``)
-    and reloaded from there when the cache is newer than the source.
+    and reloaded from there when the cache is newer than the source AND was
+    built with the same arguments (shape/dx/order/transpose/flip/nan/
+    mapping) — an argument fingerprint is stored in the npz so a cache
+    written by different arguments is re-parsed, not silently served
+    (review finding, 2026-08-11).
     """
     path = Path(path)
     cache_path = path.with_suffix(path.suffix + ".labels.npz")
+    fingerprint = repr(
+        (
+            tuple(int(n) for n in shape),
+            float(dx),
+            str(order),
+            tuple(transpose) if transpose is not None else None,
+            tuple(flip_axes),
+            float(nan_value),
+            getattr(mapping, "__qualname__", type(mapping).__name__),
+        )
+    )
     if cache and cache_path.exists() and cache_path.stat().st_mtime >= path.stat().st_mtime:
-        return LabelVolume.load_npz(cache_path)
+        with np.load(cache_path) as data:
+            if "fingerprint" in data.files and str(data["fingerprint"]) == fingerprint:
+                return LabelVolume(
+                    labels=data["labels"],
+                    dx=float(data["dx"]),
+                    origin=tuple(data["origin"].tolist()),
+                )
+        # stale-by-arguments: fall through and re-parse
 
     values = np.loadtxt(path, dtype=np.float64).reshape(-1)
     if values.size != int(np.prod(shape)):
@@ -151,7 +219,13 @@ def load_labels_txt(
         labels = np.flip(labels, axis=ax)
     out = LabelVolume(labels=np.ascontiguousarray(labels), dx=dx)
     if cache:
-        out.save_npz(cache_path)
+        np.savez_compressed(
+            cache_path,
+            labels=out.labels,
+            dx=out.dx,
+            origin=np.asarray(out.origin),
+            fingerprint=np.asarray(fingerprint),
+        )
     return out
 
 

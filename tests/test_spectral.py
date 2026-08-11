@@ -16,12 +16,13 @@ def _series(amp, phi0, spp, n_periods, t0=0.0):
 
 
 def test_amplitude_and_phase_recovered_exactly():
-    # p = A sin(wt + phi0) = Re{ A e^{i(phi0 - pi/2)} e^{iwt} }
+    # Library convention (2026-08-11): p(t) = Re{ P e^{-iwt} }, so
+    # p = A sin(wt + phi0) = Re{ A e^{i(pi/2 - phi0)} e^{-iwt} }.
     amp, phi0 = 3.7e6, 0.9
     x, dt = _series(amp, phi0, spp=10, n_periods=2)
     ph = single_bin_phasor(x, dt, F0)
     assert abs(ph) == pytest.approx(amp, rel=1e-9)
-    expected_angle = phi0 - np.pi / 2.0
+    expected_angle = np.pi / 2.0 - phi0
     diff = np.angle(np.exp(1j * (np.angle(ph) - expected_angle)))
     assert abs(diff) < 1e-9
 
@@ -31,7 +32,7 @@ def test_absolute_time_origin_is_honored():
     t0 = 17.25 / F0  # non-integer period offset
     x, dt = _series(amp, phi0, spp=8, n_periods=3, t0=t0)
     ph = single_bin_phasor(x, dt, F0, t0=t0)
-    diff = np.angle(np.exp(1j * (np.angle(ph) - (phi0 - np.pi / 2.0))))
+    diff = np.angle(np.exp(1j * (np.angle(ph) - (np.pi / 2.0 - phi0))))
     assert abs(ph) == pytest.approx(amp, rel=1e-9)
     assert abs(diff) < 1e-9
 

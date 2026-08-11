@@ -186,3 +186,84 @@ def test_kwave_heterogeneous_absorbing_medium():
     rel_l2 = np.linalg.norm(a - b) / np.linalg.norm(b)
     assert r > 0.99, f"hetero correlation r={r:.5f}"
     assert rel_l2 < 0.05, f"hetero relL2={rel_l2 * 100:.1f}%"
+
+
+# ------------- 2026-08-11 physics-review regressions (round 2) -------------
+
+
+def test_mass_source_normalization_and_phase_convention():
+    """Three contracts in one 2-D water run + one perturbed rerun:
+
+    1. realized plane amplitude ~= source.amplitude (mass-source scaling);
+    2. the amplitude is INVARIANT to remote medium content that only
+       changes dt through c_max (the old raw injection shifted ~20% here);
+    3. phasor convention p(t)=Re{P e^{-iwt}}: the outgoing wave's unwrapped
+       phase must INCREASE along propagation at slope +k.
+    """
+    shape = (96, 64)
+    dx = 0.25e-3
+    f0 = 1e6
+    amp = 1e5
+    grid = Grid(shape=shape, dx=dx, pml=PMLSpec(thickness=2e-3))  # 8 voxels
+    src = plane_cw_source(grid, f0=f0, amplitude=amp, position_vox=14)
+    spec = CWRunSpec(min_settle_periods=6, n_record_periods=2)
+    win = (slice(30, 70), slice(20, 44))
+
+    med1 = Medium.homogeneous(shape, water(c=C0))
+    res1 = solvers.get("linear")().run(grid, med1, src, spec, record_region=win)
+    plateau1 = float(np.median(np.abs(res1.phasor)))
+    assert 0.90 * amp < plateau1 < 1.12 * amp, f"realized {plateau1 / amp:.3f}x amp"
+
+    # fast block deep inside the FAR sponge: physically invisible to the
+    # window, but raises c_max -> smaller dt -> different spp
+    c2 = med1.c.copy()
+    c2[-4:, :] = 1800.0
+    med2 = Medium(alpha=med1.alpha, rho=med1.rho, c=c2, beta=med1.beta)
+    res2 = solvers.get("linear")().run(grid, med2, src, spec, record_region=win)
+    assert res2.spp != res1.spp  # the coupling channel really did change
+    plateau2 = float(np.median(np.abs(res2.phasor)))
+    rel = abs(plateau2 - plateau1) / plateau1
+    assert rel < 0.02, f"remote medium changed the drive by {rel * 100:.1f}%"
+
+    line = res1.phasor[:, res1.phasor.shape[1] // 2]
+    phase = np.unwrap(np.angle(line))
+    x_m = np.arange(phase.size) * dx
+    slope = float(np.polyfit(x_m, phase, 1)[0])
+    k = 2.0 * np.pi * f0 / C0
+    assert slope == pytest.approx(+k, rel=0.02), f"phase slope {slope:.0f} vs +k={k:.0f}"
+
+
+def test_settle_capped_reports_convergence_honestly():
+    shape = (32, 32)
+    grid = Grid(shape=shape, dx=1e-3, pml=PMLSpec(thickness=4e-3))
+    med = Medium.homogeneous(shape, water(c=C0))
+    src = plane_cw_source(grid, f0=0.5e6, amplitude=1e5)
+
+    ok = solvers.get("linear")().run(
+        grid, med, src, CWRunSpec(min_settle_periods=1, max_settle_periods=40, n_record_periods=1)
+    )
+    assert not ok.settle_capped
+    assert ok.converged_period < ok.tof_periods + 40
+
+    capped = solvers.get("linear")().run(
+        grid,
+        med,
+        src,
+        CWRunSpec(
+            min_settle_periods=1,
+            max_settle_periods=5,
+            convergence_tol=0.0,  # unattainable: rel change is never < 0
+            n_record_periods=1,
+        ),
+    )
+    assert capped.settle_capped
+
+
+@pytest.mark.kwave
+def test_kwave_rejects_source_inside_its_pml_band():
+    pytest.importorskip("kwave")
+    grid = Grid(shape=(64, 64), dx=1e-3, pml=PMLSpec(thickness=5e-3))  # 5 voxels
+    med = Medium.homogeneous((64, 64), water(c=C0))
+    src = plane_cw_source(grid, f0=0.5e6, amplitude=1e5, position_vox=3)  # inside the band
+    with pytest.raises(ValueError, match="PML band"):
+        solvers.get("kwave")().run(grid, med, src, CWRunSpec())

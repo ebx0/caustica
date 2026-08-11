@@ -19,8 +19,16 @@ Differences from the native solvers (documented, not hidden):
 * No adaptive convergence — k-Wave runs a FIXED schedule of
   ``tof + min_settle_periods`` settle periods plus the record window. Pick
   ``min_settle_periods`` generously for strongly reverberant media.
-* k-Wave applies its own PML INSIDE the grid edge (``pml_inside=True``);
-  hifusim's sponge spec is ignored here and k-Wave's default PML is used.
+* k-Wave applies its own PML INSIDE the grid edge (``pml_inside=True``).
+  The adapter passes ``pml_size = grid.pml_vox`` so the damped band matches
+  the native sponge (falling back to k-Wave's default — 20 voxels in 2-D,
+  10 in 3-D — when the grid has no PML), and REFUSES sources that sit
+  inside that band: k-Wave would silently swallow them (review finding,
+  2026-08-11).
+* Source amplitude: k-Wave normalizes additive pressure sources internally
+  (realized plane amplitude ~= the prescribed signal); the native engine
+  applies the equivalent ``2 c dt / dx`` mass-source scaling (2026-08-11),
+  so absolute amplitudes agree to first order across the registry.
 """
 
 from __future__ import annotations
@@ -190,7 +198,28 @@ class KWaveSolver(SolverBase):
         sensor.record = ["p"]
         sensor.record_start_index = nt - rec_steps + 1  # 1-based, inclusive
 
-        sim_options = SimulationOptions(pml_inside=True, data_cast="single", save_to_disk=True)
+        # Match the damped band to the native sponge; k-Wave's default PML
+        # (20 vox 2-D / 10 vox 3-D) applies only when the grid has none.
+        pml_size = grid.pml_vox if grid.pml_vox > 0 else (20 if nd == 2 else 10)
+        if grid.pml_vox == 0:
+            warnings.warn(
+                f"grid has no PML: k-Wave still damps its default inner band "
+                f"({pml_size} voxels) — the field near the edges will differ "
+                f"from the native (periodic) solvers.",
+                stacklevel=2,
+            )
+        lo = source.indices.min(axis=0)
+        hi = source.indices.max(axis=0)
+        if (lo < pml_size).any() or (hi >= np.asarray(grid.shape) - pml_size).any():
+            raise ValueError(
+                f"source voxels (span {tuple(lo)}..{tuple(hi)}) intersect k-Wave's "
+                f"inner PML band ({pml_size} voxels on each face of {grid.shape}, "
+                f"pml_inside=True) and would be silently damped. Enlarge the grid "
+                f"or move the source inward."
+            )
+        sim_options = SimulationOptions(
+            pml_inside=True, pml_size=pml_size, data_cast="single", save_to_disk=True
+        )
         exec_options = SimulationExecutionOptions(
             is_gpu_simulation=use_gpu_binary, show_sim_log=False
         )

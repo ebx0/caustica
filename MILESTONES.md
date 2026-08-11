@@ -142,13 +142,14 @@ COMSOL-vari geometri kurulumu; materyallerden AYRI (Scene etiket üretir, Materi
   - Adım süresi ölçülür ve `benchmarks/`e damgalanır (baseline; M19 bunu referans alır)
   - GPU yokken testler otomatik SKIP (CI kırılmaz)
 
-### M8 — Planner v1 (süre + VRAM tahmini) `[ ]`
-- [ ] Statik VRAM modeli (tampon dökümü + cuFFT workspace payı + %15 marj); süre modeli a·N·logN + b·N; `gpu_db.json` (T4/L4/V100/A100/H100); cihazda kalibrasyon (~20 adım) → `~/.hifusim/calibration.json`; `sim.estimate(gpu=...)` + `planner.compare(...)`
+### M8 — Planner v1 (süre + VRAM tahmini) `[~]` — yerel yarısı tamam (2026-08-11), Colab kapıları açık
+- [x] Statik VRAM modeli (tampon dökümü + cuFFT workspace payı + %15 marj); süre modeli a·N·logN + b·N; `gpu_db.json` (T4/L4/V100/A100/H100); cihazda kalibrasyon (~20 adım) → `~/.hifusim/calibration.json`; `planner.estimate(gpu=...)` + `planner.compare(...)` — `src/hifusim/planner/`, 11 test (`tests/test_planner.py`)
 - Başarı kriterleri:
-  - VRAM tahmini, Colab'da ölçülen mempool tepe değerinin ±%10'u içinde (≥2 farklı grid boyutunda)
-  - Kalibrasyon SONRASI süre tahmini gerçekleşenin ±%25'i içinde (aynı cihaz, ≥2 senaryo)
-  - Tahmin kaynağı raporda etiketli: `db` | `calibrated` | `measured`
-  - OOM öngörüsünde eyleme geçirilebilir öneri metni (dx büyüt / AOI küçült / linear'a geç)
+  - [ ] VRAM tahmini, Colab'da ölçülen mempool tepe değerinin ±%10'u içinde (≥2 farklı grid boyutunda) — **Colab kapısı, M7 oturumunda ölçülecek**
+  - [ ] Kalibrasyon SONRASI süre tahmini gerçekleşenin ±%25'i içinde (aynı cihaz, ≥2 senaryo) — **Colab kapısı** (mekanik yerelde testli: cpu kalibrasyonu → fit → estimate zinciri)
+  - [x] Tahmin kaynağı raporda etiketli: `db` | `calibrated` | `measured` (testli; cpu kalibrasyonu GPU anahtarıyla asla eşleşmez)
+  - [x] OOM öngörüsünde eyleme geçirilebilir öneri metni (dx büyüt ×m hesaplı / AOI küçült / linear'a geç / daha büyük cihaz) — testli
+- Not: dt/spp ve time-of-flight türetimi motordan `cw_discretization`/`cw_tof_periods` fonksiyonlarına çıkarıldı (tek doğruluk kaynağı; planner==engine testli). VRAM envanteri engine.py tampon listesini birebir aynalar — motora yeni kalıcı tampon eklersen `test_memory_inventory_matches_hand_count` kırılır (bilerek).
 
 ### M9 — KZK çözücüsü `[ ]`
 - [ ] Operator splitting: difraksiyon = angular spectrum (VERIFY: gemini2 önerisi; CN alternatifi karşılaştırılacak), absorpsiyon, nonlineerlik = zaman-uzayı Burgers (şok emniyeti); Rayleigh ile başlangıç düzlemi projeksiyonu; registry'de `kzk`
@@ -280,7 +281,18 @@ COMSOL-vari geometri kurulumu; materyallerden AYRI (Scene etiket üretir, Materi
 
 ## Sıradaki iş (canlı)
 
-- **Şimdi**: M7 CuPy backend (Colab oturumu gerekir) veya M8 Planner; M10 IO da CPU'da yapılabilir.
+- **Şimdi**: M7 CuPy backend (Colab oturumu gerekir; M8'in iki açık Colab kapısı — VRAM ±%10,
+  kalibre süre ±%25 — aynı oturumda ölçülür) veya M10 IO (CPU'da yapılabilir).
+- M8 yerel yarısı kapandı (2026-08-11): `hifusim.planner` — VRAM envanteri (engine birebir),
+  a·N·log2N+b·N süre modeli, gpu_db.json (7 cihaz), cpu/cuda kalibrasyon + calibration.json,
+  `estimate`/`compare`, kaynak etiketi db|calibrated|measured, OOM önerileri; 11 test.
+- Geometri adversarial review turu yapıldı (2026-08-11): 9 bulgu → 5'i düzeltildi-testlendi
+  (resample zoom hizalama kayması → tam-pozisyon örnekleme; cache argüman parmak izi; add_volume
+  volume.origin; axisym |r| aynalama; chunk böleni s^ndim; majority tie=son boyanan; __eq__;
+  HalfSpace+Transform config'leri). Fizik motoru review'u aynı gün: çekirdek fizik temiz;
+  4 sınır-kontratı düzeltmesi — kaynak genliği kütle-kaynak normalizasyonu (2c·dt/dx),
+  kütüphane çapı fazor konvansiyonu p(t)=Re{P e^{-iωt}}, kwave pml_size=grid.pml_vox +
+  kaynak-PML çakışma reddi, settle_capped/ramp koruması (ayrıntı: docs/devlog.md).
 - M6b kapandı (2026-08-11): 22 geometri testi; kriter notları — küre hacmi <%2 hem s=1 hem s=3'te
   (hacim hataları istatistiksel dengelenir; süperörnekleme kapısı s=5 referansına yakınsama olarak
   ölçülür), 0.5→0.3 mm resample arayüz ≤1 yeni-voxel, config build == elle kurulum (birebir id_map).

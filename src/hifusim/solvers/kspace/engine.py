@@ -11,7 +11,13 @@ Scheme per time step (dt), all states float32 on the chosen backend:
     u_i <- (u_i - dt/rho * IFFT{ i k_i kappa FFT{p} }) * e^{-alpha c dt} * sponge
     p   <- (p - (rho c^2 dt + 2 beta dt p) * IFFT{ kappa sum_i i k_i FFT{u_i} })
            * e^{-alpha c dt} * sponge
-    p[src] += p0 * ramp(t) * sin(omega t - phase)
+    p[src] += (2 c dt / dx) * p0 * ramp(t) * sin(omega t - phase)
+
+The (2 c dt / dx) factor is the k-Wave-style mass-source normalization: the
+realized plane amplitude is ~p0 (few-% residual), independent of grid,
+CFL, and remote medium content. Recorded phasors follow the library-wide
+convention p(t) = Re{P exp(-i omega t)} (outgoing = e^{+ikx}), matching
+the analytic references.
 
 The nonlinear term is the notebook's validated form: dp_nl = -2 beta dt p
 (div u), i.e. the local Westervelt correction to the equation of state.
@@ -62,6 +68,57 @@ def normalize_record_region(region: tuple[slice, ...], shape: tuple[int, ...]) -
     return tuple(out)
 
 
+def cw_discretization(
+    grid: Grid,
+    medium: Medium,
+    spec: CWRunSpec,
+    f0: float,
+    harmonics: tuple[int, ...] = (1,),
+) -> tuple[int, float]:
+    """Exact-period ``(spp, dt)`` under the CFL limit (notebook policy).
+
+    Single source of truth shared by the engine and the planner (M8): the
+    planner MUST predict the same dt the engine will use, or its step-count
+    and VRAM figures drift from reality. Raises on temporal-Nyquist violation
+    for the requested harmonics (h*f0 must sit strictly below spp*f0/2).
+    """
+    period = 1.0 / f0
+    dt_cfl = spec.cfl * grid.dx / medium.c_max
+    spp = max(2, int(floor(period / dt_cfl)))
+    dt = period / spp
+    while dt * medium.c_max / grid.dx > spec.cfl_hard_max + 1e-12 and spp < 1024:
+        spp += 1
+        dt = period / spp
+    h_max = max(harmonics)
+    if 2 * h_max >= spp:
+        raise ValueError(
+            f"harmonic {h_max} is at/above the temporal Nyquist for spp={spp} "
+            f"(need 2*h < spp); refine dx or lower cfl to raise spp."
+        )
+    return spp, dt
+
+
+def cw_tof_periods(
+    grid: Grid,
+    medium: Medium,
+    source: CWSource,
+    reference_point: tuple[int, ...] | None = None,
+) -> int:
+    """Periods of time-of-flight from the source to the farthest reference.
+
+    With no explicit reference the wave must reach every domain corner
+    (conservative default — matches the engine's settling floor).
+    """
+    period = 1.0 / source.f0
+    src_pos = source.indices.astype(np.float64) * grid.dx
+    if reference_point is not None:
+        refs = np.asarray(reference_point, np.float64)[None, :] * grid.dx
+    else:
+        refs = np.array(list(product(*((0, n - 1) for n in grid.shape))), np.float64) * grid.dx
+    dmax = max(float(np.sqrt(((src_pos - r) ** 2).sum(axis=1)).max()) for r in refs)
+    return max(1, int(ceil(dmax / medium.c_min / period)))
+
+
 def run_cw_kspace_pstd(
     solver_name: str,
     grid: Grid,
@@ -95,23 +152,10 @@ def run_cw_kspace_pstd(
     dx = grid.dx
     period = 1.0 / source.f0
     omega = 2.0 * np.pi * source.f0
-    c_max, c_min = medium.c_max, medium.c_min
+    c_max = medium.c_max
 
     # ---- exact-period dt under the CFL limit (notebook policy) ----
-    dt_cfl = spec.cfl * dx / c_max
-    spp = max(2, int(floor(period / dt_cfl)))
-    dt = period / spp
-    while dt * c_max / dx > spec.cfl_hard_max + 1e-12 and spp < 1024:
-        spp += 1
-        dt = period / spp
-    # Temporal Nyquist for harmonic capture: h*f0 must sit strictly below
-    # spp*f0/2 or the demod bin silently aliases (h=spp/2 doubles amplitude).
-    h_max = max(harmonics)
-    if 2 * h_max >= spp:
-        raise ValueError(
-            f"harmonic {h_max} is at/above the temporal Nyquist for spp={spp} "
-            f"(need 2*h < spp); refine dx or lower cfl to raise spp."
-        )
+    spp, dt = cw_discretization(grid, medium, spec, source.f0, harmonics)
 
     # ---- padded FFT domain; property maps edge-replicated ----
     active = tuple(slice(0, n) for n in grid.shape)
@@ -148,15 +192,17 @@ def run_cw_kspace_pstd(
     src_idx = tuple(xp.asarray(source.indices[:, d]) for d in range(nd))
     src_ph = xp.asarray(source.phases, dtype=xp.float32)
     amp = float(source.amplitude)
+    # Mass-source normalization (k-Wave-equivalent): a RAW additive injection
+    # realizes a plane amplitude ~amp/(2*CFL_local), which couples to REMOTE
+    # medium content through dt(c_max) — a far fast inclusion changed the
+    # realized drive by 27% (review finding, 2026-08-11). Scaling by
+    # 2*c*dt/dx at the source voxels makes the realized amplitude
+    # ~= source.amplitude, grid- and medium-invariant (few-% residual).
+    c_src = medium.c[tuple(source.indices[:, d] for d in range(nd))]
+    src_scale = xp.asarray(2.0 * c_src.astype(np.float64) * dt / dx, dtype=xp.float32)
 
     # ---- time of flight: farthest reference the wave must reach ----
-    src_pos = source.indices.astype(np.float64) * dx
-    if reference_point is not None:
-        refs = np.asarray(reference_point, np.float64)[None, :] * dx
-    else:  # conservative default: the wave must reach every domain corner
-        refs = np.array(list(product(*((0, n - 1) for n in grid.shape))), np.float64) * dx
-    dmax = max(float(np.sqrt(((src_pos - r) ** 2).sum(axis=1)).max()) for r in refs)
-    tof_periods = max(1, int(ceil(dmax / c_min / period)))
+    tof_periods = cw_tof_periods(grid, medium, source, reference_point)
 
     # ---- convergence monitoring region (interior, PML shaved) ----
     margin = grid.pml_vox + 2
@@ -186,13 +232,20 @@ def run_cw_kspace_pstd(
         p_local *= sponge
         t = n * dt
         env = ramp_envelope(t, period, source.ramp_periods)
-        p_local[src_idx] += xp.float32(amp * env) * xp.sin(xp.float32(omega * t) - src_ph)
+        p_local[src_idx] += (xp.float32(amp * env) * src_scale) * xp.sin(
+            xp.float32(omega * t) - src_ph
+        )
 
     # ---- settle until the per-period peak stops moving ----
-    eff_min = tof_periods + spec.min_settle_periods
-    eff_max = tof_periods + spec.max_settle_periods
+    # The convergence test must not arm before the source ramp has ended:
+    # the flattening cosine-ramp tail can dip below convergence_tol while
+    # the drive is still rising (review finding, 2026-08-11; the k-Wave
+    # adapter's fixed schedule already guards this).
+    eff_min = tof_periods + max(spec.min_settle_periods, int(ceil(source.ramp_periods)) + 1)
+    eff_max = max(tof_periods + spec.max_settle_periods, eff_min)
     n = 0
     prev_peak: float | None = None
+    converged = False
     converged_period = eff_max
     history: list[tuple[int, float, float]] = []
     periods_done = 0
@@ -215,6 +268,7 @@ def run_cw_kspace_pstd(
             rel = abs(peak - prev_peak) / max(prev_peak, 1e-9)
             if peak > 0.0 and rel < spec.convergence_tol:
                 converged_period = period_idx
+                converged = True
                 break
         prev_peak = peak
 
@@ -239,7 +293,12 @@ def run_cw_kspace_pstd(
         t = n * dt
         pa = p[rec]
         for h in harmonics:
-            buffers[h] += pa * xp.exp(xp.complex64(-1j * h * omega * t))
+            # Library-wide phasor convention: p(t) = Re{P exp(-i omega t)},
+            # outgoing wave = exp(+ikx) — same as the analytic references
+            # (O'Neil/Rayleigh). Accumulating exp(+i...) extracts exactly
+            # that P (review finding, 2026-08-11: the old -i kernel produced
+            # the CONJUGATE of the analytic convention).
+            buffers[h] += pa * xp.exp(xp.complex64(+1j * h * omega * t))
         xp.maximum(pmax, xp.abs(pa), out=pmax)
         n += 1
     for h in harmonics:
@@ -256,7 +315,7 @@ def run_cw_kspace_pstd(
         t_end_s=n * dt,
         tof_periods=tof_periods,
         converged_period=converged_period,
-        settle_capped=converged_period >= eff_max,
+        settle_capped=not converged,
         convergence_history=history,
         phasors=phasors,
         meta={

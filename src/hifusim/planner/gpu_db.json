@@ -1,0 +1,13 @@
+{
+  "_comment": "Datasheet-nominal GPU specs for the M8 planner 'db' estimate path. vram_gib uses binary GiB (nvidia-smi convention). Bandwidth GB/s and fp32 TFLOPS are vendor nominal; the calibrated path supersedes both.",
+  "devices": {
+    "T4": { "vram_gib": 16, "mem_bw_gbs": 320, "fp32_tflops": 8.1, "notes": "Colab free tier" },
+    "L4": { "vram_gib": 24, "mem_bw_gbs": 300, "fp32_tflops": 30.3, "notes": "Colab paid tier" },
+    "V100": { "vram_gib": 16, "mem_bw_gbs": 900, "fp32_tflops": 15.7, "notes": "SXM2 16 GB" },
+    "A100-40GB": { "vram_gib": 40, "mem_bw_gbs": 1555, "fp32_tflops": 19.5, "notes": "Colab Pro" },
+    "A100-80GB": { "vram_gib": 80, "mem_bw_gbs": 1935, "fp32_tflops": 19.5, "notes": "" },
+    "H100-SXM": { "vram_gib": 80, "mem_bw_gbs": 3350, "fp32_tflops": 66.9, "notes": "Colab Pro+" },
+    "H100-PCIe": { "vram_gib": 80, "mem_bw_gbs": 2000, "fp32_tflops": 51.2, "notes": "" }
+  },
+  "aliases": { "A100": "A100-40GB", "H100": "H100-SXM" }
+}

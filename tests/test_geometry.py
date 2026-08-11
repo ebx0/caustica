@@ -376,3 +376,135 @@ def test_real_mtype_phantom_if_present():
     sub = LabelVolume(labels=vol.labels[100:140, 150:190, 140:180], dx=vol.dx)
     out = sub.resample(0.3e-3, method="nearest")
     assert set(out.label_set) <= set(sub.label_set)
+
+
+# ---------------- review-hardening regressions (2026-08-11) ----------------
+
+
+def test_resample_samples_exact_physical_positions():
+    """zoom(grid_mode=False) used to stretch content ~(n_out-1)/((n_in-1)*r).
+
+    Interface truly at 18.0 mm (input i >= 36 at dx=0.5 mm) must land at
+    18.0 mm after 0.5 -> 0.3 mm resampling: first output row j with
+    j*0.3 >= interface-half-cell is j=60 — NOT j=61 (the old drifted answer).
+    """
+    labels = np.ones((40, 4), dtype=np.int32)
+    labels[36:, :] = 3
+    vol = LabelVolume(labels=labels, dx=0.5e-3)
+    for method in ("nearest", "smooth"):
+        out = vol.resample(0.3e-3, method=method)
+        assert out.shape[0] == round(40 * 0.5 / 0.3)  # extent preserved
+        first3 = int(np.argmax(out.labels[:, 0] == 3))
+        assert first3 == 60, f"{method}: interface at {first3 * 0.3:.1f} mm, want 18.0 mm"
+
+
+def test_labelvolume_eq_and_origin_preserved():
+    a = LabelVolume(labels=np.ones((4, 4), np.int32), dx=1e-3, origin=(1e-3, 2e-3))
+    b = LabelVolume(labels=np.ones((4, 4), np.int32), dx=1e-3, origin=(1e-3, 2e-3))
+    c = LabelVolume(labels=np.zeros((4, 4), np.int32), dx=1e-3, origin=(1e-3, 2e-3))
+    assert a == b  # dataclass-default __eq__ used to raise on the ndarray
+    assert a != c
+    assert a.resample(0.7e-3).origin == a.origin
+
+
+def test_labels_txt_cache_checks_arguments(tmp_path):
+    """A cache written with different args must be re-parsed, not served."""
+    path = tmp_path / "vol.txt"
+    np.savetxt(path, np.arange(12, dtype=float).reshape(3, 4))
+
+    def mapping(v):
+        return (v > 5).astype(np.int32)
+
+    v1 = load_labels_txt(path, shape=(3, 4), dx=1e-3, mapping=mapping, order="C")
+    assert v1.shape == (3, 4)
+    v2 = load_labels_txt(path, shape=(3, 4), dx=1e-3, mapping=mapping, order="C", transpose=(1, 0))
+    assert v2.shape == (4, 3)  # stale cache used to return (3, 4)
+    v3 = load_labels_txt(path, shape=(3, 4), dx=2e-3, mapping=mapping, order="C")
+    assert v3.dx == 2e-3  # stale cache used to return dx=1e-3
+    # unchanged args do hit the cache and agree
+    v4 = load_labels_txt(path, shape=(3, 4), dx=2e-3, mapping=mapping, order="C")
+    assert v4 == v3
+
+
+def test_add_volume_uses_volume_origin_by_default():
+    """rasterize -> add_volume round-trip must preserve placement."""
+    grid = Grid(shape=(20, 20), dx=1e-3)
+    org = (10e-3, 10e-3)
+    scene1 = Scene(ndim=2, background=0)
+    scene1.add(Ball((15e-3, 15e-3), 3e-3), 1)
+    vol = scene1.rasterize(grid, origin=org)
+    assert vol.labels.sum() > 0
+
+    scene2 = Scene(ndim=2, background=0)
+    scene2.add_volume(vol)  # no explicit position: volume.origin must apply
+    np.testing.assert_array_equal(scene2.rasterize(grid, origin=org).labels, vol.labels)
+
+
+def test_axisym_supersample_mirrors_negative_radii():
+    """On-axis sub-samples at r < 0 are physically the mirror points |r|."""
+    grid = Grid(shape=(4, 4), dx=3e-3)
+    band = Box((1.0e-3, 6e-3), (1.0e-3, 24e-3))  # radial band r in [0.5, 1.5] mm, all z
+    scene = Scene(ndim=2, axisymmetric=True, background=0)
+    scene.add(band, 1)
+    out = scene.rasterize(grid, supersample=3)
+    # r=0 row sub-samples at |-1|,0,|1| mm -> 6 of 9 votes inside the band
+    np.testing.assert_array_equal(out.labels[0, :], 1)
+
+
+def test_majority_tie_prefers_later_paint():
+    grid = Grid(shape=(4, 4), dx=1e-3)
+    scene = Scene(ndim=2, background=0)
+    scene.add(HalfSpace((2.0e-3, 0.0), (1, 0)), 2)  # x <= 2 mm, painted first
+    scene.add(HalfSpace((2.0e-3, 0.0), (-1, 0)), 7)  # x >= 2 mm, painted later
+    out = scene.rasterize(grid, supersample=2)  # voxel x=2 mm ties 2-2
+    np.testing.assert_array_equal(out.labels[2, :], 7)
+
+
+def test_chunked_rasterization_identical_across_chunk_sizes():
+    grid = Grid(shape=(24, 24), dx=1e-3)
+    scene = Scene(ndim=2, background=0)
+    scene.add(Ball((12e-3, 12e-3), 7e-3), 1)
+    scene.add(Box((5e-3, 5e-3), (6e-3, 6e-3)), 2)
+    big = scene.rasterize(grid, supersample=3, chunk_voxels=10**9)
+    tiny = scene.rasterize(grid, supersample=3, chunk_voxels=30)
+    np.testing.assert_array_equal(big.labels, tiny.labels)
+
+
+def test_halfspace_and_transform_configs_roundtrip():
+    """The JSON layer must cover HalfSpace and affine transforms too."""
+    cfg = SceneConfig(
+        ndim=2,
+        background=0,
+        objects=[
+            {
+                "shape": {
+                    "kind": "transform",
+                    "child": {"kind": "ellipsoid", "center_mm": (50, 50), "semiaxes_mm": (20, 8)},
+                    "scale": 1.2,
+                    "angle_deg": 30.0,
+                    "center_mm": (50, 50),
+                    "translate_mm": (5, 0),
+                },
+                "label": 1,
+            },
+            {"shape": {"kind": "halfspace", "point_mm": (80, 0), "normal": (1, 0)}, "label": 2},
+        ],
+    )
+    rebuilt = SceneConfig.model_validate_json(cfg.model_dump_json())
+    grid = _grid2d()
+
+    from hifusim.geometry import Ellipsoid as Ell
+
+    hand = Scene(ndim=2, background=0)
+    shape = (
+        Ell((50e-3, 50e-3), (20e-3, 8e-3))
+        .scaled(1.2, center=(50e-3, 50e-3))
+        .rotated(np.deg2rad(30.0), center=(50e-3, 50e-3))
+        .translated((5e-3, 0.0))
+    )
+    hand.add(shape, 1)
+    hand.add(HalfSpace((80e-3, 0.0), (1, 0)), 2)
+
+    np.testing.assert_array_equal(
+        rebuilt.build().rasterize(grid).labels, hand.rasterize(grid).labels
+    )
