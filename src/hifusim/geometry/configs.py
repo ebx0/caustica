@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
+import numpy as np
 from pydantic import Field
 
 from hifusim.config.models import HifusimModel
@@ -103,6 +104,50 @@ class ComplementConfig(HifusimModel):
         return ~self.child.build()
 
 
+class HalfSpaceConfig(HifusimModel):
+    """Points with ``normal . (x - point) <= 0``; ``normal`` is a unitless
+    direction (NOT mm — only ``point_mm`` converts)."""
+
+    kind: Literal["halfspace"] = "halfspace"
+    point_mm: tuple[float, ...]
+    normal: tuple[float, ...]
+
+    def build(self) -> sh.Shape:
+        return sh.HalfSpace([p * _MM for p in self.point_mm], self.normal)
+
+
+class TransformConfig(HifusimModel):
+    """Affine wrapper: scale, then rotate, then translate the child.
+
+    Application order is fixed (scale -> rotate -> translate, all about
+    ``center_mm`` where given) so a JSON tree has ONE meaning; nest
+    transforms for any other order. ``angle_deg`` is degrees (JSON
+    friendliness; the code API is radians), ``rotation_axis`` is required
+    in 3-D, ``scale`` factors are unitless.
+    """
+
+    kind: Literal["transform"] = "transform"
+    child: ShapeConfig
+    scale: tuple[float, ...] | float | None = None
+    angle_deg: float | None = None
+    rotation_axis: tuple[float, float, float] | None = None
+    center_mm: tuple[float, ...] | None = None
+    translate_mm: tuple[float, ...] | None = None
+
+    def build(self) -> sh.Shape:
+        out = self.child.build()
+        center = tuple(c * _MM for c in self.center_mm) if self.center_mm is not None else None
+        if self.scale is not None:
+            out = out.scaled(self.scale, center=center)
+        if self.angle_deg is not None:
+            out = out.rotated(
+                float(np.deg2rad(self.angle_deg)), axis=self.rotation_axis, center=center
+            )
+        if self.translate_mm is not None:
+            out = out.translated([t * _MM for t in self.translate_mm])
+        return out
+
+
 ShapeConfig = Annotated[
     BallConfig
     | BoxConfig
@@ -111,7 +156,9 @@ ShapeConfig = Annotated[
     | UnionConfig
     | IntersectionConfig
     | DifferenceConfig
-    | ComplementConfig,
+    | ComplementConfig
+    | HalfSpaceConfig
+    | TransformConfig,
     Field(discriminator="kind"),
 ]
 
@@ -142,7 +189,13 @@ class SceneObjectConfig(HifusimModel):
 
 
 class SceneConfig(HifusimModel):
-    """Full scene: background + ordered shape assignments + volume imports."""
+    """Full scene: background + ordered shape assignments + volume imports.
+
+    Paint order is FIXED: imports first (in list order), then objects (in
+    list order) — so shapes always draw over imported phantoms. A config
+    cannot interleave the two; build the Scene in code if you need a
+    phantom painted over a shape.
+    """
 
     ndim: int = Field(..., ge=2, le=3)
     axisymmetric: bool = False

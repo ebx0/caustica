@@ -232,3 +232,67 @@ olarak sabitliyor.
 - M7 CuPy (Colab) veya M8 planner. M6b'nin axisym sahneleri M15 çözücüsünü bekliyor.
 - Bir sonraki oturumda tam adversarial review turu (bu turda da atlandı — önceki oturumda
   limit yüzünden kesilmişti; geometri paketi henüz bağımsız review görmedi).
+
+---
+
+## 2026-08-11 — Oturum 7: M8 planner (yerel yarı) + tam adversarial review turu
+
+### M8 — Planner v1 (`hifusim.planner`)
+- VRAM modeli: `run_cw_kspace_pstd`'nin tampon envanterinin birebir dökümü (durum p+u,
+  özellik haritaları, sünger, spektral çarpanlar, kayıt tamponları, adım geçicileri,
+  FFT workspace payı) + %15 ayırıcı marjı. `test_memory_inventory_matches_hand_count`
+  envanteri elle sayımla sabitler — motora kalıcı tampon ekleyen bu testi kırar (bilerek).
+- Süre modeli `t_step = a·P·log2(P) + b·P`; üç kaynak, sonuçta ETİKETLİ:
+  `db` (gpu_db.json datasheet, kaba ~2x), `calibrated` (cihazda ~20 gerçek adım →
+  `~/.hifusim/calibration.json`, ±%25 Colab kapısı), `measured` (şimdi bu makinede ölç).
+- `planner.estimate(...)` / `planner.compare(...)` (fits/sure tablosu); OOM'da eyleme
+  geçirilebilir öneriler: dx ×m (hesaplı), AOI küçült, linear'a geç, daha büyük cihaz.
+- Motor refaktörü: dt/spp ve tof türetimi `cw_discretization`/`cw_tof_periods` olarak
+  motordan çıkarıldı — planner ve motor AYNI fonksiyonu çağırır (test: planner==engine).
+- Colab'a kalan iki kapı MILESTONES M8'de açık işaretli (VRAM ±%10, kalibre süre ±%25).
+
+### Adversarial review turu (2 bağımsız ajan: geometri + fizik motoru)
+
+**Geometri (9 bulgu; 5 MED düzeltildi, hepsi regresyon testli):**
+1. `resample`: scipy `zoom(grid_mode=False)` uç-hizalama → içerik %1.5'e varan gerilme,
+   0.5→0.3 mm fantomda arayüz 1 voxel kayıyordu. Çözüm: eksen-ayrık TAM fiziksel pozisyon
+   örnekleme (`j·dx_new/dx`); arayüz testte tam 18.0 mm'de sabitlendi.
+2. `.labels.npz` önbelleği yalnız mtime'a bakıyordu — farklı argümanlarla (transpose/dx/
+   mapping) çağrı bayat önbelleği sessizce döndürüyordu. Çözüm: argüman parmak izi npz'de.
+3. `add_volume` `volume.origin`'i yok sayıyordu (rasterize→add_volume round-trip konum
+   kaybediyordu). Çözüm: position verilmezse origin geçerli.
+4. Axisymmetric + supersample: eksen voxelinin r<0 alt-örnekleri aynalanmadan
+   değerlendiriliyordu (odak tam orada!). Çözüm: `pts[:,0]=|r|`.
+5. Chunk böleni s çarpanı eksikti (bellek s kat büyüyordu; sonuç doğruydu). Ayrıca:
+   majority tie artık gerçekten "son boyanan kazanır"; `LabelVolume.__eq__` düzgün;
+   HalfSpace + affine Transform config'leri eklendi (JSON kapsamı tamamlandı);
+   SceneConfig boyama sırası (import → obje) belgelendi.
+
+**Fizik motoru (fizik çekirdeği TEMİZ çıktı: dispersiyon 1500.000 m/s, absorpsiyon
+5.0017/5.0 Np/m, Westervelt/Fubini, birim dönüşümleri, Fortran sıralaması, analitik
+önfaktörler — hepsi doğrulandı; bulgular ÇÖZÜCÜ SINIRLARINDA):**
+1. **Kaynak genliği kalibre edildi**: ham additive enjeksiyon ~amp/(2·CFL_local)
+   gerçekleşiyordu ve dt(c_max) üzerinden UZAKTAKİ ortam içeriğine bağlıydı (uzak hızlı
+   inklüzyon sürücüyü %27 değiştirdi!). Çözüm: k-Wave-eşdeğeri kütle-kaynak ölçeği
+   `2·c·dt/dx` — gerçekleşen düzlem genliği ≈ amplitude, grid/ortam-değişmez (test:
+   sünger içine gömülü c=1800 blok spp'yi değiştirir ama genlik <%2 oynar).
+2. **Fazor konvansiyonu kütüphane çapında sabitlendi**: çözücü analitik referansların
+   KOMPLEKS EŞLENİĞİNİ üretiyordu. Artık `p(t)=Re{P·e^{-iωt}}`, giden dalga `e^{+ikx}`
+   (analitikle aynı). `single_bin_phasor` + motor demodülasyonu çevrildi; dispersiyon
+   ve spektral testler yeni konvansiyonu sabitler.
+3. **kwave adapteri PML**: `pml_size=grid.pml_vox` geçirilir (önce k-Wave default'u
+   sessizce farklı banttı); kaynak k-Wave'in iç PML bandına girerse ValueError.
+4. `settle_capped` dürüstlüğü (açık `converged` bayrağı); yerleşme penceresi artık
+   kaynak rampasını bekler (`eff_min ≥ tof + ceil(ramp)+1`; planner aynı formülü kullanır).
+5. Belgelendi/bilinçli bırakıldı: eğik eleman ayak izi ~πr²/cosγ (birebir notebook portu,
+   M12 adayı); faz haritası maskesinin yarım-piksel merkezi (dataset kodlama paritesi).
+
+### Kanıt
+- **139 + 4 kwave = 143 test yeşil** (11 planner + 8 geometri-regresyon + 3 fizik-regresyon
+  yeni). Canlı k-Wave çaprazları adapter değişikliği sonrası yeniden koşuldu.
+- NOT: 2026-08-10 tarihli görsel rapor ESKİ mutlak genlik/faz konvansiyonuyla üretildi;
+  normalize karşılaştırmalar geçerliliğini korur, mutlak değerler o günün anlık görüntüsüdür.
+  Bir sonraki rapor üretimi yeni konvansiyonla damgalanır.
+
+### Sonraki
+- M7 CuPy (Colab oturumu; M8'in iki Colab kapısı aynı oturumda ölçülür) veya M10 IO.

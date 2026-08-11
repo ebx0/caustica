@@ -33,9 +33,11 @@ class CWSource:
     phases:
         ``(n,)`` per-voxel drive phase [rad].
     amplitude:
-        Drive amplitude [Pa] (injected additively; the realized field
-        amplitude depends on the discretization — validation therefore
-        compares normalized shapes, or calibrates against a plane wave).
+        Drive amplitude [Pa]. Solvers apply mass-source normalization
+        (native: ``2 c dt / dx`` at the source voxels; k-Wave: internal),
+        so the realized plane amplitude is ~= this value to the few-%
+        level, independent of grid, CFL and medium (2026-08-11; before
+        that the raw additive injection made it discretization-dependent).
     f0:
         Drive frequency [Hz].
     ramp_periods:

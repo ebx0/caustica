@@ -59,7 +59,27 @@ medium = scene.to_medium(grid, breast_default(), supersample=3)
 ```
 
 2-D, 3-D and 2-D-axisymmetric (r-z half-plane) scenes share one code path;
-scenes serialize to JSON (`SceneConfig`) with imported files kept as references.
+scenes serialize to JSON (`SceneConfig`) with imported files kept as references
+(CSG trees, affine transforms and half-spaces included).
+
+## Planner (will it fit? how long will it take?)
+
+Ask BEFORE committing a Colab GPU:
+
+```python
+from hifusim import planner
+print(planner.estimate(grid, medium, src, solver="westervelt", gpu="A100").summary())
+print(planner.compare(grid, medium, src))   # every known GPU, one sorted table
+planner.calibrate()                         # ~20 real steps on THIS device
+```
+
+VRAM comes from a byte-level inventory of the engine's actual buffers (+15%
+allocator margin); wall time from `t_step = a·N·log2 N + b·N` with three
+sources, always labeled on the result: `db` (datasheet, coarse), `calibrated`
+(fitted on-device, persisted to `~/.hifusim/calibration.json`), `measured`
+(timed right now). Out-of-memory verdicts carry actionable advice: the exact
+dx factor that would fit, a smaller record region, the `linear` solver, or a
+larger device.
 
 ## Validation
 
@@ -72,6 +92,9 @@ grids/media/sources. Current evidence (all automated, `pytest`):
 - 3-D focused bowl vs O'Neil: focus within 1 voxel, axial correlation r > 0.99, −6 dB widths < 5%
 - Westervelt vs Fubini: A2/A1 within 5% (measured 0.9–3.2%) across σ = 0.06–0.61
 - `linear` vs `kwave` (real OMP binary), 2-D water: normalized-field correlation r > 0.99
+- calibrated source amplitude: realized plane amplitude ≈ `source.amplitude` on both the
+  native and k-Wave paths, invariant to grid/CFL/remote medium content; one phasor
+  convention library-wide (`p(t) = Re{P e^{−iωt}}`, shared with the analytic references)
 
 Figure-based comparison reports live under `benchmarks/reports/`.
 
@@ -84,6 +107,8 @@ src/hifusim/
   materials.py, medium.py, sources.py, spectral.py
   analytic/   # Rayleigh, O'Neil, Fubini, cap sampling — the ground-truth layer
   arrays/     # transducer geometry (Archimedean spiral), DAS phasing, voxelization
+  geometry/   # CSG shapes, scenes, label-volume import + dx-resampling
+  planner/    # pre-run VRAM + wall-time estimates (db | calibrated | measured)
   solvers/    # registry + capability declarations; kspace engine; kwave adapter
 tests/        # pytest; CPU-only by default; kwave/gpu tests auto-skip
 scripts/      # validation-report generator

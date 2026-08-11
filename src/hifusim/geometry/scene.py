@@ -65,12 +65,15 @@ class Scene:
         """Place an imported label volume; its labels paint over the scene.
 
         ``position`` is the physical location of the volume's first voxel
-        center [m]; labels listed in ``ignore`` are transparent (typically
-        the phantom's own background).
+        center [m]. When omitted it defaults to ``volume.origin`` — so a
+        volume produced by :meth:`rasterize` (or round-tripped through npz)
+        lands back where it was, instead of silently at zero (review
+        finding, 2026-08-11). Labels listed in ``ignore`` are transparent
+        (typically the phantom's own background).
         """
         if volume.ndim != self.ndim:
             raise ValueError(f"{volume.ndim}-D volume in a {self.ndim}-D scene")
-        pos = tuple(float(p) for p in (position or (0.0,) * self.ndim))
+        pos = tuple(float(p) for p in (position if position is not None else volume.origin))
         if len(pos) != self.ndim:
             raise ValueError(f"position needs {self.ndim} entries, got {position}")
         self._entries.append(_VolumeEntry(volume, pos, tuple(int(i) for i in ignore)))
@@ -122,8 +125,10 @@ class Scene:
         axes = [a.reshape(-1) for a in axes]  # length shape[d] * s each
 
         out = np.full(grid.shape, self.background, dtype=np.int32)
+        # Sub-points per voxel-row of axis 0: s sub-rows x (each later axis
+        # contributes n*s samples) -> prod(shape[1:]) * s^ndim total.
         n_rows_chunk = max(
-            1, int(chunk_voxels // max(1, int(np.prod(grid.shape[1:])) * s ** (self.ndim - 1)))
+            1, int(chunk_voxels // max(1, int(np.prod(grid.shape[1:])) * s**self.ndim))
         )
 
         for row0 in range(0, grid.shape[0], n_rows_chunk):
@@ -131,6 +136,12 @@ class Scene:
             ax0 = axes[0][row0 * s : row1 * s]
             mesh = np.meshgrid(ax0, *axes[1:], indexing="ij")
             pts = np.column_stack([m.reshape(-1) for m in mesh])
+            if self.axisymmetric:
+                # Sub-voxel samples of the on-axis voxel row reach r < 0;
+                # physically those are the mirror points |r| (review
+                # finding, 2026-08-11 — unmirrored sampling misclassified
+                # the axis row, exactly where the focus sits).
+                pts[:, 0] = np.abs(pts[:, 0])
             labels = np.full(pts.shape[0], self.background, dtype=np.int32)
             for entry in self._entries:
                 if isinstance(entry, _ShapeEntry):
@@ -155,8 +166,25 @@ class Scene:
         target = np.where(inside)[0][keep]
         labels[target] = vals[keep]
 
+    def _paint_precedence(self) -> dict[int, int]:
+        """Later-painted labels get higher precedence (background lowest)."""
+        prec = {self.background: 0}
+        for i, entry in enumerate(self._entries, start=1):
+            if isinstance(entry, _ShapeEntry):
+                prec[entry.label] = i
+            else:
+                for lab in entry.volume.label_set:
+                    if lab not in entry.ignore:
+                        prec[lab] = i
+        return prec
+
     def _majority(self, ss_labels: np.ndarray, s: int) -> np.ndarray:
-        """Majority vote over s^ndim sub-samples per voxel (paint-order ties)."""
+        """Majority vote over s^ndim sub-samples per voxel.
+
+        Vote ties break toward the most recently painted label (true
+        paint-order semantics; review finding 2026-08-11 — np.unique order
+        used to make the smallest label win regardless of paint order).
+        """
         if s == 1:
             return ss_labels
         shape = tuple(n // s for n in ss_labels.shape)
@@ -167,8 +195,13 @@ class Scene:
         moved = ss_labels.reshape(resh)
         order = list(range(0, 2 * len(shape), 2)) + list(range(1, 2 * len(shape), 2))
         blocks = moved.transpose(order).reshape(*shape, s ** len(shape))
-        present = np.unique(ss_labels)
-        counts = np.zeros((*shape, present.size), dtype=np.int16)
+        prec = self._paint_precedence()
+        # argmax returns the FIRST maximum -> order candidates by
+        # descending precedence so ties resolve to the latest paint.
+        present = np.array(
+            sorted(np.unique(ss_labels), key=lambda lab: (-prec.get(int(lab), -1), int(lab)))
+        )
+        counts = np.zeros((*shape, present.size), dtype=np.int32)
         for i, lab in enumerate(present):
             counts[..., i] = (blocks == lab).sum(axis=-1)
         return present[np.argmax(counts, axis=-1)].astype(np.int32)

@@ -59,10 +59,11 @@ def test_exact_period_dt_policy(lossless):
 
 
 def test_plane_wave_dispersion_below_0p1_percent(lossless):
-    # Right of the source only the +x wave exists: P(x) ~ exp(-i k x).
+    # Library convention (2026-08-11): p(t)=Re{P e^{-iwt}}, so right of the
+    # source the outgoing +x wave is P(x) ~ exp(+i k x).
     ph = lossless.phasor[SPAN]
     dphi = np.angle(ph[1:] * np.conj(ph[:-1]))
-    k_num = -dphi.mean() / DX
+    k_num = dphi.mean() / DX
     rel_err = abs(k_num - K0) / K0
     assert rel_err < 1e-3, f"phase-speed error {rel_err * 100:.4f}% >= 0.1%"
 

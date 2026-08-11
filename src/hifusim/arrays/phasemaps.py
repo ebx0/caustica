@@ -14,6 +14,11 @@ import numpy as np
 
 
 def apply_circular_mask(image: np.ndarray) -> np.ndarray:
+    # Verbatim notebook port: the mask centers at size/2 while
+    # project_elements centers the aperture at (size-1)/2 — half a pixel
+    # apart. Harmless for the production geometry (rim margin ~2 px) and
+    # kept EXACTLY as-is for dataset-encoding parity (review note,
+    # 2026-08-11).
     size = image.shape[0]
     y, x = np.ogrid[-size / 2 : size / 2, -size / 2 : size / 2]
     out = image.copy()

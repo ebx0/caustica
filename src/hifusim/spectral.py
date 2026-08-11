@@ -20,10 +20,13 @@ def single_bin_phasor(
 ) -> np.ndarray:
     """Complex amplitude of the ``f0`` component of ``series``.
 
-    Convention: ``p(t) ~ Re{ P * exp(+i omega t) }`` — matching the solver's
-    streaming accumulation ``sum p * exp(-i omega t) * 2 / N``. The window
-    must span an INTEGER number of periods for a leakage-free result
-    (exact-period dt policy); this is asserted to 1e-6 period tolerance.
+    LIBRARY-WIDE convention: ``p(t) = Re{ P * exp(-i omega t) }``, so an
+    outgoing wave is ``e^{+ikx}`` — the same convention as the analytic
+    references (O'Neil/Rayleigh). The extraction kernel is therefore
+    ``sum p * exp(+i omega t) * 2 / N`` (review finding, 2026-08-11: the
+    old ``-i`` kernel produced the CONJUGATE of the analytic convention).
+    The window must span an INTEGER number of periods for a leakage-free
+    result (exact-period dt policy); asserted to 1e-6 period tolerance.
 
     Parameters
     ----------
@@ -45,7 +48,7 @@ def single_bin_phasor(
             f"single-bin DFT would leak. Use an exact-period record window."
         )
     t = t0 + dt * np.arange(n)
-    kernel = np.exp(-1j * 2.0 * np.pi * f0 * t)
+    kernel = np.exp(+1j * 2.0 * np.pi * f0 * t)
     shape = [1] * x.ndim
     shape[axis] = n
     return (x * kernel.reshape(shape)).sum(axis=axis) * (2.0 / n)
