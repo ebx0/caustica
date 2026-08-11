@@ -193,3 +193,42 @@ olarak sabitliyor.
   kapısı eklendi), DAS-çözücü-içi yönlendirme testi (M12'ye not).
 - **99 test yeşil.** Sonraki oturum: M7 CuPy (Colab) veya M8 planner; review'un physics
   finder'ı hiç koşamadı — bir sonraki oturumda tam tur tekrarlanmalı.
+
+---
+
+## 2026-08-11 — Oturum 6 (Fable): M6b geometri sistemi (araya alınan iş)
+
+### Yapılanlar
+- Kullanıcı talebi: COMSOL-vari geometri. `src/hifusim/geometry/` paketi (materyallerden AYRI):
+  - `shapes.py`: Ball/Box/Cylinder/Ellipsoid/HalfSpace + `| & - ~` CSG cebiri +
+    translated/rotated/scaled (AffineShape, ters-dönüşüm noktalarla; tek kontrat:
+    `contains((n,ndim) noktalar)`).
+  - `scene.py`: Scene(ndim, background, axisymmetric) — boyama sıralı etiket ataması,
+    `rasterize(grid, supersample)` (s^ndim alt-örnek + çoğunluk oyu, satır-chunk'lı),
+    `add_volume` (import edilen fantom sahnede konumlandırılır, ignore etiketleri şeffaf),
+    `to_medium`.
+  - `volumes.py`: LabelVolume (dx+origin'li heterojen etiket hacmi), mtype-tarzı text import
+    (genel `mapping` callable + meme fantomu preseti; .labels.npz otomatik önbellek),
+    `resample(dx, "nearest"|"smooth")` (smooth = one-hot lineer + argmax, etiket icat etmez).
+  - `configs.py`: pydantic tagged-union CSG ağacı JSON'da; import DOSYA REFERANSI
+    (yol+format+konum+resample ayarı) JSON'da.
+- Refactor/temizlik: PLAN.md'ye "tarihsel belge" bandı (canlı doküman MILESTONES),
+  README'ye geometri bölümü. Gereksiz dosya taraması: silinecek bir şey bulunamadı
+  (_code_cells.py gitignore'da referans olarak duruyor — bilinçli).
+
+### Test kapısı dersleri
+- Süperörnekleme kapısı "hacim hatası küçülür" DEĞİL: büyük pürüzsüz şekilde kenar hataları
+  istatistiksel dengelenir (s=1 hacim hatası ~%0.08!). Ölçülebilir doğru kapı: s=3
+  rasterizasyonu s=5 (yakınsak) referansına s=1'den daha yakın (7 vs 9 sınır voxeli).
+- Axisymmetric r≥0 kuralı voxel MERKEZLERİ için (r=0 merkezli eksen voxeli meşru).
+
+### Kanıt
+- **121 test yeşil** (22 yeni geometri testi: primitif analitiği, CSG ≡ numpy boolean birebir,
+  dönüşümler, boyama sırası, axisym, mtype-format round-trip + NaN + Fortran + önbellek,
+  0.5→0.3 mm resample (gerçek oran) arayüz ≤1 voxel, config JSON round-trip + build ≡ elle
+  kurulum, Scene→Medium→çözücü smoke, gerçek mtype.txt yükleme+resample [yerel]).
+
+### Sonraki
+- M7 CuPy (Colab) veya M8 planner. M6b'nin axisym sahneleri M15 çözücüsünü bekliyor.
+- Bir sonraki oturumda tam adversarial review turu (bu turda da atlandı — önceki oturumda
+  limit yüzünden kesilmişti; geometri paketi henüz bağımsız review görmedi).

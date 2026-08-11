@@ -108,6 +108,32 @@ analitik süit (O'Neil/Rayleigh/Fubini) + k-Wave çapraz karşılaştırması bi
   - DAS: yanal yönlendirme < λ/2, eksenel < λ (yer-değiştirme farkı), hedefte ≥3× genlik ✓
   - Entegrasyon: voxelize spiral + linear çözücü su içinde; yanal ≤1 voxel, eksenel [O'Neil tepe−1, geo+1] ✓
 
+### M6b — Geometri sistemi: CSG + import + yeniden örnekleme `[x]` (2026-08-11, araya alınan iş — kullanıcı talebi)
+COMSOL-vari geometri kurulumu; materyallerden AYRI (Scene etiket üretir, MaterialDB etiketi yorumlar).
+- [x] `geometry.shapes`: primitifler (Ball, Box, Cylinder, Ellipsoid, HalfSpace) — 2D/3D,
+      konum/boyut parametreli, `translated/rotated/scaled` dönüşümleri
+- [x] `geometry.csg`: boolean cebir — `|` (union/OR), `&` (intersection/AND), `-` (difference),
+      `~` (complement/NOT); keyfi derinlikte ağaç
+- [x] `geometry.scene`: Scene(ndim, axisymmetric, background) + boyama sıralı etiket ataması +
+      `rasterize(grid, supersample)` (süperörnekleme + çoğunluk oyu ile kenar kalitesi) +
+      `add_volume` (import edilen hacmi sahneye yerleştirme) + `to_medium(grid, db)`
+- [x] `geometry.volumes`: LabelVolume (heterojen çok-sınıflı etiket hacmi, dx+origin'li);
+      mtype-tarzı text import (genel eşleme kuralları + meme fantomu preseti + npz önbellek),
+      npz IO; `resample(dx_new, method="nearest"|"smooth")` (smooth = one-hot lineer + argmax)
+- [x] `geometry.configs`: pydantic tagged-union CSG ağacı JSON'da; import dosya REFERANSI
+      JSON'da (yol + format + eşleme); round-trip + build() == elle kurulum
+- Başarı kriterleri:
+  - Küre/disk hacim doğruluğu: rasterize hacmi analitikten < %2 (makul dx'te); supersample=3,
+    supersample=1'den ölçülebilir daha iyi
+  - CSG cebiri: örneklenmiş maskelerde numpy boolean eşdeğerliğiyle BİREBİR
+  - Axisymmetric sahne (r,z): r≥0 yarı-düzlem doğrulaması; 2D makineyle aynı yol
+  - Import: mtype-format round-trip (yaz→oku→eşle), NaN→background, Fortran order;
+    gerçek mtype.txt varsa yerelde yüklenip yeniden örnekleniyor (yoksa skip)
+  - Resample: 0.5→0.3 mm (gerçek kullanım oranı) etiket kümesi korunur; arayüz konumu ≤ 1 voxel;
+    smooth ile nearest karşılaştırılır
+  - Config: JSON round-trip; build sonucu elle kurulan sahneyle aynı id_map
+  - Entegrasyon: Scene→Medium→linear çözücü smoke testi
+
 ### M7 — CuPy backend (CUDA) `[ ]` — Colab oturumu gerektirir
 - [ ] ElementwiseKernel'ların portu; aynı çözücü kodu iki backend'de; fp32 yolu
 - Başarı kriterleri:
@@ -255,5 +281,8 @@ analitik süit (O'Neil/Rayleigh/Fubini) + k-Wave çapraz karşılaştırması bi
 ## Sıradaki iş (canlı)
 
 - **Şimdi**: M7 CuPy backend (Colab oturumu gerekir) veya M8 Planner; M10 IO da CPU'da yapılabilir.
+- M6b kapandı (2026-08-11): 22 geometri testi; kriter notları — küre hacmi <%2 hem s=1 hem s=3'te
+  (hacim hataları istatistiksel dengelenir; süperörnekleme kapısı s=5 referansına yakınsama olarak
+  ölçülür), 0.5→0.3 mm resample arayüz ≤1 yeni-voxel, config build == elle kurulum (birebir id_map).
 - M0–M6 kriter kanıtları: 90 test yeşil (devlog 2026-08-10). k-Wave canlı çapraz doğrulama r>0.99;
   Fubini A2/A1 < %5; O'Neil 3D kapıları; DAS/voxelizasyon kapıları.

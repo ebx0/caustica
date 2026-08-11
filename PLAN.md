@@ -1,5 +1,9 @@
 # HIFU Simülasyon Kütüphanesi — Mimari Plan (v2)
 
+> **NOT (2026-08-11):** Bu belge TARİHSEL mimari plandır. Canlı yol haritası ve güncel durum
+> **MILESTONES.md**'de, oturum kayıtları **docs/devlog.md**'dedir. Bu plandan sapmalar (GUI'nin
+> ertelenmesi, k-Wave'in registry çözücüsü olması, milestone yeniden numaralandırması) oralarda izlenir.
+
 > Tarih: 2026-08-10 · Hazırlayan: Claude (Fable) · Sonraki oturumlar: Opus
 > Kaynak: `hifu_pred_dx300_t128.ipynb` (v12.3, tek hücre, ~3750 satır) + `mtype.txt` (0.5 mm meme fantomu, 310×355×253, Fortran order)
 > Notebook'un düz metin dökümü: `_code_cells.py` (bu klasörde; refactor sırasında referans olarak kullan)

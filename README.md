@@ -40,6 +40,27 @@ res    = solver.run(grid, medium, src, CWRunSpec(), harmonics=(1, 2))
 res.amp, res.phase, res.p_max, res.harmonic_amp(2)
 ```
 
+## Geometry (COMSOL-style CSG)
+
+Build media from primitives with boolean operators, import heterogeneous label
+volumes (e.g. the breast phantom's `mtype`-style text), and resample everything
+to YOUR `dx` with a selectable method:
+
+```python
+from hifusim.geometry import Ball, Box, Scene, load_breast_phantom
+from hifusim.materials import breast_default
+
+scene = Scene(ndim=3, background=4)                     # coupling gel
+scene.add((Ball((0, 0, 0.05), 0.04) | Box((0, 0, 0.09), (0.08, 0.08, 0.02)))
+          - Ball((0, 0, 0.05), 0.01), label=2)          # CSG: (A | B) - C
+phantom = load_breast_phantom("mtype.txt")              # cached as .labels.npz
+scene.add_volume(phantom.resample(0.3e-3, method="smooth"), ignore=(4,))
+medium = scene.to_medium(grid, breast_default(), supersample=3)
+```
+
+2-D, 3-D and 2-D-axisymmetric (r-z half-plane) scenes share one code path;
+scenes serialize to JSON (`SceneConfig`) with imported files kept as references.
+
 ## Validation
 
 Every solver milestone is gated by tests against **analytic references** (O'Neil 1949 focused
