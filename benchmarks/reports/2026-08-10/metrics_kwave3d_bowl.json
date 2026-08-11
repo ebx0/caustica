@@ -1,0 +1,23 @@
+{
+  "scenario": "kwave3d_bowl",
+  "elapsed_s": 268.0,
+  "vs_kwave": {
+    "rel_l2_pct": 1.57,
+    "pearson_r": 0.99981,
+    "peak_offset_vox": [
+      0,
+      0,
+      1
+    ],
+    "peak_amp_ratio": 1.081
+  },
+  "axial_vs_oneill": {
+    "rel_l2_pct": 5.57,
+    "pearson_r": 0.99158,
+    "peak_offset_vox": [
+      1,
+      0
+    ],
+    "peak_amp_ratio": 0.0735
+  }
+}

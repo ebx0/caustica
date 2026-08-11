@@ -1,48 +1,81 @@
 # hifusim
 
+[![CI](https://github.com/ebx0/hifusim/actions/workflows/ci.yml/badge.svg)](https://github.com/ebx0/hifusim/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
+
 **GPU-accelerated, multi-solver acoustic simulation library for HIFU / therapeutic ultrasound.**
-Pure-Python core (NumPy on CPU, CuPy/CUDA on GPU — no precompiled binaries), designed to run
-identically on a local workstation and on Google Colab (T4/L4/A100/H100).
+Pure-Python core (NumPy on CPU, CuPy/CUDA on GPU — no precompiled binaries required), designed
+to run identically on a local workstation and on Google Colab (T4/L4/A100/H100).
 
 > Status: pre-alpha, under active development. The name `hifusim` is a working name and may
 > change before the first public release. See [MILESTONES.md](MILESTONES.md) for the roadmap
-> with per-milestone acceptance criteria, and [PLAN.md](PLAN.md) for the architecture plan.
+> with per-milestone acceptance criteria and current progress, [PLAN.md](PLAN.md) for the
+> architecture plan, and [docs/devlog.md](docs/devlog.md) for the engineering log.
 
-## Design pillars
+## Solvers (one API, a registry of engines)
 
-- **Multi-solver, one API** — full-wave nonlinear Westervelt k-space PSTD, an optimized linear
-  path, and a parabolic KZK solver (planned), selected through a registry with explicit
-  capability declarations. Invalid parameter/solver combinations fail loudly at setup time.
-- **Dimension-agnostic core** — 1D/2D/3D Cartesian grids share one code path; 2D doubles as the
-  cheap CI/testing environment. Axisymmetric grids are planned as a separate transform layer.
-- **Analytics-first validation** — O'Neil (1949), Rayleigh integral and Fubini references ship
-  inside the library and gate every solver milestone; k-Wave cross-comparisons and ITRUSST
-  benchmark corridors follow (see MILESTONES.md, Faz C/E).
-- **Config everywhere** — every simulation serializes to a Pydantic/JSON config; physical inputs
-  are mm/MHz, voxel counts are always *derived*, never hand-written.
-- **Cost before compute** — a planner module (milestone M8) estimates runtime and VRAM per GPU
-  *before* a run is launched.
+| name | physics | dims | backend | status |
+|---|---|---|---|---|
+| `linear` | linear full-wave k-space PSTD | 1/2/3-D | numpy (cupy: M7) | ✅ validated |
+| `westervelt` | nonlinear (Westervelt) k-space PSTD, multi-harmonic capture | 1/2/3-D | numpy (cupy: M7) | ✅ validated |
+| `kwave` | [k-Wave](http://www.k-wave.org) kspaceFirstOrder via `k-wave-python` (CPU/OMP binary) | 2/3-D | external | ✅ wrapped + cross-validated |
+| `kzk` | parabolic KZK (z-marching) | planned | — | M9 |
+
+```python
+import numpy as np
+import hifusim as hs
+import hifusim.solvers as solvers
+from hifusim.arrays import archimedean_spiral
+from hifusim.materials import water
+from hifusim.solvers import CWRunSpec
+
+grid   = hs.Grid(shape=(96, 96, 96), dx=0.5e-3, pml=hs.PMLSpec(thickness=5e-3))
+medium = hs.Medium.homogeneous(grid.shape, water())
+array  = archimedean_spiral(n_elements=32, d_outer=0.030, d_inner=0.010, roc=0.030)
+src    = array.voxelize(grid, apex_vox=(48, 48, 12), f0=1.0e6, amplitude=1e5).source
+
+solver = solvers.get("westervelt")()          # or "linear", "kwave"
+res    = solver.run(grid, medium, src, CWRunSpec(), harmonics=(1, 2))
+res.amp, res.phase, res.p_max, res.harmonic_amp(2)
+```
+
+## Validation
+
+Every solver milestone is gated by tests against **analytic references** (O'Neil 1949 focused
+bowl, Rayleigh integral, Fubini nonlinear harmonic growth, exponential absorption, plane-wave
+dispersion) **and cross-validated against k-Wave** running as a registry solver on identical
+grids/media/sources. Current evidence (all automated, `pytest`):
+
+- plane-wave phase-speed error < 0.1% at 4 ppw; measured absorption within 1% of configured α
+- 3-D focused bowl vs O'Neil: focus within 1 voxel, axial correlation r > 0.99, −6 dB widths < 5%
+- Westervelt vs Fubini: A2/A1 within 5% (measured 0.9–3.2%) across σ = 0.06–0.61
+- `linear` vs `kwave` (real OMP binary), 2-D water: normalized-field correlation r > 0.99
+
+Figure-based comparison reports live under `benchmarks/reports/`.
 
 ## Layout
 
 ```
 src/hifusim/
   core/       # Grid, PML, backend dispatch (numpy|cupy)
-  config/     # Pydantic models, JSON round-trip, derived quantities
-  materials.py, medium.py
-  analytic/   # Rayleigh integral, O'Neil bowl, plane-wave & Fubini references
-  solvers/    # (M4+) registry, linear & Westervelt PSTD, KZK
-  ...
-tests/        # pytest; CPU-only by default, GPU tests auto-skip
+  config/     # Pydantic models: strict fields, mm-in / voxels-derived, JSON round-trip
+  materials.py, medium.py, sources.py, spectral.py
+  analytic/   # Rayleigh, O'Neil, Fubini, cap sampling — the ground-truth layer
+  arrays/     # transducer geometry (Archimedean spiral), DAS phasing, voxelization
+  solvers/    # registry + capability declarations; kspace engine; kwave adapter
+tests/        # pytest; CPU-only by default; kwave/gpu tests auto-skip
+scripts/      # validation-report generator
 ```
 
 ## Development
 
 ```bash
+git clone https://github.com/ebx0/hifusim && cd hifusim
 python -m venv .venv
-.venv/Scripts/python -m pip install -e .[dev]
+.venv/Scripts/python -m pip install -e .[dev,kwave]   # kwave extra optional
 .venv/Scripts/python -m pytest
 .venv/Scripts/python -m ruff check src tests
 ```
 
-License: MIT (to be confirmed before first public release).
+License: [MIT](LICENSE).

@@ -1,0 +1,14 @@
+{
+  "scenario": "spiral",
+  "elapsed_s": 0.8,
+  "n_elements": 128,
+  "elem_radius_mm": 3.204,
+  "target_xz_mm": [
+    8.0,
+    85.0
+  ],
+  "peak_xz_mm": [
+    8.0,
+    84.5
+  ]
+}

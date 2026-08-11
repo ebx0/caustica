@@ -1,0 +1,8 @@
+{
+  "scenario": "planewave",
+  "elapsed_s": 0.4,
+  "alpha_target_np_m": 30.0,
+  "alpha_measured_np_m": 30.1,
+  "alpha_err_pct": 0.334,
+  "dispersion_err_pct": 0.00384
+}

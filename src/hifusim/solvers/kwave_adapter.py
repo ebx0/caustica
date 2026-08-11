@@ -90,6 +90,16 @@ class KWaveSolver(SolverBase):
         harmonics = tuple(dict.fromkeys(int(h) for h in harmonics))
         if not harmonics or harmonics[0] != 1 or any(h < 1 for h in harmonics):
             raise ValueError(f"harmonics must start with 1 (fundamental), got {harmonics}")
+        if reference_point is not None:
+            ref = tuple(reference_point)
+            if len(ref) != grid.ndim or any(
+                not float(r).is_integer() or not 0 <= int(r) < n
+                for r, n in zip(ref, grid.shape, strict=True)
+            ):
+                raise ValueError(
+                    f"reference_point must be integer VOXEL indices inside {grid.shape}, "
+                    f"got {reference_point} (did you pass meters?)"
+                )
         self.validate(grid, medium, source)
         try:
             from kwave.kgrid import kWaveGrid
@@ -116,6 +126,11 @@ class KWaveSolver(SolverBase):
         # ---- exact-period dt at k-Wave's customary CFL 0.3 ----
         spp = max(2, int(ceil(period / (0.3 * dx / c_max))))
         dt = period / spp
+        if 2 * max(harmonics) >= spp:
+            raise ValueError(
+                f"harmonic {max(harmonics)} is at/above the temporal Nyquist for "
+                f"spp={spp}; refine dx to raise spp."
+            )
 
         # ---- fixed schedule: tof + min_settle + record ----
         src_pos = source.indices.astype(np.float64) * dx
@@ -125,7 +140,12 @@ class KWaveSolver(SolverBase):
             refs = np.array(list(product(*((0, n - 1) for n in grid.shape))), np.float64) * dx
         dmax = max(float(np.sqrt(((src_pos - r) ** 2).sum(axis=1)).max()) for r in refs)
         tof_periods = max(1, int(ceil(dmax / c_min / period)))
-        settle_periods = tof_periods + spec.min_settle_periods
+        # Fixed schedule (no adaptive convergence here): the settle window
+        # must outlast the source ramp, or the record window lands on a
+        # still-rising drive and the phasor is silently biased low.
+        settle_periods = tof_periods + max(
+            spec.min_settle_periods, int(ceil(source.ramp_periods)) + 2
+        )
         total_periods = settle_periods + spec.n_record_periods
         if spec.t_end_min_us is not None:
             total_periods = max(total_periods, ceil(spec.t_end_min_us * 1e-6 / period))
@@ -197,6 +217,12 @@ class KWaveSolver(SolverBase):
 
         p_rec = np.asarray(sensor_data["p"])
         n_points = int(np.prod(grid.shape))
+        if rec_steps == n_points:  # square: orientation is ambiguous
+            warnings.warn(
+                "k-Wave sensor data is square (rec_steps == n_points); assuming "
+                "time-major layout - verify against a non-square run.",
+                stacklevel=2,
+            )
         if p_rec.shape == (rec_steps, n_points):
             p_rec = p_rec.T
         elif p_rec.shape != (n_points, rec_steps):
@@ -211,7 +237,13 @@ class KWaveSolver(SolverBase):
 
         full_order = np.flatnonzero(np.ones(grid.shape, dtype=bool).flatten(order="F"))
         full_coords = np.unravel_index(full_order, grid.shape, order="F")
-        rec = record_region if record_region is not None else tuple(slice(0, n) for n in grid.shape)
+        from hifusim.solvers.kspace.engine import normalize_record_region
+
+        rec = (
+            normalize_record_region(record_region, grid.shape)
+            if record_region is not None
+            else tuple(slice(0, n) for n in grid.shape)
+        )
 
         phasors: dict[int, np.ndarray] = {}
         for h in harmonics:

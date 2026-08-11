@@ -1,0 +1,11 @@
+{
+  "scenario": "kwave2d_linear",
+  "elapsed_s": 269.0,
+  "rel_l2_pct": 1.14,
+  "pearson_r": 0.99981,
+  "peak_offset_vox": [
+    0,
+    0
+  ],
+  "peak_amp_ratio": 1.0289
+}

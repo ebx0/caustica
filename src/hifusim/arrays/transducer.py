@@ -41,8 +41,10 @@ class TransducerArray:
             raise ValueError(f"positions/normals must be matching (n, 3), got {pos.shape}")
         if self.elem_radius <= 0 or self.focal_length <= 0:
             raise ValueError("elem_radius and focal_length must be > 0")
-        object.__setattr__(self, "positions", np.ascontiguousarray(pos))
-        object.__setattr__(self, "normals", np.ascontiguousarray(nrm))
+        # Copies, not views: a frozen geometry must not shift when the caller
+        # mutates the arrays it built us from (review finding, 2026-08-11).
+        object.__setattr__(self, "positions", np.array(pos, dtype=np.float64, copy=True))
+        object.__setattr__(self, "normals", np.array(nrm, dtype=np.float64, copy=True))
 
     @property
     def n_elements(self) -> int:

@@ -1,0 +1,11 @@
+{
+  "scenario": "fubini",
+  "elapsed_s": 0.2,
+  "p0_effective_mpa": 2.069,
+  "sigma_range": [
+    0.051,
+    0.6
+  ],
+  "a2_a1_max_err_pct": 3.8,
+  "a2_a1_mean_err_pct": 1.91
+}

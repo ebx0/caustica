@@ -107,3 +107,89 @@ periodic boundaries are intended"). Test PML'le düzeltildi.
   fark nonlineer basınç güncellemesi). Kapılar: β=0 ≡ linear (<1e-6), Fubini A2/A1 <%5
   (σ≤0.3), amp/p_max tavan değişmezi. Ardından M6 arrays (spiral port).
 - GitHub'a çıkış: kullanıcı `gh auth login` yapınca repo oluşturulup push edilecek.
+
+---
+
+## 2026-08-10 — Oturum 5 (Fable): M5 + M6 + görsel doğrulama raporu + GitHub
+
+### Yapılanlar
+- Kullanıcı kararları (tur 5): rapor = repo(MD+PNG) + Artifact web sayfası; kapsam = M5+M6+rapor;
+  k-Wave seti = 2D×3 + 3D çanak; GitHub'a şimdi çıkılıyor.
+- Profesyonelleşme: `.gitattributes` (LF normalize), `LICENSE` (MIT — kullanıcı telif satırını
+  kendi adına güncelledi), GitHub Actions CI (ubuntu+windows, kwave testleri CI'da deselect),
+  kwave adapter uyarı hijyeni (bilinen zararsız FutureWarning/UserWarning'ler koşu çevresinde
+  filtreli; 8 uyarı → 1).
+- **M5**: `solvers/kspace/engine.py` — linear+westervelt TEK numerik yüzeyde; westervelt
+  `dp_nl = −2·β·dt·p·divu` (notebook formu); çok-harmonik fazor (`harmonics=(1,2,3)`) tek
+  kayıt geçişinde; `SolverResult.phasors` + `harmonic_amp(n)`. kwave adapter de aynı
+  harmonics API'sini aldı (kayıttan n·f0 tek-bin DFT).
+- **M5 kalibrasyonu**: ppw=8'de Fubini A2/A1 ~%10 sapıyor (3f0 @2.67ppw aliası); ppw=16'da
+  %0.85–3.2 → kapı ppw=16'da tanımlandı, çözünürlük kuralı belgelendi.
+- **M6**: `arrays/` paketi — `archimedean_spiral` (parametre-generik notebook portu; üretim
+  128'lik birebir: r_elem=3.205mm), `TransducerArray` (DAS fazlama, `rayleigh_preview`,
+  `voxelize` eleman-sahiplikli kabuk projeksiyonu), `phasemaps` (sin/cos + boyut seçici).
+- **GitHub**: repo canlı — https://github.com/ebx0/hifusim (public, master push'landı,
+  gh hesabı ebx0 zaten girişliydi; winget ile gh CLI kuruldu). README rozetli/profesyonel.
+- Görsel rapor altyapısı: `scripts/gen_validation_report.py` (8 senaryo, paralel koşulabilir,
+  metrics fragment + PNG üretir; dataviz kurallarına uygun: tek-renk sequential rampa,
+  diverging fark haritaları, sabit kategorik sıra). Senaryolar workflow ile paralel koşuldu.
+
+### KEŞİF 3 — Dataset'in faz haritası 64×64'müş (32 değil)
+M6 testi: üretim 128-spirali 32×32 faz haritası yerleşiminden GEÇEMİYOR (95 eleman,
+0.25-piksel merkezleme toleransını aşıyor; matematik notebook'la birebir aynı). Notebook
+runtime'da sessizce 64×64 fallback'ine düşüyordu → **dataset'in gerçek phase_map_size'ı 64**.
+(HDF5 attr'ı doğru yazıyor; ama "default 32" zihinsel modeli yanlıştı.) Test bunu regresyon
+olarak sabitliyor.
+
+### Test-kapısı fizik dersleri (yanlış kapıyı düzeltmek de iş)
+- DAS kapısı "tepe==hedef" OLAMAZ: sonlu açıklık odak kayması tepe noktasını faz hedefinin
+  proksimaline çeker. Doğru kapı: uniform-vs-DAS tepe YER DEĞİŞTİRMESİ = komut edilen
+  kayma (yanal <λ/2, eksenel <λ; sistematik bias farkta iptal) + hedefte ≥3× genlik artışı.
+- Entegrasyon kapısında eksenel pencere O'Neil-öngörülü tepeyle sınırlandı (geometrik odak değil).
+- Rapor senaryosunda dispersiyon ölçümü kayıpsız koşuya ayrıldı (kayıplı koşuda decay ripple
+  faz-gradyan kestirimini kirletiyor: %0.28 görünüyordu; kayıpsızda %0.004).
+
+### Kanıt
+- **90 test yeşil** (M5: β=0 birebir eşitlik [array_equal], Fubini A2/A1 <%5 @ σ∈[0.06,0.61],
+  A3/A1 <%10, tavan değişmezi; M6: geometri regresyonu, DAS, voxelizasyon, faz haritası,
+  uçtan uca spiral+çözücü odaklanması). Commit: 4b81f8c.
+- Rapor metrikleri (bu oturum): O'Neil 3D axial r=0.9916 / lateral r=0.9989; absorpsiyon
+  hatası %0.33; dispersiyon %0.004; spiral DAS tepe (8.0, 84.5)mm vs hedef (8.0, 85.0)mm.
+  k-Wave karşılaştırma sayıları workflow bitince metrics.json'da.
+
+---
+
+## 2026-08-11 — Oturum 5 devamı: rapor yayınlandı, review sertleştirmesi
+
+### Rapor
+- 8 senaryo koşuldu (workflow ile paralel; k-wave-python'ın SANİYE-damgalı temp .h5 adı
+  yüzünden aynı saniyede başlayan paralel kwave koşuları çakışıyor — nonlineer senaryo seri
+  yeniden koşuldu, kısıt scripte not edildi).
+- Sonuçlar: k-Wave vs hifusim — 2D lineer relL2 %1.14 (r=0.99981), heterojen %1.29
+  (r=0.99977), nonlineer f0 %1.14, 3D çanak %1.57 (r=0.99981, odak ≤1 voxel). 2f0 alanı
+  zayıf-σ'da relL2 %17.3 ama A2/A1 seviyeleri %9.8 farkla koridor içinde.
+- Çıktılar: benchmarks/reports/2026-08-10/ (REPORT.md + metrics.json + 9 PNG) +
+  Artifact web sayfası: https://claude.ai/code/artifact/af2a6222-6ffb-4efe-b811-ee06f1f1479f
+
+### Review turu (kısmi) ve sertleştirme
+- Adversarial review workflow'u oturum limitine takıldı (17/19 ajan düştü) — "0 bulgu"
+  İNCELENMEDİ demek. İki finder'ın 19 bulgusu journal'dan kurtarıldı, elle doğrulandı.
+- GERÇEK bulgular düzeltildi:
+  1. record_region dilimleri PADDED FFT dizisine uygulanıyordu — slice(None)/negatif stop
+     pad voxellerini içeriyordu → normalize_record_region() (aktif şekle karşı çözümleme).
+  2. spp/2 üstü harmonikler sessizce aliaslanıyordu → temporal-Nyquist kontrolü (2h < spp).
+  3. kwave adaptörünün sabit programı ramp'i beklemiyordu → settle ≥ ramp+2 periyot.
+  4. reference_point'e metre verilirse sessizce yanlış TOF → voxel-tamsayı doğrulaması.
+  5. kwave record_region doğrulanmıyordu → aynı normalize yolu; kare sensör-verisi
+     yönelim belirsizliğine uyarı.
+  6. TransducerArray caller dizilerini aliaslıyordu → kopya.
+  7. build_phase_maps çakışan elemanları sessizce eziyordu → ValueError.
+- Test sertleştirmesi (tests/test_review_hardening.py, 9 test): yukarıdakilerin kapıları +
+  FAZLI kaynakla canlı k-Wave testi (Fortran-order LUT'u gerçekten zorlar; r>0.99 &
+  relL2<%5 GEÇTİ) + heterojen+soğurmalı ortam canlı testi (GEÇTİ) + hızlı nonlineer smoke.
+- Kabul edilen sınırlamalar (düzeltilmedi, belgelendi): Fubini σ-ekseni self-kalibrasyonu
+  (enjekte kaynakta mutlak genlik tanımsız — yapısal), rapor scriptinin assert'süzlüğü
+  (kapılar pytest'te, script raporlama aracı), r-kapısının ~%6 λ-hatası toleransı (relL2
+  kapısı eklendi), DAS-çözücü-içi yönlendirme testi (M12'ye not).
+- **99 test yeşil.** Sonraki oturum: M7 CuPy (Colab) veya M8 planner; review'un physics
+  finder'ı hiç koşamadı — bir sonraki oturumda tam tur tekrarlanmalı.

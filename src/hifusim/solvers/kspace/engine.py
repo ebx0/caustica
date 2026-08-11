@@ -41,6 +41,27 @@ from hifusim.sources import CWSource, ramp_envelope
 log = logging.getLogger("hifusim")
 
 
+def normalize_record_region(region: tuple[slice, ...], shape: tuple[int, ...]) -> tuple[slice, ...]:
+    """Resolve record-region slices against the ACTIVE grid shape.
+
+    The pressure array lives on the FFT-padded shape, so open-ended or
+    negative slices must be resolved against the active shape FIRST —
+    ``p[slice(None)]`` on a padded axis would silently include pad voxels
+    (review finding, 2026-08-11).
+    """
+    if len(region) != len(shape):
+        raise ValueError(f"record_region rank {len(region)} != grid rank {len(shape)}")
+    out = []
+    for sl, n_ax in zip(region, shape, strict=True):
+        start, stop, step = sl.indices(n_ax)
+        if step != 1:
+            raise ValueError(f"record_region does not support strides, got {sl}")
+        if stop <= start:
+            raise ValueError(f"record_region slice {sl} is empty on an axis of {n_ax}")
+        out.append(slice(start, stop))
+    return tuple(out)
+
+
 def run_cw_kspace_pstd(
     solver_name: str,
     grid: Grid,
@@ -57,6 +78,16 @@ def run_cw_kspace_pstd(
     harmonics = tuple(dict.fromkeys(int(h) for h in harmonics))
     if not harmonics or harmonics[0] != 1 or any(h < 1 for h in harmonics):
         raise ValueError(f"harmonics must start with 1 (fundamental), got {harmonics}")
+    if reference_point is not None:
+        ref = tuple(reference_point)
+        if len(ref) != grid.ndim or any(
+            not float(r).is_integer() or not 0 <= int(r) < n
+            for r, n in zip(ref, grid.shape, strict=True)
+        ):
+            raise ValueError(
+                f"reference_point must be integer VOXEL indices inside {grid.shape}, "
+                f"got {reference_point} (did you pass meters?)"
+            )
 
     b = get_backend(backend)
     xp, fft = b.xp, b.fft
@@ -73,6 +104,14 @@ def run_cw_kspace_pstd(
     while dt * c_max / dx > spec.cfl_hard_max + 1e-12 and spp < 1024:
         spp += 1
         dt = period / spp
+    # Temporal Nyquist for harmonic capture: h*f0 must sit strictly below
+    # spp*f0/2 or the demod bin silently aliases (h=spp/2 doubles amplitude).
+    h_max = max(harmonics)
+    if 2 * h_max >= spp:
+        raise ValueError(
+            f"harmonic {h_max} is at/above the temporal Nyquist for spp={spp} "
+            f"(need 2*h < spp); refine dx or lower cfl to raise spp."
+        )
 
     # ---- padded FFT domain; property maps edge-replicated ----
     active = tuple(slice(0, n) for n in grid.shape)
@@ -189,10 +228,9 @@ def run_cw_kspace_pstd(
             periods_done += 1
 
     # ---- record window: leakage-free single-bin DFTs + time peak ----
-    rec = record_region if record_region is not None else active
-    for sl, n_ax in zip(rec, grid.shape, strict=True):
-        if not (0 <= (sl.start or 0) and (sl.stop or n_ax) <= n_ax):
-            raise ValueError(f"record_region {rec} exceeds active grid {grid.shape}")
+    rec = (
+        normalize_record_region(record_region, grid.shape) if record_region is not None else active
+    )
     rec_steps = spec.n_record_periods * spp
     buffers = {h: xp.zeros(p[rec].shape, dtype=xp.complex64) for h in harmonics}
     pmax = xp.zeros(p[rec].shape, dtype=xp.float32)
