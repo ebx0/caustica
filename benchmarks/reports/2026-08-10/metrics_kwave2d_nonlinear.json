@@ -1,0 +1,25 @@
+{
+  "scenario": "kwave2d_nonlinear",
+  "elapsed_s": 2.8,
+  "f0": {
+    "rel_l2_pct": 1.14,
+    "pearson_r": 0.99981,
+    "peak_offset_vox": [
+      0,
+      0
+    ],
+    "peak_amp_ratio": 1.0
+  },
+  "second_harmonic": {
+    "rel_l2_pct": 17.3,
+    "pearson_r": 0.97417,
+    "peak_offset_vox": [
+      0,
+      0
+    ],
+    "peak_amp_ratio": 0.9011
+  },
+  "a2_over_a1_hifusim": 0.012,
+  "a2_over_a1_kwave": 0.0133,
+  "amplitude_match_scale": 0.9718
+}

@@ -34,7 +34,9 @@ def test_production_geometry_regression(production_array):
     assert arr.elem_radius == pytest.approx(3.205e-3, rel=1e-2)
     # All elements between the inset apertures, on the spherical shell.
     r = np.hypot(arr.positions[:, 0], arr.positions[:, 1])
-    assert r.min() >= 0.022 and r.max() <= 0.050
+    # Spiral must respect the one-element-radius inset from both apertures.
+    assert r.min() >= 0.022 + arr.elem_radius - 1e-9
+    assert r.max() <= 0.050 - arr.elem_radius + 1e-9
     shell = np.linalg.norm(arr.positions - arr.focus, axis=1)
     np.testing.assert_allclose(shell, 0.100, rtol=1e-9)
     np.testing.assert_allclose(np.linalg.norm(arr.normals, axis=1), 1.0, rtol=1e-9)
@@ -98,6 +100,11 @@ def test_voxelization_invariants(small_array):
     idx = asrc.source.indices
     r_mm = np.hypot(idx[:, 0] - 48, idx[:, 1] - 48) * 0.5
     assert r_mm.max() <= (0.030 / 2) * 1e3 + 1.0
+    # Curved shell: z must actually follow the bowl depth (cap height),
+    # not sit in a flat plane (review finding: z geometry was unasserted).
+    h_vox = (0.030 - np.sqrt(0.030**2 - 0.015**2)) / 0.5e-3
+    z_span = idx[:, 2].max() - idx[:, 2].min()
+    assert 0.5 * h_vox <= z_span <= h_vox + 2
     asrc.source.check_inside(grid)
 
 

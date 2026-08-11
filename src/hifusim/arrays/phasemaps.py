@@ -81,6 +81,14 @@ def build_phase_maps(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Return ``(sin_cos_maps (2, S, S), phase_map (S, S))`` float32 images."""
     xi, yi, _, _ = project_elements(positions, size, d_outer)
+    lin = xi * size + yi
+    _uniq, counts = np.unique(lin, return_counts=True)
+    if (counts > 1).any():
+        n_lost = int(counts[counts > 1].sum() - (counts > 1).sum())
+        raise ValueError(
+            f"{n_lost} element(s) would be silently overwritten at size={size} "
+            f"(pixel collisions); use select_phase_map_size() to pick a valid size."
+        )
     sin_map = np.zeros((size, size), np.float32)
     cos_map = np.zeros((size, size), np.float32)
     phase_map = np.zeros((size, size), np.float32)

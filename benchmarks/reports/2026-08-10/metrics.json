@@ -1,0 +1,103 @@
+{
+  "fubini": {
+    "elapsed_s": 0.2,
+    "p0_effective_mpa": 2.069,
+    "sigma_range": [
+      0.051,
+      0.6
+    ],
+    "a2_a1_max_err_pct": 3.8,
+    "a2_a1_mean_err_pct": 1.91
+  },
+  "kwave2d_hetero": {
+    "elapsed_s": 269.3,
+    "rel_l2_pct": 1.29,
+    "pearson_r": 0.99977,
+    "peak_offset_vox": [
+      0,
+      0
+    ],
+    "peak_amp_ratio": 1.0294
+  },
+  "kwave2d_linear": {
+    "elapsed_s": 269.0,
+    "rel_l2_pct": 1.14,
+    "pearson_r": 0.99981,
+    "peak_offset_vox": [
+      0,
+      0
+    ],
+    "peak_amp_ratio": 1.0289
+  },
+  "kwave2d_nonlinear": {
+    "elapsed_s": 2.8,
+    "f0": {
+      "rel_l2_pct": 1.14,
+      "pearson_r": 0.99981,
+      "peak_offset_vox": [
+        0,
+        0
+      ],
+      "peak_amp_ratio": 1.0
+    },
+    "second_harmonic": {
+      "rel_l2_pct": 17.3,
+      "pearson_r": 0.97417,
+      "peak_offset_vox": [
+        0,
+        0
+      ],
+      "peak_amp_ratio": 0.9011
+    },
+    "a2_over_a1_hifusim": 0.012,
+    "a2_over_a1_kwave": 0.0133,
+    "amplitude_match_scale": 0.9718
+  },
+  "kwave3d_bowl": {
+    "elapsed_s": 268.0,
+    "vs_kwave": {
+      "rel_l2_pct": 1.57,
+      "pearson_r": 0.99981,
+      "peak_offset_vox": [
+        0,
+        0,
+        1
+      ],
+      "peak_amp_ratio": 1.081
+    },
+    "axial_vs_oneill": {
+      "rel_l2_pct": 5.57,
+      "pearson_r": 0.99158,
+      "peak_offset_vox": [
+        1,
+        0
+      ],
+      "peak_amp_ratio": 0.0735
+    }
+  },
+  "oneill3d": {
+    "elapsed_s": 10.7,
+    "axial_r": 0.99158,
+    "lateral_r": 0.99894
+  },
+  "planewave": {
+    "elapsed_s": 0.4,
+    "alpha_target_np_m": 30.0,
+    "alpha_measured_np_m": 30.1,
+    "alpha_err_pct": 0.334,
+    "dispersion_err_pct": 0.00384
+  },
+  "spiral": {
+    "elapsed_s": 0.8,
+    "n_elements": 128,
+    "elem_radius_mm": 3.204,
+    "target_xz_mm": [
+      8.0,
+      85.0
+    ],
+    "peak_xz_mm": [
+      8.0,
+      84.5
+    ]
+  }
+}

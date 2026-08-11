@@ -1,0 +1,11 @@
+{
+  "scenario": "kwave2d_hetero",
+  "elapsed_s": 269.3,
+  "rel_l2_pct": 1.29,
+  "pearson_r": 0.99977,
+  "peak_offset_vox": [
+    0,
+    0
+  ],
+  "peak_amp_ratio": 1.0294
+}
