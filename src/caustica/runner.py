@@ -201,6 +201,7 @@ class RunnerOptions:
     vram_limit_gib: float | None = None  # None -> actual device VRAM on cupy
     stop_after_periods: int | None = None  # deterministic stop (tests/ops)
     allow_slow_cpu: bool = False  # M10i/D20: override the CPU time gate
+    preview_only: bool = False  # M10i/D34: skip result.h5, keep the preview
 
 
 def _cpu_limit_min() -> float:
@@ -272,6 +273,20 @@ def _plan(built: BuiltJob, backend_name: str, opts: RunnerOptions):
         if opts.measure
         else est_gpu
     )
+    # Expected result.h5 size (M10i/D34): the disk cost of a run is a choice
+    # the user must SEE before a multi-GB file lands on a Drive mount.
+    rec = built.record_region
+    if rec is None:
+        n_rec = int(np.prod(built.grid.shape))
+    else:
+        n_rec = int(np.prod([sl.stop - sl.start for sl in rec]))
+    nh = len(built.harmonics)
+    if built.output.quantize:  # float16 pairs per phasor + float16 p_max
+        result_bytes = n_rec * (nh * 4 + 2)
+    else:  # complex64 phasors + float32 p_max
+        result_bytes = n_rec * (nh * 8 + 4)
+    result_mb = result_bytes / 2**20
+
     payload = {
         "source": est_here.source,
         "spp": est_here.spp,
@@ -283,6 +298,7 @@ def _plan(built: BuiltJob, backend_name: str, opts: RunnerOptions):
         "t_worst_s": round(est_here.t_worst_s, 1),
         "vram_gib": round(est_here.vram_gib, 3),
         "vram_breakdown_bytes": dict(est_here.vram_breakdown),
+        "result_size_mb_expected": round(result_mb, 1),
         "gpu": opts.gpu,
         "gpu_t_expected_s": round(est_gpu.t_expected_s, 1),
         "gpu_fits": est_gpu.fits,
@@ -296,6 +312,9 @@ def _plan(built: BuiltJob, backend_name: str, opts: RunnerOptions):
             f"expected {est_here.t_expected_s:.0f} s "
             f"({est_here.steps_expected}-{est_here.steps_worst} steps, spp={est_here.spp})",
             f"memory for this run: {est_here.vram_gib:.2f} GiB",
+            f"expected result.h5 size: ~{result_mb:,.1f} MB "
+            f"({'float16-quantized' if built.output.quantize else 'float32'}, "
+            f"{nh} harmonic{'s' if nh > 1 else ''}; --preview-only skips it)",
             est_gpu.summary(),
         ]
     )
@@ -588,26 +607,34 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
         # from the startup probe, and a Drive FUSE mount can lose the
         # directory in between (v12.3 lesson).
         ensure_dir_verified(outdir)
-        save_result(
-            result_path,
-            result,
-            built.source,
-            dx=built.grid.dx,
-            grid_shape=built.grid.shape,
-            pml_vox=built.grid.pml_vox,
-            quantize=built.output.quantize,
-            max_norm_err=built.output.max_norm_err,
-            extra_attrs={
-                "job_name": built.name,
-                "job_kind": built.job.kind,
-                "git_commit": git_commit,
-                "runner": f"caustica {caustica.__version__}",
-                # Geometry stamp so `caustica report` can place the field in
-                # mm-from-apex without the job/medium (M10d).
-                "apex_vox": list(apex_vox),
-                "focus_vox": [int(v) for v in built.focus_vox],
-            },
-        )
+        if opts.preview_only:
+            # D34 opt-in: the field is deliberately discarded — the preview
+            # package IS the output here, so its failure is a real failure
+            # (the post-store preview below is best-effort only because
+            # result.h5 is already safe). No result.h5 also means no
+            # skip-guard: a rerun of this folder solves again.
+            _write_preview_package(built, result, outdir, apex_vox)
+        else:
+            save_result(
+                result_path,
+                result,
+                built.source,
+                dx=built.grid.dx,
+                grid_shape=built.grid.shape,
+                pml_vox=built.grid.pml_vox,
+                quantize=built.output.quantize,
+                max_norm_err=built.output.max_norm_err,
+                extra_attrs={
+                    "job_name": built.name,
+                    "job_kind": built.job.kind,
+                    "git_commit": git_commit,
+                    "runner": f"caustica {caustica.__version__}",
+                    # Geometry stamp so `caustica report` can place the field
+                    # in mm-from-apex without the job/medium (M10d).
+                    "apex_vox": list(apex_vox),
+                    "focus_vox": [int(v) for v in built.focus_vox],
+                },
+            )
     except Exception as exc:
         hb.write("failed", error=f"store: {type(exc).__name__}: {exc}")
         traceback.print_exc()
@@ -622,11 +649,13 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
 
     # ---- preview package (M10d): <=10 MB answer to "did the run work?" ----
     # The result is already safe on disk; a preview failure must never turn
-    # a successful run into a failed one — warn and move on.
-    try:
-        _write_preview_package(built, result, outdir, apex_vox)
-    except Exception as exc:
-        log.warning("preview package failed (the result itself is safe): %s", exc)
+    # a successful run into a failed one — warn and move on. (In
+    # --preview-only mode the package was already written above, fatally.)
+    if not opts.preview_only:
+        try:
+            _write_preview_package(built, result, outdir, apex_vox)
+        except Exception as exc:
+            log.warning("preview package failed (the result itself is safe): %s", exc)
 
     actual = {
         "elapsed_solve_s": round(elapsed_solve, 2),
@@ -637,6 +666,7 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
         "settle_capped": result.settle_capped,
         "resumed_from_period": offset_periods or None,
         "vram_pool_peak_gib": _vram_pool_peak_gib(backend_name),
+        "preview_only": opts.preview_only,
     }
     meta = {
         "format": "caustica-run-meta/1",
@@ -661,7 +691,8 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
         log.warning("run_meta.json write failed: %s", exc)
     if native:
         ck_path.unlink(missing_ok=True)  # only now is it safe to forget the run
-    hb.write("done", result=str(result_path))
+    final_artifact = outdir / "preview.npz" if opts.preview_only else result_path
+    hb.write("done", result=str(final_artifact))
 
     pk = float(np.abs(result.phasor).max())
     print(
@@ -670,5 +701,8 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
         f"{' (SETTLE CAP HIT)' if result.settle_capped else ''}; "
         f"peak |P| = {pk / 1e6:.3f} MPa"
     )
-    print(f"result: {result_path}")
+    if opts.preview_only:
+        print(f"preview only (no result.h5, --preview-only): {final_artifact}")
+    else:
+        print(f"result: {final_artifact}")
     return EXIT_OK

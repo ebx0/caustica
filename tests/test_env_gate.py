@@ -295,3 +295,41 @@ def test_ppw_warning_at_the_head_of_the_report(tmp_path):
     md = (out / "REPORT.md").read_text(encoding="utf-8")
     head = "\n".join(md.splitlines()[:10])  # the HEAD, not a footnote
     assert "WARNING" in head and "points per wavelength" in head
+
+
+# ---------------------------------------- --preview-only + plan size line
+
+
+def test_plan_carries_expected_result_size(tmp_path):
+    import json
+
+    out = tmp_path / "out"
+    code, _ = run_recording_warnings(mini_job(tmp_path), opts(out=out, dry_run=True))
+    assert code == EXIT_OK
+    plan = json.loads((out / "plan.json").read_text(encoding="utf-8"))
+    assert plan["result_size_mb_expected"] > 0
+    assert "expected result.h5 size" in (out / "plan.txt").read_text(encoding="utf-8")
+
+
+def test_preview_only_skips_the_field_but_keeps_the_rest(tmp_path):
+    import json
+
+    out = tmp_path / "out"
+    code, _ = run_recording_warnings(mini_job(tmp_path), opts(out=out, preview_only=True))
+    assert code == EXIT_OK
+    assert not (out / "result.h5").exists()  # the point of the flag
+    assert (out / "preview.npz").is_file()
+    assert (out / "metrics.json").is_file()
+    meta = json.loads((out / "run_meta.json").read_text(encoding="utf-8"))
+    assert meta["actual"]["preview_only"] is True
+    assert not (out / "checkpoint.npz").exists()  # the run is DONE
+    status = json.loads((out / "status.json").read_text(encoding="utf-8"))
+    assert status["state"] == "done" and status["result"].endswith("preview.npz")
+
+
+def test_default_output_unchanged_full_result_plus_preview(tmp_path):
+    """D34: the DEFAULT does not change — full field AND preview."""
+    out = tmp_path / "out"
+    code, _ = run_recording_warnings(mini_job(tmp_path), opts(out=out))
+    assert code == EXIT_OK
+    assert (out / "result.h5").is_file() and (out / "preview.npz").is_file()

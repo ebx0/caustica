@@ -84,6 +84,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="accept a CPU run over the CAUSTICA_CPU_LIMIT_MIN (default 5 min) estimate gate",
     )
+    r.add_argument(
+        "--preview-only",
+        action="store_true",
+        help="write only the <=10 MB preview package + metrics, no result.h5 "
+        "(disk-pressure opt-in; the full field is unrecoverable and a rerun solves again)",
+    )
     r.add_argument("--stop-after-periods", type=int, default=None, help=argparse.SUPPRESS)
 
     ex = sub.add_parser(
@@ -149,6 +155,7 @@ def main(argv: list[str] | None = None) -> int:
                 vram_limit_gib=args.vram_limit_gib,
                 stop_after_periods=args.stop_after_periods,
                 allow_slow_cpu=args.allow_slow_cpu,
+                preview_only=args.preview_only,
             ),
         )
     if args.command == "example":
