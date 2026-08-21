@@ -90,7 +90,11 @@ def export_path(name: str) -> Path:
     side win), after which :meth:`PhantomAsset.save` happily ``mkdir -p``s the
     way there and overwrites whatever it lands on (review finding, 2026-08-18).
     """
-    if not name or Path(name).name != name or name in (".", ".."):
+    # Reject BOTH separators on every platform: Path(name).name only knows
+    # the native one, so on POSIX "x\\y" would pass here yet be unreadable
+    # as an export name on Windows (first seen on the Linux CI leg,
+    # 2026-08-22).
+    if not name or Path(name).name != name or "\\" in name or name in (".", ".."):
         raise ValueError(
             f"export name must be a plain filename with no path separators, got {name!r}"
         )
