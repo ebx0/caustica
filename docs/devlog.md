@@ -1272,3 +1272,34 @@ eksik 2 boyut (motor-checkpoint, job-config/steering) elle tarandı.
 - Yeni cpu girdisi: **a = 2.831e-09, b = 0.0** (48³: 4.12 ms, 72³: 19.86 ms). Sağlama:
   model 240×300×360 için ~1.8 s öngörüyor, ölçülen 2.25-2.37 s (~%20 altında — iki küçük
   şekilli fit için makul; eşik 5 dk ölçeğinde bu sapma karar değiştirmez).
+
+### M10i adım 3 — 5 dk CPU kapısı (`d2f3c75`)
+- VRAM reddinin hemen ardında, yalnız native+numpy: eşik `CAUSTICA_CPU_LIMIT_MIN` (vars. 5 dk),
+  aşımda EXIT_CONFIG(2) — yeni çıkış kodu yok; mesaj tahmin + `est.source` + iki kaçış
+  (`--backend cupy`, `--allow-slow-cpu`); kaçış aynı commit'te. Eşik altı: koşu başına TAM BİR
+  `CausticaWarning`. `--dry-run` da kapılı (VRAM reddiyle aynı semantik).
+- Tasarım düzeltmesi (planın harfinden sapma, gerekçeli): `--no-measure` yolunda `est` GPU
+  datasheet sayısıdır — kapı ona kurulsaydı 10 saatlik CPU işi sessizce geçerdi. Kapı bu yolda
+  kalibre cpu girdisinden yeniden ölçekliyor; ikisi de yoksa "yargılayamıyorum" uyarısı.
+- KANIT KOŞUSU (tam boy 560×700×480 @ 0.25 mm homojen, numpy, --no-measure): exit 2,
+  "estimated wall time ... ~9509 s (~2.6 h, estimate source: calibrated), over the 5 min CPU
+  limit". Aynı işte A100 db tahmini 58.7 sn — GPU sayısına kurulan kapının neden anlamsız
+  olduğunun canlı kanıtı.
+
+### M10i kalan kalemler (`dc0747f`, `25bfc65`, `c60945b`, `74212bc`)
+- `caustica.env`: `env_report()` (damga anahtarları korunarak GENİŞLETİLDİ: + scipy/pydantic/
+  h5py/resolved_backend; asla raise etmez) + `require_gpu()` (Colab: Runtime menüsü, pip'siz;
+  yerel: `pip install cupy-cuda12x`; pip çağrısı YOK). Runner damgası aynı fonksiyondan geçiyor.
+- `CausticaWarning(UserWarning)` public kategori; backend auto→numpy düşüşü süreç başına BİR
+  uyarı (eski INFO handler'sızdı, kimse görmüyordu); CLI `run` girişte logging açıyor,
+  kütüphane import'ta handler kurmuyor.
+- Taze CLI sürecinde CPU koşusu İKİ uyarı gösterir: 1 backend düşüşü (süreç başına) + 1 kapı
+  bildirimi (koşu başına) — iki ayrı ölçütün bileşimi, testte belgeli.
+- VRAM reddi boş VRAM'e bakıyor (`vram_free_gib`, yoksa toplam + etiketli); mesaj hangi sınırı
+  kullandığını söylüyor. Sahte-GPU monkeypatch testleri: toplam 40 GiB "sığar" derken boş
+  0.001 GiB reddettiriyor.
+- Düşük ppw dört yerde: `low_ppw_warnings()` tek kaynak; plan.txt/json + status.json (her kalp
+  atışı) + run_meta.json + rapor BAŞI (⚠ banner, full+preview). Dört test. mini_job (ppw 2.0)
+  artık koşuda görünür uyarı üretiyor — bilinçli.
+- Plan'a "expected result.h5 size: ~X MB" satırı (quantize-farkında); `--preview-only`
+  (varsayılan değişmedi; preview-only modda preview yazımı FATAL — çıktının kendisi o).

@@ -518,43 +518,58 @@ olur, UWCEM işleri ayrı repoya taşınır, yerine genel `medium_volume` kind'�
         `test_copied_example_runs_without_touching_the_install_dir`: kurulum dizini içerik
         anlık-görüntüsü koşu öncesi/sonrası BİREBİR, çıktı kopyanın yanına düşüyor (T4)
 
-### M10i — Ortam ve güvenlik politikası `[ ]` — **DEVİR PAKETİ 2/4**
+### M10i — Ortam ve güvenlik politikası `[x]` (2026-08-22) — **DEVİR PAKETİ 2/4**
 Ortak tema: **kullanıcı sessizce yanmasın.** Yanlış backend, yanlış çözünürlük, görünmeyen uyarı,
 tek çekirdekte sürünen CPU — hepsi "çalışıyor gibi görünüp yanlış/yavaş sonuç veren" sınıfından.
-`config/job.py`'nin yalnızca `validate` raporlama kısmına dokunur; şemaya dokunmaz, bu yüzden
-M10k ile paralel yürüyebilir.
-- [ ] `caustica.env_report()` (runner'daki `_gpu_environment` public'e taşınır, runner aynı
-      fonksiyonu çağırmaya devam eder — damga ile notebook çelişemez); asla exception atmaz
-- [ ] `caustica.require_gpu()` — asla pip çağırmaz; Colab'da "runtime GPU değil" ile "cupy yok"
-      AYRI mesajlar (Colab'daki gerçek arıza neredeyse her zaman birincisidir ve hiçbir
-      `pip install` onu çözmez)
-- [ ] **CPU çok çekirdekli FFT** (bugün YOK — `workers` kodda hiç geçmiyor, yani her CPU koşusu
-      tek çekirdekte): `scipy.fft` çağrılarına `workers=-1`. **SIRA ÖNEMLİ**: önce bu, sonra
-      planner CPU kalibrasyonu yenilenir, EN SON 5 dk eşiği konur — tek çekirdeğe göre kalibre
-      edilmiş bir eşik anlamsızdır. Golden-regression alanları önce/sonra karşılaştırılır
-- [ ] CPU kapısı VRAM reddinin hemen ardına: planner `t_expected_s` > **5 dk** ise EXIT_CONFIG (2)
-      ile reddet — yeni çıkış kodu EKLENMEZ (kod kümesi kuyruğun API'si); mesaj tahmini ve
-      `est.source` etiketini alıntılar; `--allow-slow-cpu` / `allow_slow_cpu=True` kaçış kapısı
-      AYNI değişiklikte iner
-- [ ] **Kritik olaylar `warnings.warn` ile** (bugün kütüphane hiçbir handler kurmuyor, yani
-      `get_backend("auto")`'nun "cupy yok, numpy'a düşüyorum" INFO mesajı KİMSEYE görünmüyor):
-      backend düşüşü ve düşük ppw Python uyarı mekanizmasına taşınır — notebook'ta da CI'da da
-      görünür, gerekirse filtrelenebilir. Kütüphane `import` anında handler EKLEMEZ; `caustica run`
-      ve facade girişte loglamayı açar
-- [ ] **Düşük ppw sesi yükselir, ENGEL OLMAZ** (kullanıcı kararı: üretim ayarı 2f0'da 1.88 ppw ve
-      bu bilinçli bir seçim — sert eşik kendi datasetini bloke ederdi). `job.py:944` uyarısı artık
-      plan çıktısında, `status.json`'da, `run_meta.json`'da ve RAPORUN BAŞINDA tekrar eder.
-      Görmezden gelinebilir; "kaydırdım geçtim" olamaz
-- [ ] Plan çıktısına **beklenen `result.h5` boyutu** satırı (planner zaten eleman sayısını biliyor)
-      + runner'a `--preview-only` bayrağı. VARSAYILAN DEĞİŞMEZ: tam alan + önizleme kaydedilir
+`config/job.py`'nin yalnızca `validate` raporlama kısmına dokunur; şemaya dokunmaz.
+- [x] `caustica.env_report()` — `_gpu_environment` `caustica.env`'e taşındı, runner AYNI
+      fonksiyon üzerinden damgalıyor (test: `test_run_meta_environment_composes_env_report`);
+      tarihsel damga anahtarları korunuyor (caustica/python/numpy/platform + GPU alanları),
+      yalnız EKLEME yapıldı (scipy/pydantic/h5py/resolved_backend); asla exception atmaz (testli)
+- [x] `caustica.require_gpu()` — pip çağırmaz; Colab'da (COLAB_* / google.colab tespiti)
+      "Runtime → Change runtime type → GPU" mesajı (pip'ten hiç bahsetmez), yerelde
+      `pip install cupy-cuda12x` — iki mesaj ayrı ve testli
+- [x] **CPU FFT `workers` — ÖLÇÜM D32'Yİ DEVİRDİ (kullanıcı yetkisi "ölçüm karara üstün gelir",
+      2026-08-22):** tesisat kuruldu (`Backend.fft` sarmalayıcısı, tek nokta; cupyx `workers`
+      almaz — CuPy docs'tan doğrulandı) ama **varsayılan 1 kaldı**: iki ölçüm turu (i5-13450HX,
+      10 çekirdek; %14–22 arka plan yükü belgelendi) 1–26 Mvox motor şekillerinde HİÇBİR worker
+      sayısından TEKRARLANABİLİR kazanç bulamadı — ilk turun hücre sinyalleri (96³'te 0.73×
+      regresyon, 26 Mvox'ta 1.48× kazanç) teyit turunda kayboldu (tablolar devlog'da). İsteyen
+      `CAUSTICA_CPU_WORKERS` / `set_cpu_fft_workers()` ile açar. Sıra korundu: workers →
+      kalibrasyon → eşik (üç ayrı commit: `6fe6f6f`, `4db495d`, `d2f3c75`)
+- [x] CPU kapısı VRAM reddinin hemen ardında: > 5 dk (`CAUSTICA_CPU_LIMIT_MIN`) → EXIT_CONFIG(2),
+      yeni kod YOK; mesaj tahmini + `est.source` etiketini alıntılıyor; `--allow-slow-cpu` aynı
+      commit'te. `--no-measure` yolunda kapı GPU db sayısına DEĞİL kalibre cpu girdisine bakar
+      (db A100 58.7 sn derken cpu gerçeği 2.6 saatti — kanıt koşusu devlog'da); ikisi de yoksa
+      "kapı yargılayamıyor" uyarısı basar, sessiz geçmez
+- [x] Kritik olaylar `warnings.warn` ile — kategori **`CausticaWarning(UserWarning)`** (public,
+      `__all__`'da; yalnız bizim uyarılar filtrelenebilir): backend auto→numpy düşüşü süreç
+      başına BİR kez (testli), düşük ppw koşu başına bir toplu uyarı. Kütüphane import'ta handler
+      KURMAZ; `caustica run` girişte `logging.basicConfig` açar (facade M10j'de aynısını yapacak)
+- [x] Düşük ppw dört yerde, ENGEL DEĞİL: `low_ppw_warnings()` tek kaynak (validate delege) →
+      plan.txt/plan.json + her status.json kalp atışı + run_meta.json + raporun BAŞI (full ve
+      preview yolları). Dört ayrı test
+- [x] Plan çıktısında beklenen `result.h5` boyutu satırı (quantize-farkında, plan.json'da da);
+      `--preview-only` bayrağı — varsayılan DEĞİŞMEDİ: tam alan + önizleme (testli)
+- [x] EK (gözden geçiren talimatı, 2026-08-22): VRAM reddi artık **boş VRAM**'e bakıyor
+      (`vram_free_gib`; CUDA context'i Colab'da 0.8–1.5 GB yer — toplam "sığar" derken koşu
+      OOM'lanırdı); mesaj hangi sınırın uygulandığını söylüyor (boş/toplam/`--vram-limit-gib`);
+      testli (sahte GPU ortamıyla)
 - Başarı kriterleri:
-  - GPU'suz tam boy iş, tahmini ve kaynak etiketini alıntılayarak reddedilir
-  - Paketli mini örnek eşiğin altında tek uyarıyla koşar; `allow_slow_cpu` geçersiz kılar
-  - `env_report()` GPU'suz makinede sözlük döndürür ve ÇÖKMEZ
-  - Çok çekirdekli FFT: aynı mini senaryo `workers=1` ve `workers=-1` ile alan olarak AYNI
-    (golden tolerans içinde); hızlanma devlog'a ölçülmüş sayıyla yazılır
-  - cupy'siz ortamda `backend="auto"` çağrısı görünür bir `UserWarning` üretir (testli)
-  - ppw uyarısı dört yerin (plan, status, run_meta, rapor) hepsinde görünür (testli)
+  - [x] GPU'suz tam boy iş reddedildi — kanıt koşusu (560×700×480 homojen, numpy, --no-measure):
+        exit 2, "~9509 s (~2.6 h, estimate source: calibrated), over the 5 min CPU limit",
+        iki kaçış da mesajda (devlog 2026-08-22); mekanizma `tests/test_env_gate.py` (7 test)
+  - [x] Paketli örnek eşiğin altında TAM BİR uyarıyla koştu (test:
+        `test_packaged_example_runs_with_exactly_one_warning`; taze süreçte buna süreç-başına-bir
+        backend düşüş uyarısı eklenir — iki ayrı ölçütün bileşimi, testte belgeli);
+        `allow_slow_cpu=True` reddi geçersiz kılıyor (testli)
+  - [x] `env_report()` cupy'siz makinede sözlük döndürüyor, çökmez, JSON-serileşebilir (testli)
+  - [x] `workers=1` vs `workers=-1`: fazor alanları **BİT-AYNI** (`assert_array_equal`, linear +
+        westervelt; golden toleransı değil sıkı eşitlik — gözden geçirenin ölçümüyle uyumlu:
+        pocketfft toplama sırasını değiştirmez). Hızlanma: **1.00× — tekrarlanabilir kazanç YOK**
+        (ölçülen; tablolar devlog'da). Varsayılan bu ölçümle 1
+  - [x] cupy'siz `backend="auto"` → görünür `CausticaWarning`, süreç başına TAM BİR kez (testli)
+  - [x] ppw uyarısı dört yerde — dört test (plan, status, run_meta, rapor başı)
 
 ### M10m — Dışarıdan kullanılabilirlik: kendi kurulumunu getir `[ ]` — **DEVİR PAKETİ 4/4**
 Kabul sorusu: **hiç tanımadığımız bir araştırmacı, repoyu bulup kendi problemini koşabiliyor mu?**
