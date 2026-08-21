@@ -1,10 +1,13 @@
-"""Library command line: ``python -m caustica <command>``.
+"""Library command line: ``caustica <command>`` (also ``python -m caustica``).
 
 M10b ships ``validate`` — every check that does not require solving, so a
 typo'd or impossible job dies HERE, on the local machine, instead of after a
 Colab session has been booked and a dataset staged. The M10c runner adds
 ``run`` on top of the same job contract; M10d adds ``report`` — local HTML +
 figures from a run's output folder (or from its preview package alone).
+M10h adds the ``caustica`` console entry point and ``example`` — packaged,
+zero-data jobs copied *out* of the install before running (running them in
+place would write into site-packages, see ``caustica.examples``).
 """
 
 from __future__ import annotations
@@ -18,7 +21,7 @@ import caustica
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="python -m caustica",
+        prog="caustica",
         description="caustica job tools (job format: caustica-job/1)",
     )
     p.add_argument("--version", action="version", version=f"caustica {caustica.__version__}")
@@ -78,6 +81,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     r.add_argument("--stop-after-periods", type=int, default=None, help=argparse.SUPPRESS)
 
+    ex = sub.add_parser(
+        "example",
+        help="copy a packaged zero-data example job into your directory "
+        "(run the copy, never the packaged file); no name lists what ships",
+    )
+    ex.add_argument("name", nargs="?", default=None, help="example name (omit to list)")
+    ex.add_argument(
+        "--to",
+        type=Path,
+        default=Path("."),
+        help="destination directory (default: current directory)",
+    )
+
     rep = sub.add_parser(
         "report",
         help="render REPORT.md + index.html (+ figures) for a run output folder, "
@@ -123,6 +139,26 @@ def main(argv: list[str] | None = None) -> int:
                 stop_after_periods=args.stop_after_periods,
             ),
         )
+    if args.command == "example":
+        from caustica import examples
+
+        if args.name is None:
+            for name in examples.available():
+                print(name)
+            return 0
+        try:
+            target = examples.copy(args.name, args.to)
+        except (KeyError, OSError) as exc:
+            # str(KeyError) is the repr of its message (adds quotes); OSError
+            # covers FileExistsError plus the POSIX-only NotADirectoryError /
+            # PermissionError a bad --to produces — no raw tracebacks here.
+            msg = exc.args[0] if isinstance(exc, KeyError) else exc
+            print(f"EXAMPLE ERROR: {msg}", file=sys.stderr)
+            return 2
+        print(f"copied: {target}")
+        print(f"next:   caustica validate {target}")
+        print(f"        caustica run {target}")
+        return 0
     if args.command == "report":
         from caustica.report.run_report import report_out_dir
 

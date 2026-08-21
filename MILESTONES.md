@@ -477,29 +477,36 @@ olur, UWCEM işleri ayrı repoya taşınır, yerine genel `medium_volume` kind'�
     `caustica run`) ve ortamlar bit-aynı; 4.5 GB yeniden ÜRETİLMEZ
   - Taşınan 137 test yeni repoda yeşil (silinmeden ÖNCE doğrulanır)
 
-### M10h — Kütüphane paketleme + temiz ortam kapısı `[ ]` — **DEVİR PAKETİ 1/4**
+### M10h — Kütüphane paketleme + temiz ortam kapısı `[x]` (2026-08-21) — **DEVİR PAKETİ 1/4**
 `pip install` deyip checkout'suz koşabilmek. Wheel içeriği artık testle sabitlenir.
-- [ ] `[project.scripts] caustica = "caustica.__main__:main"`, `src/caustica/py.typed`
-- [ ] `src/caustica/examples/water_bowl_mini.json` — dış veri gerektirmeyen sentetik örnek
-      (`tests/test_runner.py::mini_job` şablonu; CPU'da ≤30 sn). `data/setups` UYGUN DEĞİL:
-      fantom dosyası referanslıyor ve 560×700×480
-- [ ] **Örnek YERİNDE koşturulmaz** (2026-08-21 bulgusu): göreli çıktı yolu job dosyasına göre
-      çözülüyor (`runner.py:330-337`, T4 kuralı) — paketli örnek doğrudan koşulursa
-      `site-packages/caustica/examples/runs/...` altına yazmaya çalışır. Çözüm: `caustica example
-      <ad> [--to DIR]` job'ı kullanıcının klasörüne KOPYALAR; README quickstart kopyayı koşar
-- [ ] matplotlib `[report]` extra'sında kalır (kuyruk/headless koşu onu istemez; önizleme yazımı
-      zaten numpy-only). Ama README quickstart `pip install "caustica[report]"` demeli — aksi
-      halde `caustica report` adımı temiz kurulumda patlar. (`figures.py:22` zaten aksiyonlu hata
-      veriyor; eksik olan dokümandaki doğru kurulum satırı)
-- [ ] CI'da temiz-venv wheel işi: repo DIŞINDA kurulum → `caustica --version`, paketli örnekle
-      `caustica validate` + `caustica run --dry-run`
-- [ ] `network` pytest markası (upstream'e giden testler), CI `-m "not kwave and not network"`
+- [x] `[project.scripts] caustica = "caustica.__main__:main"`, `src/caustica/py.typed`
+      (+ package-data girişleri; wheel içeriği `tests/test_packaging.py` ile sabit)
+- [x] `src/caustica/examples/water_bowl_mini.json` — dış veri gerektirmeyen sentetik örnek
+      (`tests/test_runner.py::mini_job` şablonu; CPU'da ≤30 sn — ölçüldü: çözüm 0.2 sn).
+      Bilinçli sapma: dx 0.75 → 0.5 mm — şablonun dx'i ppw 2.00'da "under-resolved" uyarısı
+      bastırıyordu; ilk karşılaşmada uyarıyla açılan quickstart olmaz (dx=0.5 → ppw 3.00, temiz)
+- [x] **Örnek YERİNDE koşturulmaz**: `caustica example <ad> [--to DIR]` kopyalar (üzerine yazmayı
+      reddeder), adsız çağrı listeler; `caustica.examples.path()/copy()` Python'dan aynı kapı;
+      README quickstart kopyayı koşuyor
+- [x] matplotlib `[report]` extra'sında kaldı; README quickstart kurulum satırı
+      `pip install "caustica[report] @ git+..."` — rapor adımı temiz kurulumda patlamaz
+- [x] CI'da temiz-venv wheel işi (`wheel` job'ı): build → repo DIŞINDA taze venv'e kurulum →
+      `import caustica` + `caustica --version` + `example` + `validate` + `run --dry-run`
+- [x] `network` pytest markası eklendi; CI test ayağı `-m "not kwave and not network"`
 - Başarı kriterleri:
-  - Checkout'suz temiz ortamda kurulum + import + plan üretimi çalışır
-  - Wheel içeriği testle sabit: `py.typed` + `gpu_db.json` + örnek job (gpu_db.json regresyonu
-    bir daha olmaz)
-  - `caustica example` ile kopyalanan job, salt-okunur `site-packages` senaryosunda bile koşar
-    (test: kurulum dizinine yazma denemesi YAPILMAZ)
+  - [x] Checkout'suz temiz ortamda kurulum + import + plan üretimi çalışır — yerel prova
+        (2026-08-21): wheel → scratchpad'de taze venv → repo dışından import + `--version` +
+        `example` + `validate` + `run --dry-run` + TAM koşu (1.5 sn, sekiz çıktı dosyası).
+        CI `wheel` ayağının yeşili push'ta görülecek (push kullanıcı onayı bekliyor, janitor/06)
+  - [x] Wheel içeriği testle sabit: `py.typed` + `gpu_db.json` + örnek job + entry point +
+        yan-paket sızıntısı yok + src'de olmayan dosya (hayalet) yok (`tests/test_packaging.py`,
+        9 test). Mutasyonla kanıtlı: gpu_db/examples package-data satırı ya da örnek dosya
+        silinince KIRMIZI (fixture pristine kopyadan build eder — bayat `build/` maskesi
+        kapatıldı, devlog 2026-08-21). Not: `py.typed` satırı silinse de wheel onu içerir
+        (setuptools ≥69 otomatik dahil ediyor) — test dosyanın varlığını sabitler, satırı değil
+  - [x] `caustica example` ile kopyalanan job salt-okunur `site-packages` senaryosunda koşar —
+        `test_copied_example_runs_without_touching_the_install_dir`: kurulum dizini içerik
+        anlık-görüntüsü koşu öncesi/sonrası BİREBİR, çıktı kopyanın yanına düşüyor (T4)
 
 ### M10i — Ortam ve güvenlik politikası `[ ]` — **DEVİR PAKETİ 2/4**
 Ortak tema: **kullanıcı sessizce yanmasın.** Yanlış backend, yanlış çözünürlük, görünmeyen uyarı,

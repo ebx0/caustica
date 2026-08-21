@@ -29,5 +29,31 @@ jobs:
         run: |
           python -m ruff check src tests
           python -m ruff format --check src tests
-      - name: Test (kwave binary tests excluded on CI)
-        run: python -m pytest -m "not kwave" -q
+      - name: Test (kwave binary + network tests excluded on CI)
+        run: python -m pytest -m "not kwave and not network" -q
+
+  # The wheel must work WITHOUT a checkout. Installing and running from
+  # outside the repo is the point: from inside, the CWD masks a missing
+  # package-data entry (this is how the gpu_db.json bug survived).
+  wheel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Build wheel
+        run: |
+          python -m pip install build
+          python -m build --wheel --outdir dist
+      - name: Install into a fresh venv and exercise the CLI from outside the repo
+        run: |
+          python -m venv /tmp/cleanenv
+          /tmp/cleanenv/bin/python -m pip install dist/*.whl
+          cd /tmp
+          /tmp/cleanenv/bin/python -c "import caustica; print(caustica.__version__)"
+          /tmp/cleanenv/bin/caustica --version
+          /tmp/cleanenv/bin/caustica example water_bowl_mini --to /tmp/exdir
+          /tmp/cleanenv/bin/caustica validate /tmp/exdir/water_bowl_mini.json
+          /tmp/cleanenv/bin/caustica run --dry-run /tmp/exdir/water_bowl_mini.json

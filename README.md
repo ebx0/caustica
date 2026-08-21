@@ -14,6 +14,25 @@ to run identically on a local workstation and on Google Colab (T4/L4/A100/H100).
 > with per-milestone acceptance criteria and current progress, [PLAN.md](PLAN.md) for the
 > architecture plan, and [docs/devlog.md](docs/devlog.md) for the engineering log.
 
+## Quickstart (no checkout, no external data)
+
+```bash
+pip install "caustica[report] @ git+https://github.com/ebx0/caustica"
+
+caustica example water_bowl_mini      # copies a packaged, self-contained job here
+caustica validate water_bowl_mini.json
+caustica run water_bowl_mini.json     # seconds on CPU; writes runs/water_bowl_mini/
+caustica report runs/water_bowl_mini  # local HTML + figures (needs the [report] extra)
+```
+
+The `example` command *copies* the job out of the install before running —
+outputs resolve next to the job file, so running the packaged copy in place
+would write into `site-packages`. The `[report]` extra pulls matplotlib for
+`caustica report`; everything up to and including `run` needs only the base
+install. GPU (CuPy) support is packaged (`pip install "caustica[gpu]"`) but
+**not yet verified on real hardware** — every solver result above is
+CPU-validated (see [MILESTONES.md](MILESTONES.md), M7).
+
 ## Solvers (one API, a registry of engines)
 
 | name | physics | dims | backend | status |
