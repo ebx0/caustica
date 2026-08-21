@@ -298,9 +298,19 @@ python -m caustica run job.json --out out/    # plan first, refuse OOM, solve, s
                                               # exit: 0 ok - 2 config - 3 OOM - 4 solver
                                               #       5 interrupted-but-resumable
 python -m caustica run job.json --resume      # continue an interrupted run bit-exact
+python -m caustica run job.json --allow-slow-cpu   # accept a CPU run the 5-min estimate
+                                                   # gate would refuse (CAUSTICA_CPU_LIMIT_MIN)
+python -m caustica run job.json --preview-only     # skip result.h5: preview + metrics only
 python -m caustica report out/                # local HTML + figures from result.h5
 python -m caustica report out/ --preview      # quick look from the <=10 MB preview only
 ```
+
+On CPU, a native run first prints the plan (wall-time estimate, memory, the
+expected `result.h5` size) and **refuses jobs whose estimate exceeds 5
+minutes** — `--allow-slow-cpu` accepts the wait, a GPU backend avoids it.
+Warnings (low points-per-wavelength, CPU fallback) are `CausticaWarning`s:
+filter them with `warnings.filterwarnings(..., category=caustica.CausticaWarning)`
+without touching the rest of the ecosystem.
 
 ## Development
 
