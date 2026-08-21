@@ -108,6 +108,18 @@ def _wall_time(meta: dict | None) -> str | None:
     return None if t is None else f"{t:.1f} s (solve, from run_meta.json)"
 
 
+def _with_run_warnings(description: str, meta: dict | None) -> str:
+    """Prepend the run's ppw warnings to the report HEAD (M10i/D31).
+
+    A reader who opens only the report must meet the resolution warning
+    before any number — it cannot live in a footnote."""
+    warns = (meta or {}).get("ppw_warnings") or []
+    if not warns:
+        return description
+    banner = "\n".join(f"⚠ **WARNING:** {w}" for w in warns)
+    return f"{banner}\n\n{description}"
+
+
 def report_out_dir(outdir: str | Path, *, preview_only: bool = False) -> Path:
     """Render REPORT.md + index.html (+ figures) into ``outdir``; returns the html."""
     outdir = Path(outdir)
@@ -182,9 +194,10 @@ def _full_report(outdir: Path, result_path: Path, metrics: dict | None, meta: di
     figs = hfig.make_all(ctx, result, prof, outdir)
 
     rows = _header_rows(name, meta, geo) + _metric_rows(metrics, _wall_time(meta))
-    description = (
+    description = _with_run_warnings(
         f"Result of job `{name}` under the caustica-result/1 contract "
-        f"({geo['solver']} solver, {geo['backend']} backend)."
+        f"({geo['solver']} solver, {geo['backend']} backend).",
+        meta,
     )
     files_lines = [
         "- `result.h5` — full fields (caustica-result/1)",
@@ -236,7 +249,9 @@ def _preview_report(
     rows = _header_rows(name, meta, None)
     if metrics is not None and "peak" in metrics:
         rows += _metric_rows(metrics, _wall_time(meta))
-    description = f"Quick look at job `{name}` from its preview package (result.h5 not read)."
+    description = _with_run_warnings(
+        f"Quick look at job `{name}` from its preview package (result.h5 not read).", meta
+    )
     hrep.render_markdown(
         outdir / "REPORT.md",
         title=f"caustica run — {name} (preview)",

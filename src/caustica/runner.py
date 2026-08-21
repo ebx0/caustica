@@ -233,6 +233,19 @@ def _cpu_time_estimate(est, grid_shape: tuple[int, ...], opts: RunnerOptions):
     return est.steps_expected * step_time(entry["a"], entry["b"], p_elems), "calibrated"
 
 
+def _ppw_warnings_for(built: BuiltJob) -> list[str]:
+    """Low-ppw warnings for a built job (single source: config.job)."""
+    from caustica.config.job import _APPROX_C_MIN, low_ppw_warnings  # noqa: PLC0415
+
+    c_min = built.c_min_hint
+    approx = ""
+    if c_min is None and built.medium is not None:
+        c_min = float(built.medium.c_min)
+    if c_min is None:
+        c_min, approx = _APPROX_C_MIN, " (approx. c_min)"
+    return low_ppw_warnings(built.grid, built.source.f0, built.harmonics, c_min, approx)
+
+
 def _plan(built: BuiltJob, backend_name: str, opts: RunnerOptions):
     """Planner verdicts: datasheet GPU + (optionally) measured-here."""
     from caustica import planner  # noqa: PLC0415 (keep import caustica light)
@@ -369,10 +382,16 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
     # plan writes must exit 2, not leak a raw traceback with exit 1.
     native = built.solver in _NATIVE_SOLVERS
     est = plan_payload = None
+    # Low ppw is loud in four places (M10i/D31): plan, status.json,
+    # run_meta.json and the report head. Ignorable — never a block.
+    ppw_warns = _ppw_warnings_for(built)
     try:
         dump_job(job, outdir / "job.json")
         if native:
             est, plan_payload, plan_text = _plan(built, backend_name, opts)
+            if ppw_warns:
+                plan_text += "\n" + "\n".join(f"  ! WARNING: {w}" for w in ppw_warns)
+            plan_payload["ppw_warnings"] = ppw_warns
             print(plan_text)
             _write_json(outdir / "plan.json", plan_payload)
             with atomic_write(outdir / "plan.txt") as tmp:
@@ -380,6 +399,12 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
     except Exception as exc:
         print(f"CONFIG ERROR: {type(exc).__name__}: {exc}", file=sys.stderr)
         return EXIT_CONFIG
+    if ppw_warns:
+        warnings.warn(
+            "low spatial resolution: " + " | ".join(ppw_warns),
+            CausticaWarning,
+            stacklevel=2,
+        )
 
     if native:
         limit_gib = opts.vram_limit_gib
@@ -489,6 +514,7 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
         "solver": built.solver,
         "backend": backend_name,
         "pid": os.getpid(),
+        "ppw_warnings": ppw_warns,  # D31: visible in every status heartbeat
     }
     hb = _Heartbeat(
         status_path,
@@ -623,6 +649,7 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
         # env_report keeps the historical key names (M8's Colab gates read
         # them) and only ADDS facts — see caustica.env.
         "environment": env_report(backend_name),
+        "ppw_warnings": ppw_warns,  # D31: the report head re-reads these
         "planner": plan_payload,  # None for non-native solvers
         "actual": actual,  # planner-vs-actual: M8's Colab gates read this
         "derived": built.derived,  # re-derivable geometry (check_derived contract)
