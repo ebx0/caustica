@@ -383,11 +383,18 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
 
     if native:
         limit_gib = opts.vram_limit_gib
-        limit_label = "requested limit"
+        limit_label = "requested limit (--vram-limit-gib)"
         if limit_gib is None and backend_name == "cupy":
             env = _gpu_environment(backend_name)
-            limit_gib = env.get("vram_total_gib")
-            limit_label = f"device VRAM ({env.get('gpu_name', 'unknown GPU')})"
+            gpu_name = env.get("gpu_name", "unknown GPU")
+            # FREE VRAM, not total (M10i): the CUDA context alone eats
+            # 0.8-1.5 GB on Colab — gating on the total says "fits" and then
+            # dies OOM mid-run. The message names which limit was used.
+            limit_gib = env.get("vram_free_gib")
+            limit_label = f"free device VRAM ({gpu_name})"
+            if limit_gib is None:
+                limit_gib = env.get("vram_total_gib")
+                limit_label = f"total device VRAM ({gpu_name}; free VRAM unavailable)"
         if limit_gib is not None and est.vram_gib > limit_gib:
             print(
                 f"REFUSED before solving: this run needs {est.vram_gib:.2f} GiB but "
