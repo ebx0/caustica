@@ -836,6 +836,24 @@ class JobReport:
 _APPROX_C_MIN = 1450.0
 
 
+def low_ppw_warnings(grid, f0: float, harmonics, c_min: float, approx_label: str = "") -> list[str]:
+    """The low-resolution warnings (< 3 ppw per recorded harmonic), one text.
+
+    Single source for validate, the runner's plan/status/run_meta and the
+    report head (M10i/D31): loud in four places, a block in none — the
+    production setting is a deliberate 1.88 ppw at 2f0.
+    """
+    out = []
+    for h in harmonics:
+        ppw = grid.ppw(h * f0, c_min)
+        if ppw < 3.0:
+            out.append(
+                f"harmonic {h} resolved by only {ppw:.2f} points per wavelength{approx_label} "
+                f"(need >= 3): its amplitude will be under-resolved"
+            )
+    return out
+
+
 def validate_job(path: str | Path, fast: bool = False) -> JobReport:
     """Everything that can be checked WITHOUT solving (and without a GPU).
 
@@ -939,13 +957,7 @@ def validate_job(path: str | Path, fast: bool = False) -> JobReport:
         c_min = float(built.medium.c_min)
     if c_min is None:
         c_min, approx = _APPROX_C_MIN, " (approx. c_min)"
-    for h in built.harmonics:
-        ppw = g.ppw(h * f0, c_min)
-        if ppw < 3.0:
-            report.warnings.append(
-                f"harmonic {h} resolved by only {ppw:.2f} points per wavelength{approx} "
-                f"(need >= 3): its amplitude will be under-resolved"
-            )
+    report.warnings.extend(low_ppw_warnings(g, f0, built.harmonics, c_min, approx))
     report.summary.append(f"ppw at f0: {g.ppw(f0, c_min):.2f}{approx}")
     return report
 

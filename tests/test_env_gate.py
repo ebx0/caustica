@@ -54,12 +54,19 @@ def test_cpu_gate_escape_hatch_overrides(tmp_path, monkeypatch):
     code, cw = run_recording_warnings(mini_job(tmp_path), opts(out=out, allow_slow_cpu=True))
     assert code == EXIT_OK
     assert (out / "result.h5").is_file()
-    assert len(cw) == 1 and "ACCEPTED via allow_slow_cpu" in str(cw[0].message)
+    accepted = [w for w in cw if "ACCEPTED via allow_slow_cpu" in str(w.message)]
+    assert len(accepted) == 1  # (mini_job also warns about its 2.0 ppw — separate event)
 
 
-def test_cpu_run_below_threshold_emits_exactly_one_warning(tmp_path, monkeypatch):
+def test_packaged_example_runs_with_exactly_one_warning(tmp_path, monkeypatch):
+    """The M10i criterion verbatim: the PACKAGED example, below the
+    threshold, runs with exactly ONE warning (the CPU notice — its ppw is
+    3.75 so no resolution warning joins it)."""
+    from caustica import examples
+
     monkeypatch.delenv("CAUSTICA_CPU_LIMIT_MIN", raising=False)  # default 5 min
-    code, cw = run_recording_warnings(mini_job(tmp_path), opts(out=tmp_path / "out"))
+    job = examples.copy("water_bowl_mini", tmp_path)
+    code, cw = run_recording_warnings(job, opts())
     assert code == EXIT_OK
     assert len(cw) == 1  # exactly ONE warning, not a stream
     assert "numpy (CPU) backend" in str(cw[0].message)
@@ -87,7 +94,7 @@ def test_cpu_gate_warns_when_it_cannot_judge(tmp_path, monkeypatch):
     monkeypatch.setattr(calibration, "find_calibration_for", lambda key, path=None: None)
     code, cw = run_recording_warnings(mini_job(tmp_path), opts(out=tmp_path / "out", measure=False))
     assert code == EXIT_OK
-    assert len(cw) == 1 and "cannot judge" in str(cw[0].message)
+    assert len([w for w in cw if "cannot judge" in str(w.message)]) == 1
 
 
 def test_dry_run_is_gated_too(tmp_path, monkeypatch, capsys):
@@ -243,3 +250,48 @@ def test_explicit_vram_limit_still_overrides(tmp_path, monkeypatch, capsys):
     err = capsys.readouterr().err
     assert code == 3
     assert "requested limit (--vram-limit-gib)" in err
+
+
+# ------------------------------------------- low ppw is loud in FOUR places
+
+
+def _low_ppw_run(tmp_path):
+    """mini_job at its default dx=0.75/f0=1 MHz is a 2.0 ppw job — the
+    warning case, on purpose."""
+    import json
+
+    out = tmp_path / "out"
+    code, cw = run_recording_warnings(mini_job(tmp_path), opts(out=out))
+    assert code == EXIT_OK
+    assert any("points per wavelength" in str(w.message) for w in cw)
+    read = lambda name: json.loads((out / name).read_text(encoding="utf-8"))  # noqa: E731
+    return out, read
+
+
+def test_ppw_warning_in_the_plan(tmp_path):
+    out, read = _low_ppw_run(tmp_path)
+    assert any("points per wavelength" in w for w in read("plan.json")["ppw_warnings"])
+    assert "points per wavelength" in (out / "plan.txt").read_text(encoding="utf-8")
+
+
+def test_ppw_warning_in_status_json(tmp_path):
+    out, read = _low_ppw_run(tmp_path)
+    assert any("points per wavelength" in w for w in read("status.json")["ppw_warnings"])
+
+
+def test_ppw_warning_in_run_meta(tmp_path):
+    out, read = _low_ppw_run(tmp_path)
+    assert any("points per wavelength" in w for w in read("run_meta.json")["ppw_warnings"])
+
+
+def test_ppw_warning_at_the_head_of_the_report(tmp_path):
+    import pytest
+
+    pytest.importorskip("matplotlib")
+    from caustica.report.run_report import report_out_dir
+
+    out, _ = _low_ppw_run(tmp_path)
+    report_out_dir(out)
+    md = (out / "REPORT.md").read_text(encoding="utf-8")
+    head = "\n".join(md.splitlines()[:10])  # the HEAD, not a footnote
+    assert "WARNING" in head and "points per wavelength" in head
