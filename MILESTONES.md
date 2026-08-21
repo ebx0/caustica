@@ -477,7 +477,14 @@ olur, UWCEM işleri ayrı repoya taşınır, yerine genel `medium_volume` kind'�
     `caustica run`) ve ortamlar bit-aynı; 4.5 GB yeniden ÜRETİLMEZ
   - Taşınan 137 test yeni repoda yeşil (silinmeden ÖNCE doğrulanır)
 
-### M10h — Kütüphane paketleme + temiz ortam kapısı `[x]` (2026-08-21) — **DEVİR PAKETİ 1/4**
+### M10h — Kütüphane paketleme + temiz ortam kapısı `[x]` (2026-08-21; CI kanıtı 2026-08-22) — **DEVİR PAKETİ 1/4**
+> **Borç kapandı (2026-08-22):** gözden geçirenin `[~]` kararı üzerine dal pushlandı (kullanıcı
+> onayı), CI'ı tetiklemek için **draft PR #1** açıldı (`library-first` → `master`, merge YOK:
+> <https://github.com/ebx0/caustica/pull/1>). İlk koşuda `wheel` + windows yeşil; iki ubuntu
+> ayağı taşınan M6c kodundaki platform hatasında düştü (export adında `\` POSIX'te meşru —
+> korkuluk her platformda reddedecek şekilde düzeltildi, `efc86dd`). İkinci koşu **4/4 YEŞİL**:
+> <https://github.com/ebx0/caustica/actions/runs/32529033382> (wheel 21 sn, ubuntu 3.10 + 3.12,
+> windows 3.12).
 `pip install` deyip checkout'suz koşabilmek. Wheel içeriği artık testle sabitlenir.
 - [x] `[project.scripts] caustica = "caustica.__main__:main"`, `src/caustica/py.typed`
       (+ package-data girişleri; wheel içeriği `tests/test_packaging.py` ile sabit)
@@ -494,10 +501,13 @@ olur, UWCEM işleri ayrı repoya taşınır, yerine genel `medium_volume` kind'�
       `import caustica` + `caustica --version` + `example` + `validate` + `run --dry-run`
 - [x] `network` pytest markası eklendi; CI test ayağı `-m "not kwave and not network"`
 - Başarı kriterleri:
-  - [x] Checkout'suz temiz ortamda kurulum + import + plan üretimi çalışır — yerel prova
-        (2026-08-21): wheel → scratchpad'de taze venv → repo dışından import + `--version` +
-        `example` + `validate` + `run --dry-run` + TAM koşu (1.5 sn, sekiz çıktı dosyası).
-        CI `wheel` ayağının yeşili push'ta görülecek (push kullanıcı onayı bekliyor, janitor/06)
+  - [x] Checkout'suz temiz ortamda kurulum + import + plan üretimi çalışır — **CI'da doğrulandı
+        (2026-08-22)**: `wheel` ayağı yeşil, 21 sn —
+        <https://github.com/ebx0/caustica/actions/runs/32529033382> (draft PR #1 üzerinden;
+        adımlar: build → repo dışında taze venv → import + `--version` + `example` +
+        `validate` + `run --dry-run`). Yerel prova kaydı (2026-08-21): aynı adımlar + TAM koşu
+        (1.5 sn, sekiz çıktı dosyası). Örnek ayrıca eşikten çekildi: f0 1.0 → 0.8 MHz,
+        ppw 3.00 → 3.75 (`60b73c1` — tam eşikte float-hassasiyet tesadüfüne dayanmasın)
   - [x] Wheel içeriği testle sabit: `py.typed` + `gpu_db.json` + örnek job + entry point +
         yan-paket sızıntısı yok + src'de olmayan dosya (hayalet) yok (`tests/test_packaging.py`,
         9 test). Mutasyonla kanıtlı: gpu_db/examples package-data satırı ya da örnek dosya
