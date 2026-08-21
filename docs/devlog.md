@@ -1152,3 +1152,78 @@ eksik 2 boyut (motor-checkpoint, job-config/steering) elle tarandı.
 - `janitor/` (gitignore'lu, lokal): 00-durum özeti, 7 açık ticket (en önemlisi 06 —
   push sonrası M10e kapanış kontrolleri), eski-hatalar haritası. Kural: bir dosya = bir iş,
   bitince sil.
+
+## 2026-08-21 — Oturum 12 (Fable): M10h kapandı — paketleme + temiz ortam kapısı (devir paketi 1/4)
+
+### Bağlam
+- Kütüphane-önce devir paketi başladı (docs/library_first_plan.md; sıra W1→W2→W0→W5 =
+  M10h→M10i→M10k→M10m). Dal: `library-first`; ilk commit çalışma ağacındaki commit'lenmemiş
+  M6c–M10e durumunu (hifusim→caustica rename dahil) olduğu gibi sabitledi (`ed9c7a4`) —
+  master ref'ine dokunulmadı, push yok.
+
+### Yapılanlar (W1)
+- `[project.scripts] caustica`, `py.typed` + package-data, `caustica.examples` paketi
+  (`available/path/copy`) + `water_bowl_mini.json`, CLI `example` alt komutu (kopyalar,
+  üzerine yazmayı reddeder, adsız listeler), README Quickstart (`[report]` extra satırıyla),
+  CI'ya `wheel` temiz-venv işi + `network` markası. `prog` "caustica" oldu.
+- Örnek şablondan tek bilinçli sapma: dx 0.75 → 0.5 mm. Şablon dx'i ppw 2.00'da
+  "under-resolved" uyarısı üretiyordu; quickstart'ın ilk çıktısı uyarı olamaz.
+  dx=0.5 → ppw 3.00, uyarısız; çözüm 0.2 sn (≤30 sn kapısının çok altında).
+- `setuptools>=77` dev extra'ya girdi (runtime DEĞİL): test_packaging wheel'i
+  `--no-build-isolation` ile kurup içeriği ağsız sabitleyebilsin diye.
+
+### Kapı kanıtları
+- Wheel içeriği: `tests/test_packaging.py` (8 test) — py.typed, gpu_db.json, örnek job,
+  console-script entry point, yan-paket (uwcem_phantoms/apps/tests) sızıntısı yok.
+- Yerinde-koşturmama (T4): kurulum dizini içerik anlık-görüntüsü koşu öncesi/sonrası birebir;
+  çıktı kopyanın yanındaki `runs/`e düşüyor; süre < 30 sn assert'lü.
+- Temiz ortam provası (yerel, CI wheel ayağının birebir adımları): `pip wheel` →
+  scratchpad'de taze venv → repo DIŞINDAN `import caustica`, `caustica --version`,
+  `example --to`, `validate` (OK, uyarısız), `run --dry-run`, ardından TAM koşu — 1.5 sn'de
+  sekiz dosyalık çıktı kontratı (matplotlib'siz venv'de preview.npz dahil — numpy-only yol).
+  CI yeşili push'ta görülecek (push kullanıcı onayı bekliyor, janitor/06).
+
+### Bilerek yapılmayanlar
+- CI matrisi genişletilmedi (D14); yeni runtime bağımlılığı yok; `data/setups` örnek olarak
+  kullanılmadı (fantom referanslı, D13 gereği sentetik örnek).
+
+### Mutasyon denetimi sonrası düzeltme (aynı oturum, kullanıcı denetimi üzerine)
+- Kullanıcı "package-data satırını sil, test kırmızı olmalı" provasını istedi. İLK sonuç:
+  üç mutasyon da YEŞİL kaldı — test ısırmıyordu. Kök neden iki katmanlı:
+  (1) `py.typed` için setuptools ≥69 dosyayı package-data'sız da otomatik paketliyor
+  (v69 "Include type information by default") — o satır emniyet kemeri, mutasyonu
+  görünmez kılan bu; (2) `gpu_db.json`/örnek JSON içinse repodaki BAYAT `build/lib`
+  kalıntısı: setuptools önceki build'in kopyalarını wheel'e taşımaya devam ediyor,
+  pyproject mutasyonu wheel içeriğini değiştirmiyordu. Yani test "bayat kopyalı"
+  wheel'i doğruluyordu — tam da planın uyardığı maskeleme sınıfı, yeni kostümle.
+- Düzeltmeler: wheel fixture'ı artık PRISTINE geçici kaynak kopyasından build ediyor
+  (pyproject+README+LICENSE+src, `__pycache__`/egg-info hariç); bayat `build/` silindi;
+  yeni test `test_wheel_ships_no_file_absent_from_src` — wheel'de src'de olmayan dosya
+  = hayalet (M10k'daki silmelerde hortlama bununla yakalanır); `_dir_snapshot`
+  (yol, boyut, mtime_ns) üçlüsüne güçlendirildi (yerinde üzerine yazma da yakalanır).
+- Düzeltme SONRASI mutasyon protokolü: gpu_db satırı sil → KIRMIZI; examples satırı
+  sil → KIRMIZI; örnek dosyayı kaldır → KIRMIZI; geri al → 9/9 yeşil. Eski prova
+  wheel'i hayalet içermiyordu (tehlike gizildi, gerçekleşmemişti); prova temiz
+  wheel'le tazelendi (validate ppw 3.00 uyarısız, koşu 0.2 sn).
+
+### Adversarial review turu (M10h, 14 ajan: 3 mercek + bulgu başına şüpheci)
+- 11 aday bulgu → 7 doğrulandı, 4 çürütüldü. Doğrulananlardan CRITICAL olan (bayat
+  `build/lib` → wheel-içerik testi gerilemiş wheel'de yeşil kalır; ajan `STALE_MARKER.txt`
+  ekiyle deneysel kanıtladı) kullanıcı mutasyon denetimimin bağımsız teyidi — yukarıdaki
+  fixture düzeltmesiyle kapanmıştı. Kalan doğrulanmışlar da düzeltildi:
+  - CLI `example` hata yolu: `KeyError` repr tırnakları temizlendi (`exc.args[0]`);
+    `except` OSError'a genişledi (POSIX'te `--to mevcut-dosya/alt` → NotADirectoryError
+    raw traceback veriyordu; WSL'de repro edildi, artık temiz exit 2)
+  - Wheel fixture'ı build hatasında pip/setuptools stderr'ini yutuyordu → returncode
+    kontrolü + stderr'li RuntimeError
+  - "Kurulum dizinine yazma yok" kapısı: snapshot yalnız examples/ adlarını topluyordu →
+    TÜM paket kökü, (yol, boyut, mtime_ns), `__pycache__` hariç; docstring sınırı
+    (create-then-delete geçici yazım snapshot'la yakalanamaz) açıkça yazıldı
+  - Örnek tam ppw=3.0 eşiğinde ve hiçbir test uyarısızlığı sabitlemiyordu →
+    `test_packaged_example_validates_clean`: `report.warnings == []` assert'i (dx bozulursa
+    quickstart'ın uyarıyla açılması artık test kırar)
+- Çürütülenler (kayıt): CI wheel ayağının yeşili push öncesi gözlenemez (×2 — milestone
+  metni yerel provayı kanıt olarak açıkça kabul ediyor, push kullanıcı onayında);
+  `network` markası şu an hiçbir teste takılı değil (plan metni tam olarak bunu istiyor —
+  marka + CI dışlaması; ağa çıkan testler W0'da uwcem repo'suna gidiyor); README quickstart
+  satırları test-pinli değil (W1 kabulü bunu kapsam dışı bırakıyor; [report] satırı var).
