@@ -198,3 +198,48 @@ def test_auto_fallback_warns_exactly_once_per_process():
         assert "falling back to numpy" in str(hits[0].message)
     finally:
         B._AUTO_FALLBACK_WARNED = old
+
+
+# -------------------------------------------------- VRAM limit uses FREE VRAM
+
+
+def test_vram_refusal_uses_free_vram_and_says_so(tmp_path, monkeypatch, capsys):
+    """The CUDA context eats ~1 GB before the first buffer: gating on TOTAL
+    VRAM says 'fits' and dies OOM mid-run. The gate must use FREE VRAM and
+    the refusal must name which limit it applied."""
+    from types import SimpleNamespace
+
+    from caustica import runner as R
+
+    monkeypatch.setattr(R, "get_backend", lambda name=None: SimpleNamespace(name="cupy"))
+    monkeypatch.setattr(
+        R,
+        "_gpu_environment",
+        lambda backend_name: {
+            "gpu_name": "FakeGPU",
+            "vram_total_gib": 40.0,  # total says "fits" —
+            "vram_free_gib": 0.001,  # — free says "no way"
+        },
+    )
+    code = run_job_file(mini_job(tmp_path), opts(out=tmp_path / "out", measure=False))
+    err = capsys.readouterr().err
+    assert code == 3  # EXIT_OOM
+    assert "free device VRAM (FakeGPU)" in err
+    assert "0.00 GiB" in err  # the free number, not 40
+
+
+def test_explicit_vram_limit_still_overrides(tmp_path, monkeypatch, capsys):
+    from types import SimpleNamespace
+
+    from caustica import runner as R
+
+    monkeypatch.setattr(R, "get_backend", lambda name=None: SimpleNamespace(name="cupy"))
+    monkeypatch.setattr(
+        R, "_gpu_environment", lambda backend_name: {"gpu_name": "FakeGPU", "vram_free_gib": 39.0}
+    )
+    code = run_job_file(
+        mini_job(tmp_path), opts(out=tmp_path / "out", measure=False, vram_limit_gib=1e-4)
+    )
+    err = capsys.readouterr().err
+    assert code == 3
+    assert "requested limit (--vram-limit-gib)" in err
