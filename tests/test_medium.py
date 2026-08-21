@@ -3,8 +3,8 @@
 import numpy as np
 import pytest
 
-from hifusim import Medium
-from hifusim.materials import breast_default, water
+from caustica import Medium
+from caustica.materials import breast_default, water
 
 
 def test_homogeneous_water():

@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phantom Studio — hifusim</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🫀</text></svg>">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark"></span>
+    <div>
+      <h1>Phantom Studio</h1>
+      <p>UWCEM numerical breast phantoms &rarr; simulation-ready hifusim media</p>
+    </div>
+  </div>
+  <div class="topbar-status">
+    <span id="statusPill" class="pill">ready</span>
+    <span id="statusText" class="muted"></span>
+  </div>
+</header>
+
+<main class="layout">
+
+  <!-- ─────────────────────────── LEFT: every knob ─────────────────────── -->
+  <aside class="sidebar" id="sidebar">
+
+    <section class="panel">
+      <h2>Phantom</h2>
+      <label class="field">
+        <span>Source</span>
+        <select id="phantomId"></select>
+      </label>
+      <p id="phantomInfo" class="hint"></p>
+      <div id="fetchRow" class="hidden">
+        <button id="fetchBtn" class="btn btn-ghost">Download this phantom</button>
+      </div>
+      <label class="field">
+        <span><span>Frequency f<sub>0</sub></span> <em id="f0Val">1.0 MHz</em></span>
+        <input type="range" id="f0" min="0.2" max="5" step="0.05" value="1">
+      </label>
+      <p class="hint">Attenuation is stored as a power law and evaluated here, so the
+        exported <code>alpha</code> is right for this frequency and labelled with it.</p>
+    </section>
+
+    <section class="panel">
+      <h2>Tissue model</h2>
+      <div class="segmented" id="tissueModel">
+        <button data-value="detailed" class="active">detailed <em>10</em></button>
+        <button data-value="grouped">grouped <em>5</em></button>
+        <button data-value="simple">simple <em>4</em></button>
+      </div>
+      <p class="hint" id="tissueModelHint">All ten UWCEM media numbers kept apart.</p>
+    </section>
+
+    <section class="panel">
+      <h2>Resolution</h2>
+      <label class="field">
+        <span>Target dx <em id="dxVal">0.50 mm</em></span>
+        <input type="range" id="dx" min="0.2" max="2.0" step="0.05" value="0.5">
+      </label>
+      <label class="field">
+        <span>Label resampling</span>
+        <select id="resampleMethod">
+          <option value="smooth">smooth — one-hot vote (better interfaces)</option>
+          <option value="nearest">nearest — fast, blocky</option>
+        </select>
+      </label>
+      <p class="hint">Source data is 0.5&nbsp;mm. Above ~0.75&nbsp;mm the 1.5&nbsp;mm skin
+        layer stops being resolved; the build says so in its warnings.</p>
+    </section>
+
+    <section class="panel">
+      <h2>Crop</h2>
+      <label class="field">
+        <span>Region</span>
+        <select id="cropMode">
+          <option value="breast">breast — protruding cone only</option>
+          <option value="tissue">tissue — full bounding box</option>
+          <option value="none">none — whole phantom</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Margin <em id="marginVal">5 mm</em></span>
+        <input type="range" id="margin" min="0" max="30" step="1" value="5">
+      </label>
+      <p class="hint">The chest-wall fat slab spans the whole slice, so
+        <strong>tissue</strong> barely crops sideways &mdash; <strong>breast</strong> measures
+        the transverse box on the protruding slices only.</p>
+    </section>
+
+    <section class="panel">
+      <h2>Domain</h2>
+      <label class="field">
+        <span>Transducer standoff <em id="standoffVal">10 mm</em></span>
+        <input type="range" id="standoff" min="0" max="60" step="1" value="10">
+      </label>
+      <label class="field">
+        <span>Backing behind chest wall <em id="backingVal">0 mm</em></span>
+        <input type="range" id="backing" min="0" max="40" step="1" value="0">
+      </label>
+      <label class="field">
+        <span>Lateral margin <em id="lateralVal">0 mm</em></span>
+        <input type="range" id="lateral" min="0" max="40" step="1" value="0">
+      </label>
+      <label class="check">
+        <input type="checkbox" id="fftFriendly" checked>
+        <span>Pad axes to 2/3/5/7-smooth sizes <em>(much faster FFTs)</em></span>
+      </label>
+    </section>
+
+    <section class="panel">
+      <h2>Simplify</h2>
+      <label class="check"><input type="checkbox" id="dropMuscle"><span>Remove chest wall</span></label>
+      <label class="check"><input type="checkbox" id="dropSkin"><span>Remove skin</span></label>
+      <label class="check"><input type="checkbox" id="fillHoles"><span>Fill enclosed pockets</span></label>
+      <label class="check"><input type="checkbox" id="keepLargest"><span>Keep largest tissue body only</span></label>
+      <label class="field">
+        <span>Dissolve islands smaller than <em id="islandsVal">off</em></span>
+        <input type="range" id="islands" min="0" max="400" step="10" value="0">
+      </label>
+      <label class="field">
+        <span>Majority smoothing <em id="smoothVal">off</em></span>
+        <input type="range" id="smooth" min="0" max="3" step="1" value="0">
+      </label>
+      <label class="field">
+        <span>Skin closing passes <em id="closeSkinVal">off</em></span>
+        <input type="range" id="closeSkin" min="0" max="3" step="1" value="0">
+      </label>
+    </section>
+
+    <section class="panel">
+      <h2>Heterogeneity &amp; noise</h2>
+      <label class="check">
+        <input type="checkbox" id="usePval" checked>
+        <span>Use measured <code>pval</code> <em>(per-voxel within-class variation)</em></span>
+      </label>
+      <label class="field">
+        <span>Scatterer noise <em id="noiseVal">off</em></span>
+        <input type="range" id="noise" min="0" max="15" step="0.5" value="0">
+      </label>
+      <label class="field">
+        <span>Correlation length <em id="corrVal">0.0 mm</em></span>
+        <input type="range" id="corr" min="0" max="5" step="0.1" value="0">
+      </label>
+      <div class="field">
+        <span>Perturb</span>
+        <div class="chips" id="noiseProps">
+          <label><input type="checkbox" value="rho" checked><span>&rho;</span></label>
+          <label><input type="checkbox" value="c" checked><span>c</span></label>
+          <label><input type="checkbox" value="alpha"><span>&alpha;</span></label>
+          <label><input type="checkbox" value="beta"><span>&beta;</span></label>
+        </div>
+      </div>
+      <label class="check"><input type="checkbox" id="coupled" checked><span>One shared field (physical)</span></label>
+      <label class="check"><input type="checkbox" id="tissueOnly" checked><span>Leave the coupling bath clean</span></label>
+      <label class="field">
+        <span>Seed</span>
+        <input type="number" id="seed" min="0" step="1" value="0">
+      </label>
+    </section>
+
+    <section class="panel actions">
+      <div id="planLine" class="plan"></div>
+      <div class="btn-row">
+        <button id="previewBtn" class="btn btn-primary">Preview</button>
+        <button id="fullBtn" class="btn">Build full</button>
+      </div>
+      <label class="check"><input type="checkbox" id="autoPreview" checked><span>Auto-preview on change</span></label>
+    </section>
+
+    <section class="panel">
+      <h2>Export</h2>
+      <label class="field">
+        <span>File name</span>
+        <input type="text" id="exportName" placeholder="(auto from the spec)">
+      </label>
+      <label class="field">
+        <span>Property volumes</span>
+        <select id="storeProps">
+          <option value="auto">auto — store only when they carry information</option>
+          <option value="always">always — dense alpha/rho/c/beta</option>
+          <option value="never">never — labels + MaterialDB only</option>
+        </select>
+      </label>
+      <button id="exportBtn" class="btn btn-primary block">Export .npz</button>
+      <div id="exportResult" class="hidden"></div>
+    </section>
+  </aside>
+
+  <!-- ────────────────────── RIGHT: 3-D and cross-sections ────────────── -->
+  <section class="viewer">
+
+    <div class="viewer-toolbar">
+      <div class="seg-group">
+        <label class="tiny">Field</label>
+        <select id="field">
+          <option value="labels">tissue labels</option>
+          <option value="c">sound speed c</option>
+          <option value="rho">density &rho;</option>
+          <option value="alpha">absorption &alpha;</option>
+          <option value="beta">nonlinearity &beta;</option>
+          <option value="impedance">impedance &rho;c</option>
+        </select>
+      </div>
+      <div class="seg-group" id="rampGroup">
+        <label class="tiny">Colour ramp</label>
+        <select id="ramp">
+          <option value="blue">blue (sequential)</option>
+          <option value="amber">amber (sequential)</option>
+          <option value="gray">gray</option>
+        </select>
+      </div>
+      <div class="seg-group">
+        <label class="tiny">3-D opacity <em id="densityVal">1.0</em></label>
+        <input type="range" id="density" min="0.05" max="3" step="0.05" value="1">
+      </div>
+      <div class="seg-group">
+        <label class="tiny">Shading</label>
+        <input type="range" id="light" min="0" max="1" step="0.05" value="1">
+      </div>
+      <label class="check tiny"><input type="checkbox" id="cutaway" checked><span>Cut away at the slice planes</span></label>
+      <button id="resetCam" class="btn btn-ghost tiny">Reset view</button>
+    </div>
+
+    <div class="stage3d">
+      <canvas id="gl"></canvas>
+      <div id="glFallback" class="hidden overlay-msg"></div>
+      <div class="axis-hint">
+        <span>x, y &mdash; transverse</span>
+        <span>z &mdash; beam axis, 0 = transducer side &rarr; chest wall</span>
+      </div>
+    </div>
+
+    <div class="slices" id="slices">
+      <figure class="slice" data-axis="2">
+        <figcaption>axial &mdash; xy plane <em>(constant z, the beam cross-section)</em></figcaption>
+        <div class="canvas-wrap"><canvas></canvas><span class="readout"></span></div>
+        <input type="range" min="0" max="0" value="0">
+        <div class="slice-meta"></div>
+      </figure>
+      <figure class="slice" data-axis="1">
+        <figcaption>coronal &mdash; xz plane <em>(constant y, along the beam)</em></figcaption>
+        <div class="canvas-wrap"><canvas></canvas><span class="readout"></span></div>
+        <input type="range" min="0" max="0" value="0">
+        <div class="slice-meta"></div>
+      </figure>
+      <figure class="slice" data-axis="0">
+        <figcaption>sagittal &mdash; yz plane <em>(constant x, along the beam)</em></figcaption>
+        <div class="canvas-wrap"><canvas></canvas><span class="readout"></span></div>
+        <input type="range" min="0" max="0" value="0">
+        <div class="slice-meta"></div>
+      </figure>
+    </div>
+
+    <div class="infobar">
+      <div class="panel legend-panel">
+        <h2>Tissues <span class="muted tiny" id="legendHint">click to isolate &middot; checkbox to hide</span></h2>
+        <table class="legend" id="legend"></table>
+      </div>
+      <div class="panel">
+        <h2>Build</h2>
+        <div id="buildSummary" class="mono small"></div>
+        <div id="warnings"></div>
+        <details><summary>Build log</summary><ol id="buildLog" class="mono small"></ol></details>
+        <details><summary>Importing this file into a simulation</summary>
+<pre class="mono small code" id="snippet"></pre>
+        </details>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <span id="citation" class="muted tiny"></span>
+</footer>
+
+<script type="module" src="/app.js"></script>
+</body>
+</html>

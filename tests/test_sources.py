@@ -3,8 +3,8 @@
 import numpy as np
 import pytest
 
-from hifusim import Grid, PMLSpec
-from hifusim.sources import CWSource, bowl_cw_source, plane_cw_source, ramp_envelope
+from caustica import Grid, PMLSpec
+from caustica.sources import CWSource, bowl_cw_source, plane_cw_source, ramp_envelope
 
 
 def test_cwsource_validation():

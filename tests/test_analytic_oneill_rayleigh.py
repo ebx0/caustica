@@ -12,7 +12,7 @@ from MILESTONES.md M3:
 import numpy as np
 import pytest
 
-from hifusim.analytic import (
+from caustica.analytic import (
     axial_pressure,
     focal_gain,
     rayleigh_pressure,

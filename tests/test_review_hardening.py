@@ -9,13 +9,13 @@ reordering and medium mapping.
 import numpy as np
 import pytest
 
-import hifusim.solvers as solvers
-from hifusim import Grid, Medium, PMLSpec
-from hifusim.arrays import archimedean_spiral, build_phase_maps
-from hifusim.materials import Material, MaterialDB, water
-from hifusim.solvers import CWRunSpec
-from hifusim.solvers.kspace.engine import normalize_record_region
-from hifusim.sources import CWSource, plane_cw_source
+import caustica.solvers as solvers
+from caustica import Grid, Medium, PMLSpec
+from caustica.arrays import archimedean_spiral, build_phase_maps
+from caustica.materials import Material, MaterialDB, water
+from caustica.solvers import CWRunSpec
+from caustica.solvers.kspace.engine import normalize_record_region
+from caustica.sources import CWSource, plane_cw_source
 
 C0 = 1500.0
 
@@ -89,7 +89,7 @@ def test_build_phase_maps_refuses_collisions():
 def test_transducer_array_copies_inputs():
     arr0 = archimedean_spiral(n_elements=16, d_outer=0.03, d_inner=0.01, roc=0.03)
     pos = arr0.positions.copy()
-    from hifusim.arrays.transducer import TransducerArray
+    from caustica.arrays.transducer import TransducerArray
 
     arr = TransducerArray(
         positions=pos,

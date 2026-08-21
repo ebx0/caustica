@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from hifusim.spectral import single_bin_phasor
+from caustica.spectral import single_bin_phasor
 
 F0 = 1.1e6
 OMEGA = 2.0 * np.pi * F0

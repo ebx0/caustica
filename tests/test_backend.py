@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from hifusim.core.backend import cupy_available, get_backend
+from caustica.core.backend import cupy_available, get_backend
 
 
 def test_numpy_backend_always_works():
