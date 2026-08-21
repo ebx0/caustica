@@ -1,15 +1,16 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "hifusim"
+name = "caustica"
 version = "0.1.0.dev0"
 description = "GPU-accelerated multi-solver acoustic simulation library for HIFU / therapeutic ultrasound (k-space PSTD: Westervelt, linear; KZK planned)"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
-authors = [{ name = "hifusim developers" }]
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "caustica developers" }]
 keywords = ["HIFU", "ultrasound", "acoustics", "simulation", "PSTD", "Westervelt", "k-space"]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
@@ -27,14 +28,23 @@ dependencies = [
 [project.optional-dependencies]
 gpu = ["cupy-cuda12x>=13.0"]
 kwave = ["k-wave-python>=0.6"]
-dev = ["pytest>=8", "pytest-cov", "ruff>=0.4"]
+report = ["matplotlib>=3.8"]
+dev = ["pytest>=8", "pytest-cov", "ruff>=0.16,<0.17", "matplotlib>=3.8"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+# The planner's GPU datasheet ships with the library — without it a wheel
+# install (exactly what Colab does) breaks planner.estimate.
+"caustica.planner" = ["gpu_db.json"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q -ra"
+# `apps` and `uwcem_phantoms` are repo-level side packages (not installed with
+# the caustica wheel); tests import them from the repo root.
+pythonpath = ["."]
 markers = [
     "slow: long-running physics validation tests",
     "gpu: tests that require CuPy + an NVIDIA GPU (skipped when unavailable)",
@@ -43,7 +53,7 @@ markers = [
 
 [tool.ruff]
 line-length = 100
-src = ["src", "tests"]
+src = ["src", "tests", "apps", "uwcem_phantoms"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "NPY"]

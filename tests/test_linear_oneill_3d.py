@@ -8,12 +8,12 @@ methodology): axial profile correlation, focal position, and -6 dB widths.
 import numpy as np
 import pytest
 
-import hifusim.solvers as solvers
-from hifusim import Grid, Medium, PMLSpec
-from hifusim.analytic import axial_pressure, rayleigh_pressure, spherical_cap_points
-from hifusim.materials import water
-from hifusim.solvers import CWRunSpec
-from hifusim.sources import bowl_cw_source
+import caustica.solvers as solvers
+from caustica import Grid, Medium, PMLSpec
+from caustica.analytic import axial_pressure, rayleigh_pressure, spherical_cap_points
+from caustica.materials import water
+from caustica.solvers import CWRunSpec
+from caustica.sources import bowl_cw_source
 
 F0 = 1.0e6
 C0 = 1500.0

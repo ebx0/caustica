@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from hifusim.analytic import attenuate, fubini_harmonic, shock_distance
+from caustica.analytic import attenuate, fubini_harmonic, shock_distance
 
 
 def test_attenuation_is_exact_exponential():

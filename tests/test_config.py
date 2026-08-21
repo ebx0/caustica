@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from hifusim.config import GridConfig, PMLConfig
+from caustica.config import GridConfig, PMLConfig
 
 
 def test_json_roundtrip_is_lossless():

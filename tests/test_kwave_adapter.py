@@ -9,12 +9,12 @@ binary is unavailable — the suite stays green without it (M4b criterion).
 import numpy as np
 import pytest
 
-import hifusim.solvers as solvers
-from hifusim import Grid, Medium, PMLSpec
-from hifusim.materials import water
-from hifusim.solvers import CWRunSpec
-from hifusim.solvers.kwave_adapter import alpha_np_m_to_kwave, beta_to_bona
-from hifusim.sources import CWSource
+import caustica.solvers as solvers
+from caustica import Grid, Medium, PMLSpec
+from caustica.materials import water
+from caustica.solvers import CWRunSpec
+from caustica.solvers.kwave_adapter import alpha_np_m_to_kwave, beta_to_bona
+from caustica.sources import CWSource
 
 F0 = 0.5e6
 C0 = 1500.0
@@ -31,7 +31,7 @@ def test_alpha_unit_conversion():
 
 
 def test_beta_to_bona_mapping():
-    # hifusim beta = 1 + B/2A  =>  B/A = 2 (beta - 1); water beta=3.5 -> B/A=5.
+    # caustica beta = 1 + B/2A  =>  B/A = 2 (beta - 1); water beta=3.5 -> B/A=5.
     assert beta_to_bona(3.5) == pytest.approx(5.0)
     assert beta_to_bona(1.0) == pytest.approx(0.0)
 

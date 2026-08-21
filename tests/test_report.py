@@ -1,0 +1,429 @@
+"""M10d: shared focal metrics, the preview package and `caustica report`.
+
+The criteria under test:
+* metric definitions are single-sourced — focus_study and the library
+  compute IDENTICAL numbers from the same solve;
+* the preview package stays <= 10 MB measured on a full-size grid, and its
+  contents reproduce the stored field within the float16 contract;
+* `caustica report` renders from result.h5 AND from the preview alone.
+"""
+
+from __future__ import annotations
+
+import json
+import math
+from pathlib import Path
+
+import numpy as np
+import pytest
+
+from caustica.__main__ import main as cli_main
+from caustica.report.metrics import focus_metrics
+from caustica.report.preview import (
+    DEFAULT_MAX_BYTES,
+    block_mean,
+    load_preview,
+    write_preview,
+)
+from caustica.runner import EXIT_OK, RunnerOptions, run_job_file
+from caustica.solvers.base import SolverResult
+
+JOB_FORMAT = "caustica-job/1"
+
+
+# ------------------------------------------------------------- shared solves
+
+
+@pytest.fixture(scope="module")
+def water_setup_result():
+    """One coarse focus_study water-bowl solve, shared by the parity tests."""
+    from apps.focus_study import scenarios
+
+    knobs = scenarios.Knobs(dx=0.6e-3, min_settle_periods=2, max_settle_periods=6)
+    setup = scenarios.water_bowl(knobs)
+    import caustica.solvers as solvers
+
+    result = solvers.get(knobs.solver)().run(
+        setup.grid,
+        setup.medium,
+        setup.source,
+        setup.spec,
+        backend="numpy",
+        reference_point=setup.focus_vox,
+        harmonics=knobs.harmonics,
+    )
+    return setup, result
+
+
+@pytest.fixture(scope="module")
+def runner_outdir(tmp_path_factory) -> Path:
+    """One mini runner job (float32 store, h1+h2), shared by the report tests."""
+    tmp = tmp_path_factory.mktemp("report_run")
+    job = {
+        "format": JOB_FORMAT,
+        "kind": "explicit",
+        "name": "mini-report",
+        "medium": {"kind": "homogeneous"},
+        "grid": {"ndim": 3, "dx_mm": 0.5, "size_mm": [18, 18, 24], "pml": {"thickness_mm": 3.0}},
+        "source": {
+            "kind": "array",
+            "array": {"kind": "bowl", "d_outer_mm": 10.0, "roc_mm": 12.0},
+            "apex_mm": [9, 9, 6.0],
+        },
+        "drive": {"f0_mhz": 1.0, "amplitude_kpa": 100.0},
+        "run": {"spec": {"min_settle_periods": 2, "max_settle_periods": 6}, "harmonics": [1, 2]},
+        "solver": "westervelt",
+        "output": {"quantize": False},
+    }
+    job_path = tmp / "mini.json"
+    job_path.write_text(json.dumps(job), encoding="utf-8")
+    out = tmp / "out"
+    code = run_job_file(job_path, RunnerOptions(out=out, measure=False, status_interval_s=0.0))
+    assert code == EXIT_OK
+    return out
+
+
+# --------------------------------------------- single source of truth (M10d)
+
+
+def test_focus_study_and_library_compute_identical_metrics(water_setup_result):
+    """analyze() and focus_metrics() must agree to the last rounded digit."""
+    from apps.focus_study import analysis
+
+    setup, result = water_setup_result
+    via_app = analysis.analyze(setup, result)
+    via_lib = focus_metrics(
+        result,
+        dx=setup.grid.dx,
+        grid_shape=setup.grid.shape,
+        pml_vox=setup.grid.pml_vox,
+        apex_vox=setup.apex_vox,
+        focus_vox=setup.focus_vox,
+        source_amplitude=setup.knobs.amplitude,
+        medium=setup.medium,
+        solver=setup.knobs.solver,
+    )
+    for section in ("peak", "target", "focal_spot", "run", "harmonics"):
+        assert via_app[section] == via_lib[section], section
+
+
+def test_analyze_keeps_the_pre_refactor_shape(water_setup_result):
+    """Key order and presence — metrics.json byte-stability depends on it."""
+    from apps.focus_study import analysis
+
+    setup, result = water_setup_result
+    m = analysis.analyze(setup, result)
+    assert list(m) == ["peak", "target", "focal_spot", "run", "harmonics", "vs_oneill"]
+    assert m["peak"]["gain_vs_source"] is not None
+    assert m["peak"]["isppa_w_cm2"] is not None  # medium was available
+
+
+def test_metrics_from_result_file_match_the_runner_metrics(runner_outdir):
+    """The h5 path (no medium) reproduces the runner's numbers.
+
+    quantize=False in the job, so the only difference between the in-memory
+    field and the reloaded one is the float32 cast — metric-level agreement
+    must be tight; isppa is the one honest exception (needs the medium).
+    """
+    import h5py
+
+    from caustica.io.store import load_result
+
+    stored = json.loads((runner_outdir / "metrics.json").read_text(encoding="utf-8"))
+    result = load_result(runner_outdir / "result.h5")
+    with h5py.File(runner_outdir / "result.h5", "r") as hf:
+        a = dict(hf.attrs)
+        amplitude = float(hf["input"].attrs["amplitude_pa"])
+    m = focus_metrics(
+        result,
+        dx=float(a["dx_m"]),
+        grid_shape=tuple(int(v) for v in a["grid_shape"]),
+        pml_vox=int(a["pml_vox"]),
+        apex_vox=tuple(int(v) for v in a["apex_vox"]),
+        focus_vox=tuple(int(v) for v in a["focus_vox"]),
+        source_amplitude=amplitude,
+        medium=None,
+    )
+    assert m["peak"]["voxel_grid"] == stored["peak"]["voxel_grid"]
+    assert m["peak"]["p_pa"] == pytest.approx(stored["peak"]["p_pa"], rel=1e-5)
+    assert m["peak"]["gain_vs_source"] == pytest.approx(stored["peak"]["gain_vs_source"], abs=0.01)
+    assert m["peak"]["isppa_w_cm2"] is None and stored["peak"]["isppa_w_cm2"] is not None
+    assert m["target"]["hit_ratio"] == pytest.approx(stored["target"]["hit_ratio"], abs=1e-3)
+    assert m["focal_spot"]["axial_6db"]["width_mm"] == pytest.approx(
+        stored["focal_spot"]["axial_6db"]["width_mm"], abs=1e-2
+    )
+    assert m["harmonics"]["a2_over_a1_at_peak_pct"] == pytest.approx(
+        stored["harmonics"]["a2_over_a1_at_peak_pct"], abs=0.05
+    )
+    assert m["run"] == stored["run"]
+
+
+# ----------------------------------------------------------- preview package
+
+
+def _synthetic_result(shape: tuple[int, int, int]) -> SolverResult:
+    """A full-grid-sized fake solve: smooth field with a known focal blob."""
+    rng = np.random.default_rng(7)
+    zz = np.linspace(-1, 1, shape[2])[None, None, :]
+    xx = np.linspace(-1, 1, shape[0])[:, None, None]
+    yy = np.linspace(-1, 1, shape[1])[None, :, None]
+    amp = 1e6 * np.exp(-8.0 * (xx**2 + yy**2 + (zz - 0.2) ** 2)).astype(np.float32)
+    amp += rng.random(shape, dtype=np.float32) * 1e3
+    phasor = (amp * np.exp(1j * 0.3)).astype(np.complex64)
+    return SolverResult(
+        phasor=phasor,
+        p_max=amp * 1.1,
+        region=tuple(slice(0, n) for n in shape),
+        dt=1e-7,
+        spp=10,
+        steps_total=100,
+        t_end_s=1e-5,
+        tof_periods=5,
+        converged_period=8,
+        settle_capped=False,
+        convergence_history=[(i, 1e5 * i, 0.1 / (i + 1)) for i in range(8)],
+        phasors={1: phasor},
+        meta={"solver": "synthetic"},
+    )
+
+
+def test_preview_stays_under_10mb_on_a_full_grid(tmp_path):
+    """The M10d gate, measured: a 256^3 full-grid field -> <= 10 MB package."""
+    shape = (256, 256, 256)
+    result = _synthetic_result(shape)
+    path = write_preview(
+        tmp_path,
+        result,
+        dx=0.25e-3,
+        grid_shape=shape,
+        pml_vox=8,
+        apex_vox=(128, 128, 12),
+        focus_vox=(128, 128, 150),
+        metrics={"format": "caustica-metrics/1", "job": "synthetic"},
+    )
+    size = path.stat().st_size
+    assert size <= DEFAULT_MAX_BYTES, f"preview is {size} bytes"
+    pre = load_preview(path)
+    step = pre["meta"]["coarse_step"]
+    assert step > 1  # a full grid MUST have been coarsened to fit
+    # The coarse volume + slices reproduce the field within the f16 contract.
+    peak = float(result.amp.max())
+    assert pre["coarse_amp"].shape == tuple((n // step) for n in shape)
+    np.testing.assert_allclose(
+        pre["amp_h1_slice_y"],
+        result.amp[:, pre["meta"]["peak_voxel_grid"][1], :],
+        atol=1.1e-3 * peak,
+    )
+    assert (tmp_path / "metrics.json").exists()
+
+
+def test_block_mean_is_a_true_block_average():
+    arr = np.arange(4 * 4 * 4, dtype=np.float64).reshape(4, 4, 4)
+    out = block_mean(arr, 2)
+    assert out.shape == (2, 2, 2)
+    assert out[0, 0, 0] == pytest.approx(arr[:2, :2, :2].mean())
+    assert out[1, 1, 1] == pytest.approx(arr[2:, 2:, 2:].mean())
+    # step 1 is a no-op (float32 cast aside)
+    np.testing.assert_array_equal(block_mean(arr, 1), arr.astype(np.float32))
+
+
+def test_runner_writes_the_preview_package(runner_outdir):
+    """`caustica run` leaves preview.npz + metrics.json next to result.h5."""
+    from caustica.io.store import load_result
+
+    pre = load_preview(runner_outdir / "preview.npz")
+    result = load_result(runner_outdir / "result.h5")
+    pk = pre["meta"]["peak_voxel_grid"]
+    org = [s.start for s in result.region]
+    peak = float(result.amp.max())
+    np.testing.assert_allclose(
+        pre["amp_h1_slice_z"],
+        result.amp[:, :, pk[2] - org[2]],
+        atol=1.1e-3 * peak,
+    )
+    assert pre["meta"]["harmonics"] == [1, 2]
+    assert "amp_h2_slice_y" in pre and "p_max_slice_y" in pre
+    metrics = json.loads((runner_outdir / "metrics.json").read_text(encoding="utf-8"))
+    assert metrics["job"] == "mini-report"
+    assert metrics["peak"]["isppa_w_cm2"] is not None  # runner had the medium
+
+
+# ---------------------------------------------------------- caustica report
+
+
+def test_report_from_result_h5(runner_outdir):
+    code = cli_main(["report", str(runner_outdir)])
+    assert code == 0
+    html = (runner_outdir / "index.html").read_text(encoding="utf-8")
+    assert "mini-report" in html
+    assert (runner_outdir / "REPORT.md").exists()
+    for fig in ("fig_field.png", "fig_profiles.png", "fig_harmonics.png", "fig_convergence.png"):
+        assert (runner_outdir / fig).exists(), fig
+    # figures referenced by the page actually exist next to it
+    assert "fig_field.png" in html
+
+
+def test_report_from_preview_alone(runner_outdir, tmp_path):
+    """Copy ONLY the preview package elsewhere — report must still render."""
+    import shutil
+
+    lone = tmp_path / "lone"
+    lone.mkdir()
+    for name in ("preview.npz", "metrics.json", "run_meta.json"):
+        shutil.copy2(runner_outdir / name, lone / name)
+    code = cli_main(["report", str(lone)])
+    assert code == 0
+    html = (lone / "index.html").read_text(encoding="utf-8")
+    assert "preview" in html
+    assert (lone / "fig_preview.png").exists()
+    assert not (lone / "fig_field.png").exists()  # full figures need result.h5
+
+
+def test_report_on_an_empty_folder_is_a_clean_error(tmp_path):
+    assert cli_main(["report", str(tmp_path)]) == 2
+
+
+def test_coarse_step_formula_targets_the_budget():
+    """Sanity on the sizing math: the chosen step fits the float16 volume."""
+    from caustica.report.preview import _coarse_step
+
+    shape = (512, 512, 512)
+    budget = 6 * 1024 * 1024
+    s = _coarse_step(shape, budget)
+    assert 2 * math.prod(n // s for n in shape) <= budget
+    assert _coarse_step((32, 32, 32), budget) == 1  # small grids stay exact
+
+
+# ------------------------------------------- janitor round (2026-08-21)
+
+
+def test_report_on_pre_m10d_result_without_apex_attrs(runner_outdir, tmp_path):
+    """An M10c-era result.h5 (no apex_vox/focus_vox stamp) must still report.
+
+    Every pre-M10d output folder on a Drive is exactly this shape; the report
+    falls back to the grid origin and says so in a caveat.
+    """
+    from caustica.io.store import load_result, save_result
+    from caustica.sources import CWSource
+
+    result = load_result(runner_outdir / "result.h5")
+    src = CWSource(
+        indices=np.array([[2, 2, 2], [3, 3, 3]], dtype=np.int32),
+        phases=np.zeros(2, dtype=np.float32),
+        amplitude=1e5,
+        f0=1e6,
+    )
+    old = tmp_path / "old"
+    old.mkdir()
+    save_result(
+        old / "result.h5",
+        result,
+        src,
+        dx=0.5e-3,
+        grid_shape=(36, 36, 48),
+        pml_vox=6,
+        quantize=False,
+        # NO apex_vox / focus_vox extra_attrs — the pre-M10d layout.
+    )
+    assert cli_main(["report", str(old)]) == 0
+    report = (old / "REPORT.md").read_text(encoding="utf-8")
+    assert "predates the apex_vox stamp" in report
+    assert "I_sppa needs the medium" in report  # metrics were recomputed
+    metrics = json.loads((old / "metrics.json").read_text(encoding="utf-8"))
+    assert metrics["peak"]["isppa_w_cm2"] is None
+
+
+def test_preview_roundtrip_with_offset_record_region(tmp_path):
+    """Region start != 0: grid-frame bookkeeping through metrics + preview."""
+    from caustica.report.metrics import focus_metrics
+
+    shape = (40, 44, 60)
+    off = (10, 12, 20)
+    grid_shape = tuple(o + n + 8 for o, n in zip(off, shape, strict=True))
+    base = _synthetic_result(shape)
+    result = SolverResult(
+        phasor=base.phasor,
+        p_max=base.p_max,
+        region=tuple(slice(o, o + n) for o, n in zip(off, shape, strict=True)),
+        dt=base.dt,
+        spp=base.spp,
+        steps_total=base.steps_total,
+        t_end_s=base.t_end_s,
+        tof_periods=base.tof_periods,
+        converged_period=base.converged_period,
+        settle_capped=base.settle_capped,
+        convergence_history=base.convergence_history,
+        phasors=base.phasors,
+        meta=base.meta,
+    )
+    apex = (off[0] + shape[0] // 2, off[1] + shape[1] // 2, off[2] + 2)
+    m = focus_metrics(result, dx=0.5e-3, grid_shape=grid_shape, pml_vox=4, apex_vox=apex)
+    pk_grid = m["peak"]["voxel_grid"]
+    # The stored voxel is in the GRID frame: region-frame argmax + offset.
+    pk_region = np.unravel_index(int(np.argmax(result.amp)), shape)
+    assert pk_grid == [int(i) + o for i, o in zip(pk_region, off, strict=True)]
+
+    path = write_preview(
+        tmp_path,
+        result,
+        dx=0.5e-3,
+        grid_shape=grid_shape,
+        pml_vox=4,
+        apex_vox=apex,
+        focus_vox=None,
+        metrics={"format": "caustica-metrics/1", "job": "offset"},
+    )
+    pre = load_preview(path)
+    assert pre["meta"]["peak_voxel_grid"] == pk_grid
+    assert pre["meta"]["region_start"] == list(off)
+    pk_r = [g - o for g, o in zip(pk_grid, off, strict=True)]
+    peak = float(result.amp.max())
+    np.testing.assert_allclose(pre["amp_h1_slice_y"], result.amp[:, pk_r[1], :], atol=1.1e-3 * peak)
+    # focus_vox=None: no target section, meta records null.
+    assert "target" not in m
+    assert pre["meta"]["focus_vox"] is None
+
+
+def test_load_preview_rejects_wrong_format(tmp_path):
+    import numpy as _np
+
+    bad = tmp_path / "preview.npz"
+    with open(bad, "wb") as fh:
+        _np.savez(fh, meta_json=_np.str_(json.dumps({"format": "other/1"})))
+    with pytest.raises(ValueError, match="caustica-preview/1"):
+        load_preview(bad)
+
+
+def test_report_cli_on_truncated_preview_is_a_clean_error(runner_outdir, tmp_path):
+    """A half-synced preview.npz (THE Drive failure mode) exits 2, no traceback."""
+    lone = tmp_path / "half"
+    lone.mkdir()
+    data = (runner_outdir / "preview.npz").read_bytes()
+    (lone / "preview.npz").write_bytes(data[: len(data) // 2])
+    assert cli_main(["report", str(lone)]) == 2
+
+
+def test_report_preview_flag_without_package_is_a_clear_error(runner_outdir, tmp_path, capsys):
+    """--preview with only result.h5 present: exit 2 AND point at the fix."""
+    import shutil
+
+    lone = tmp_path / "onlyresult"
+    lone.mkdir()
+    shutil.copy2(runner_outdir / "result.h5", lone / "result.h5")
+    assert cli_main(["report", str(lone), "--preview"]) == 2
+    err = capsys.readouterr().err
+    assert "no preview.npz" in err and "result.h5 exists" in err
+
+
+def test_render_html_with_no_rows_emits_no_stray_table_close(tmp_path):
+    from caustica.report.html import render_html
+
+    out = render_html(
+        tmp_path / "index.html",
+        page_title="t",
+        title="t",
+        description="d",
+        rows=[],
+    )
+    html = out.read_text(encoding="utf-8")
+    assert "</table>" not in html and "<table>" not in html

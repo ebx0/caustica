@@ -3,8 +3,8 @@
 import numpy as np
 import pytest
 
-from hifusim import Grid, PMLSpec
-from hifusim.geometry import (
+from caustica import Grid, PMLSpec
+from caustica.geometry import (
     Ball,
     Box,
     Cylinder,
@@ -333,10 +333,10 @@ def test_volume_import_config_references_file(tmp_path):
 
 @pytest.mark.slow
 def test_scene_to_medium_to_solver_smoke():
-    import hifusim.solvers as solvers
-    from hifusim.materials import Material, MaterialDB, water
-    from hifusim.solvers import CWRunSpec
-    from hifusim.sources import plane_cw_source
+    import caustica.solvers as solvers
+    from caustica.materials import Material, MaterialDB, water
+    from caustica.solvers import CWRunSpec
+    from caustica.sources import plane_cw_source
 
     grid = Grid(shape=(96, 96), dx=0.5e-3, pml=PMLSpec(thickness=8e-3))
     scene = Scene(ndim=2, background=0)
@@ -365,7 +365,7 @@ def test_real_mtype_phantom_if_present():
     """Load + resample the actual production phantom when it exists locally."""
     import pathlib
 
-    from hifusim.geometry import load_breast_phantom
+    from caustica.geometry import load_breast_phantom
 
     path = pathlib.Path("mtype.txt")
     if not path.exists():
@@ -493,7 +493,7 @@ def test_halfspace_and_transform_configs_roundtrip():
     rebuilt = SceneConfig.model_validate_json(cfg.model_dump_json())
     grid = _grid2d()
 
-    from hifusim.geometry import Ellipsoid as Ell
+    from caustica.geometry import Ellipsoid as Ell
 
     hand = Scene(ndim=2, background=0)
     shape = (

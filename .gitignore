@@ -27,7 +27,21 @@ Thumbs.db
 .DS_Store
 
 # Local calibration / caches
-.hifusim/
+.caustica/
+
+# App run outputs (figures + npz + reports are regenerated, never committed)
+apps/outputs/
 
 # Source notebook stays in Drive/Colab, not in git (11 MB)
 hifu_pred_dx300_t128.ipynb
+
+# UWCEM phantom archives, decode caches and exports (179 MB of downloads +
+# regenerable derivatives). `python -m uwcem_phantoms fetch --all` refills it.
+uwcem_phantoms/_data/
+
+# Generated standard phantom dataset (GBs; `python -m uwcem_phantoms dataset`
+# regenerates it). The manifest is kept so the recipe is visible in git.
+data/phantoms/*
+!data/phantoms/manifest.json
+runs/
+janitor/

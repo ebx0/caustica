@@ -296,3 +296,859 @@ olarak sabitliyor.
 
 ### Sonraki
 - M7 CuPy (Colab oturumu; M8'in iki Colab kapısı aynı oturumda ölçülür) veya M10 IO.
+
+---
+
+## 2026-08-18 — Oturum 6 (Opus): M6c — UWCEM fantom alt modülü + Phantom Studio GUI
+
+Araya alınan iş (kullanıcı talebi): "UWCEM fantomlarını indir, simülasyona import edilebilir
+TEK dosya üreten API-benzeri bir alt modül yaz, bir de bunu kullanan GUI yap."
+
+### Yapılanlar
+
+**Veri.** https://uwcem.ece.wisc.edu/phantomRepository.html — dokuz MRI-türevi meme
+fantomu (ACR yoğunluk sınıfı 1–4, 0.5 mm izotropik), `breastInfo.txt` + `mtype.zip` +
+`pval.zip`. Hepsi indirildi (179 MB, `src/hifusim/phantoms/_data/uwcem/`, .gitignore'da).
+InstructionManual.pdf çözümlendi: `mtype` = Tablo-1 medya numarası/voxel (−1 daldırma
+ortamı, −2 deri, −4 kas, 1.1–1.3 fibroglandüler, 2 geçiş, 3.1–3.3 yağ), `pval` = sınıf içi
+[0,1] konum, ikisi de Fortran sırasında tek sütun ASCII.
+
+**ZIP'ler AÇILMADI, bilinçli.** Dokuz `mtype.txt` + `pval.txt` açıldığında ~3.5 GB; zipli
+179 MB. Okuyucu doğrudan zip'in içinden çözüyor, gerçekten yeniden kullandığımız açılmış
+biçim ise int8 `.npz` önbelleği (fantom başına ~600 kB, ~1000:1 sıkışıyor).
+
+**`src/hifusim/phantoms/` (10 modül).** `catalog` (katalog + atomik indirici + CRC
+doğrulaması), `reader` (hızlı çözücüler), `orientation`, `tissue`, `processing`,
+`heterogeneity`, `spec` (pydantic tarif), `builder` (boru hattı + `plan()`), `asset`
+(dışa aktarım), `cli`.
+
+**Hızlı çözücüler (18× ve 4×).** `np.loadtxt` en büyük fantomda dakikalar sürüyor; GUI her
+parametre değişiminde bunu ödeyemez.
+- `mtype`: satırlar tam on token; (byte0,byte1,byte2) üçlüsü bu on token içinde TEKİL →
+  tek gather + `searchsorted`, hiç float parse etmeden int8 sınıf kodu. 18.0 s → 0.96 s.
+- `pval`: `%1.5f` yazılmış, yani kaydı 8 bayt SABİT ADIM → baytları (n,8) reshape edip
+  ondalık aritmetiği numpy'de. 4.36 s → 1.07 s.
+- İkisi de varsayımını gerçek baytlarda DOĞRULUYOR (token kümesi / adım + ayraç konumları)
+  ve tutmazsa yavaş referansa düşüyor. Test: her iki çözücü aynı baytlarda birebir eşit
+  (CRLF ve eksik son satırsonu dahil).
+- `flat.reshape((s3,s2,s1))` + transpose(2,1,0) = SIFIR KOPYA (dosya zaten column-major).
+  Kopya tek sefer, yönelim adımında. Toplam: 10.1 s → 2.8 s (071904, pval dahil).
+
+**Yönelim — tahmin edilmedi, ÖLÇÜLDÜ.** Manuel hangi eksenin ne olduğunu söylemiyor.
+Kılavuzun vaat ettiği 0.5 cm kas göğüs duvarı, dokuz fantomun HEPSİNDE s1'in SON on
+diliminde, dilim alanının %100'ünü kaplayan tek slab olarak çıkıyor; s1=0 saf daldırma
+ortamı. Yani **s1 = meme ucu → göğüs duvarı ekseni**, indeks 0 transdüser tarafı.
+Kanonik dönüşüm `flip(transpose(2,1,0), axis=0)`: tek eksen takası TEK permütasyon
+(det −1, yani ayna — sol meme sessizce sağ meme olur), ek flip elle-yönlülüğü geri
+getiriyor. Mevcut `load_breast_phantom` ile aynı dönüşüm; test dokuz fantomu da tarıyor.
+
+**Akustik tablo.** Depo ELEKTROMANYETİK; akustik sayı içermiyor. On sınıf için c, rho,
+alpha (güç yasası `alpha0·f^b`, dB/(cm·MHz^b)) ve B/A → beta tablosu yazıldı. Uç noktalar
+literatür (Duck 1990; IT'IS; Mast 2000; UST meme ölçümleri), fibroglandüler/yağ alt
+grupları UWCEM'in kendi su-içeriği sıralamasında İNTERPOLE — her satır `interpolated`
+bayrağı + kaynak dizesi taşıyor, CLI tablosunda `~` ile işaretli. Alpha güç yasası olarak
+saklanıp `f0`'da değerlendiriliyor: Np/m saklamak fantomu sessizce tek frekansa çivilerdi.
+
+**pval'in tuzağı (yakalandı).** Kılavuz: "diğer tüm voxel'lerde p sıfıra ayarlanmıştır" —
+yani deri/kas/banyo için p=0 "VERİ YOK" demek, "en düşük değer" değil. İlk sürüm bunu
+alt sınır sanıp fantomdaki HER deri voxel'ini literatür minimumuna çekiyordu
+(alpha 32.8 → 25.3 Np/m). Düzeltme: `TissueTable.pval_ids` — yalnız pval'i olan
+sınıflar interpole edilir, kalanlar orta noktada kalır.
+
+**Diğer düzeltilen gerçek hatalar.**
+- `crop mode="tissue"` yanal olarak HİÇ kırpamıyordu: kas slab'ı VE memenin arkasındaki
+  deri altı yağ katmanı dilimin tamamını kaplıyor. `mode="breast"` eklendi — yanal kutuyu
+  yalnız "çıkıntı yapan" dilimlerde (doku kapsaması < %90) ölçüyor, ilerleme ekseni tüm
+  göğüs duvarını koruyor. 212×328 → 180×288 (%29 daha az voxel).
+- Gürültü alanı yalnız std'ye normalize ediliyordu; korelasyon uzunluğu büyüdükçe
+  bağımsız örnek sayısı düşüyor ve kalan DC ofseti tüm dokuya SİSTEMATİK sapma olarak
+  biniyordu (40³'te 4 voxel korelasyonda genliğin %10'u — "%3 gürültü" aynı zamanda
+  memeyi %1 yoğunlaştırıyordu). Artık önce demean, sonra normalize.
+- `np.savez_compressed(path)` adı `.npz` ile bitmiyorsa `.npz` EKLİYOR → atomik yazımın
+  `.part` geçici dosyası kayboluyordu. Dosya NESNESİ ile yazılıyor.
+- `tissue_only` gürültü maskesi id 0'ı banyo sanıyordu; `simple` modelinde banyo id 4
+  (breast_default uyumu için) — scatterer'lar suya gidiyordu. `TissueTable.coupling_id`.
+
+**Koşarak bulunan hata (en değerlisi).** İlk uçtan uca denemede dx=1.2 mm / f0=1 MHz
+seçildi; build başarılı, medium geçerli, çözücü sonuna kadar koştu — ve tepe basınç
+TRANSDÜSERİN ÜSTÜNDE çıktı, odak hiç oluşmadı. Sebep: 1.2 mm'de en yavaş dokuda dalga
+başına 1.3 nokta; k-space PSTD ~2 ppw altında dalgayı taşıyamıyor. Hiçbir katman şikâyet
+etmiyordu. Artık `builder` f0 + dx + en yavaş dokunun c'sinden ppw hesaplayıp <2'de
+"UNUSABLE", <4'te "marginal" uyarısı veriyor ve HANGİ dx / hangi f0 gerektiğini yazıyor.
+
+**Dışa aktarım — tek dosya, iki okuyucu.** `.npz` anahtarları: `labels`, `dx`, `origin`
+(bunlar TAM OLARAK `LabelVolume.load_npz`'in okuduğu anahtarlar → eski kod hiç
+değişmeden aynı dosyayı açıyor), + `materials` (MaterialDB JSON), `meta` (spec,
+uyarılar, log, atıf), `format`, ve heterojenlik varsa `alpha/rho/c/beta` float32
+hacimleri. Heterojenlik kapalıyken yoğun hacimler YAZILMAZ: etiket+DB'den birebir
+üretilebilir, yazmak 2 MB'lık dosyayı 500 MB yapardı.
+
+**`plan()`.** Pahalı adımları yapmadan boyut/bellek tahmini (kırpma kutusu gerçekten
+ölçülüyor, gerisi aritmetik). Test: `plan(spec).shape == build(spec).shape`, üç farklı
+dx/standoff için birebir. GUI önizleme çözünürlüğünü bununla seçiyor.
+
+**GUI — `apps/phantom_studio/`, sıfır bağımlılık.** Stdlib `http.server` + elle yazılmış
+WebGL2 ray caster. Sol: `PhantomSpec`'in her düğmesi. Sağ: 3-B hacim + üç kesit (slider'lı,
+hover okumalı). Kesit/hacim tel üzerinde ham `uint8` + değer aralığı olarak gidiyor,
+renklendirme tarayıcıda → alan/renk rampası değiştirmek anında, yeniden build yok.
+Kesme (cutaway) köşe ısırığı olarak yapılıyor ve açığa çıkan üç yüz TAM OLARAK alttaki üç
+kesit düzlemi. Önizleme build'i voxel bütçesine sığacak kadar kabalaştırıyor, bunu SÖYLÜYOR
+ve önizlemenin dışa aktarılmasını REDDEDİYOR.
+
+**Palet — göz kararı değil, doğrulanmış.** On sınıf aslında BEŞ aile, ikisi kendi içinde
+sıralı (fibroglandüler 1→3, yağ 1→3). Beş aile rengi bu koyu yüzeyde (#12181f) tüm-çiftler
+renk körlüğü kapılarını geçiyor (en kötü çift CVD ΔE 9.0 ≥ 8 hedefi, normal görüş 15.4 ≥ 15
+tabanı, hepsi ≥ 3:1 kontrast); iki alt rampa ordinal testi geçiyor. Banyo rengi seri değil
+YÜZEY (arka plan; 3-B'de şeffaf), o yüzden kapıların dışında. Sürekli alanlar için tek
+hue'lu sequential rampa (asla gökkuşağı).
+
+### Kanıt
+- **258 test yeşil** (115'i yeni; 22'si inceleme turunun regresyon testleri),
+  `ruff check src tests apps` temiz.
+- **Uçtan uca fizik koşusu** (asıl iddianın kanıtı): 012304 @ 0.6 mm, f0=0.5 MHz, 26 mm su
+  standoff, bowl (a=28 mm, ROC=55 mm) → `build → save → load_phantom → grid + to_medium →
+  westervelt`. Tepe 6.00 MPa, konum z=54.0 mm; geometrik odak suda 51.8 mm olurdu —
+  **2.2 mm derine kayma**, yağ dokusundan (c=1475 < su 1522) geçmenin beklenen etkisi.
+  Tepe "Fatty-1" voxel'inde, yani memenin içinde. `to_medium(linear=True)` ile lineer
+  çözücü de koştu: 6.09 MPa (nonlineer doygunluk temel harmoniği hafifçe düşürüyor).
+  Alan her yerde sonlu.
+- Hızlı↔yavaş çözücü birebir eşitliği; dokuz fantomda göğüs duvarı geometrisi;
+  `plan()==build()`; export'un HEM `LabelVolume.load_npz` HEM `load_phantom` ile
+  açılması; uçtan uca `build → save → load_phantom → grid + to_medium` (Medium
+  invariyantları: float32, C-contiguous, sonlu, 1000 < c < 2000 m/s).
+- GUI headless Edge'de (SwiftShader) render edildi ve ekran görüntüsüyle doğrulandı
+  (etiket haritası + sürekli alan, 3-B + üç kesit, path-traversal denemeleri 404).
+
+### Düşman gözle inceleme turu (4 mercek x N doğrulayıcı, 40 ajan)
+36 aday bulgu, 26'sı çürütmeye dayandı ve DÜZELTİLDİ. Kayda değer olanlar:
+
+**Geometri / fizik**
+1. **FFT dolgusu standoff'u şişiriyordu.** `pad_to_fft_friendly(anchor="center")` büyümeyi
+   HER eksende ikiye bölüyordu — yani transdüser yüzünün ÖNÜNE de su ekliyordu. dx=0.55 mm'de
+   istenen 20 mm standoff sessizce 23.65 mm oluyordu (1 MHz'de ~2.6 dalgaboyu) ve dx ile
+   0–3.85 mm arasında düzensizce değişiyordu. Artık z büyümesi tamamen ARKAYA gidiyor;
+   ölçüldü: her dx'te standoff bir voxel toleransında tam.
+2. **pval birleştirilmiş bandın üstüne uygulanıyordu.** `p` MEDYA NUMARASI içinde tanımlı;
+   `grouped` modelinde yağ-1..yağ-3 birleşince blend 2× geniş banda yayılıyor ve saf lipid
+   voxel'e yağ-1 hızı veriliyordu. `lookup_by_code` eklendi.
+3. **pval yeniden örneklemede sentinel karışıyordu.** Deri/kas/banyodaki p=0 "veri yok"
+   demek; lineer interpolasyon bunu gerçek p ile harmanlayıp memenin TÜM yüzeyini saran bir
+   voxel'lik şeritte dokuyu sınıf minimumuna çekiyordu (oran 1.4'te 0.600 → 0.360). Artık
+   maskeli (p·valid ve valid ayrı örneklenip bölünüyor) — sentetik testte tam 0.600.
+4. **`drop_skin` memeyi küçültüyordu.** En yakın deri-olmayan komşu alınıyordu; deri ~3
+   voxel'lik bir kabuk ve dışı su olduğu için %57.5'i suya dönüşüyor, doku yüzeyi 1.22 mm
+   geri çekiliyordu — yani ışının girdiği arayüz kayıyordu. Artık en yakın DOKU ile
+   dolduruluyor: ölçülen kayma 0.00 mm.
+5. **Su 20 °C absorpsiyonu taşıyordu** ama satır "37 °C" diyordu (c ve rho 37 °C idi).
+   alpha0 0.0022 → 0.0015 dB/(cm·MHz²).
+6. **`realized_cv` gürültüyü değil doku kontrastını ölçüyordu** (%3 istenince %6.76 rapor
+   ediyordu — kullanıcı düğmeyi yarıya indirirdi). Artık çarpanın std'si.
+7. **coupled/uncoupled empedans kontrastı docstring'de TERSTİ.** Ortak alanla z=ρc
+   (1+sn)² gibi ölçekleniyor → coupled √2 kat DAHA FAZLA kontrast veriyor, daha az değil.
+8. **`remove_islands` bitirmiyordu**: A adasını B'ye çevirmek B'de yeni küçük bileşen
+   yaratıyor, döngü ise yazımdan önce alınmış anlık görüntü üzerinde. 63.502 voxel "silindi"
+   raporlanırken 7.669 voxel hâlâ eşik altı bileşendeydi. Artık sabit noktaya kadar; kalan 0.
+
+**Sağlamlık / kaynak**
+9. Paylaşılan sabit `.part` geçici adı: iş parçacıklı sunucuda `/api/plan` ve `/api/build`
+   aynı fantomu aynı anda çözüyor → Windows'ta PermissionError, POSIX'te kayıp rename.
+   Artık pid+uuid'li ad ve önbellek yayınlama "best effort" (başarısızlık yüklemeyi düşürmez).
+10. Bozuk önbellek `zipfile.BadZipFile` fırlatıyordu — `except (OSError, ValueError, KeyError)`
+    bunu yakalamıyor. Artık her okunamayan önbellek yeniden çözülüyor. Ayrıca önbellek kaynak
+    arşivin boyut+mtime parmak iziyle geçersizleştiriliyor.
+11. `decode_mtype` yalnız 3 baytlık ÖNEKİ eşleştiriyordu: "1.15" sessizce sınıf 1.1 oluyordu.
+    Artık token uzunluğu da doğrulanıyor.
+12. `decode_pval` 111 MB sonuç için ~1.4 GB scratch kullanıyordu (5 sütunluk int32 dizisi +
+    dört tam boy geçici). Tek akümülatör: 445 MB, aynı hız, aynı değerler.
+13. `plan().peak_bytes` yeniden örnekleme aşamasını HİÇ saymıyordu — dx=0.35 mm'de 267 MB
+    tahmin, 1180 MB gerçek (4.4×). Artık üç aşamanın maksimumu, katsayılar ölçümden;
+    iki fantom × yedi senaryoda en kötü oran 1.10 (asla düşük raporlamıyor).
+14. `max_voxels` bariyeri pahalı adımdan SONRA tetikleniyordu; artık öncesinde (0.16 s).
+
+**GUI**
+15. Görünüm isteği her seferinde TÜM hacmi materyalize ediyordu: 132 kB'lık bir kesit
+    199 MB / 131 ms. Artık düzlem doğrudan alınıyor: 1.1 MB / 1.6 ms. Hacim isteği
+    348 → 67 MB (parçalı blok indirgeme + parçalı bincount).
+16. `couplingId()` banyoyu İSME göre buluyordu; `simple` modelinde id 0 sıfır-voxel'lik bir
+    yer tutucu ve aynı ismi taşıyor → hacmin %52'si opak su olarak çiziliyordu. Artık
+    sınıf koduna göre; voxel'i olmayan materyal hiç boyanmıyor.
+17. Kesit/hacim istekleri sıraya sokulmuyordu — slider sürüklerken EN YAVAŞ yanıt kazanıyordu.
+    Artık istek jetonu. Ayrıca baytlar üretildikleri alanla etiketli, böylece geç gelen bir
+    yanıt yeni alanın renk skalasıyla boyanıp uydurma bir değer okutamıyor.
+18. İptal edilen istek (sekme kapandı) iki aşamalı traceback döküyordu ve yarı yazılmış
+    yanıtın üstüne ikinci bir yanıt yazmaya çalışıyordu. Artık sessiz.
+19. Dışa aktarım adı sanitize edilmiyordu: `"../../x"` dizinden çıkıyor, mutlak yol tamamen
+    değiştiriyordu. `export_path()` düz dosya adı dayatıyor.
+
+Kalan 10 aday çürütüldü (doğrulayıcı ajan gösteremedi).
+
+### Açık uçlar / sonraki adım
+- Akustik tablonun interpole satırları literatürle bağımsız olarak bir kez daha
+  karşılaştırılmalı (uç noktalar sağlam, ara basamaklar bizim modelleme kararımız).
+- Fantom + çözücü uçtan uca fizik koşusu (aberasyon/odak kayması) M12 karşılaştırma
+  harness'ine aday.
+- Sıradaki: M7 CuPy (Colab oturumu) veya M10 IO.
+
+## 2026-08-19 — Oturum 8 (Fable): M6d — fantomlar bağımsız pakete taşındı + standart hizalı 0.25 mm dataset
+
+Kullanıcı talebi: fantom modülü `src`'nin dışına, yan paket olarak `uwcem_phantoms` adıyla
+taşınsın ("uwcam" yazımı soruyla düzeltildi — depo adı UWCEM); hifusim için gerekli veriler
+otomatik üretilsin: 0.25 mm, hepsi AYNI boyda, merkezleri hizalı, `data/phantoms/` içinde,
+pval'lar düzgün. Kurulum soruları soruldu; kullanıcı dört öneriyi de seçti: 9 fantomun hepsi,
+meme kırpması + birleşim kutusu, ön yüz + transvers merkez hizalama.
+
+### Taşıma
+
+`src/hifusim/phantoms/` → `uwcem_phantoms/` (repo kökü, `apps/` gibi; wheel'e GİRMEZ —
+hifusim'i tüketir, hifusim onu asla import etmez). Tüm importlar, `phantoms.bat`/`.sh`,
+launcher, studio GUI, testler, README, `.gitignore` yeniden yazıldı; `pyproject`'e
+`pythonpath = ["."]` (pytest) ve ruff src listesine `uwcem_phantoms` eklendi. Taşıma sonrası
+124 mevcut fantom testi değişiklik olmadan yeşil.
+
+### `uwcem_phantoms/dataset.py` — dokuz meme, TEK grid
+
+İki fazlı: (1) **survey** — dokuz fantomun kırpma kutusu native 0.5 mm'de (önbellekli mtype,
+saniyeler) ölçülüp `0.5/dx` ile ölçeklenir, birleşim + 3 voxel emniyet + FFT-dostu boyut =
+ortak kutu; builder'ın fitted peak-RAM modeli de satır başına taşınır ve build başlamadan
+boş RAM'e karşı kapı var. (2) **build** — fantom başına normal boru hattı (breast kırpma,
+smooth resample, pval), sonra ortak kutuya su dolgusuyla hizalama: deri ön yüzü her dosyada
+TAM z=front_gap (20 voxel = 5 mm); x/y'de ÇIKINTI YAPAN memenin bbox merkezi kutu merkezinde.
+Dolgu fizik taşır: etiketler coupling id, özellik hacimleri suyun KENDİ mid değerleri.
+
+Üretim (bu makinede, arka planda): **540×700×625 @ 0.25 mm = 135×175×156.25 mm, 236 Mvox**;
+9 dosya toplam **5.66 GB**, ~55 dk, sıfır builder uyarısı, her dosyada ön yüz z=20, trim 0.
+`manifest.json` grid'i, fantom başına gerçekleşen hizalamayı, sınıf-başına özellik
+istatistiklerini ve atfı kaydediyor.
+
+### Düşman gözle inceleme turu (5 mercek + bulgu başına şüpheci, 27 ajan)
+
+22 aday bulgu → 17'si doğrulamaya dayandı → HEPSİ düzeltildi (5'i çürütüldü). Kayda değer:
+
+1. **x/y "doku bbox merkezi" kırpma-penceresi merkezine dejenereydi.** Göğüs duvarı yağ
+   slab'ı her transvers dilimi kapladığından doku bbox'u = pencere; merkezlenen şey meme
+   değil pencereydi ve verify aynı dejenere niceliği ölçtüğü için HİÇ başarısız olamazdı.
+   Düzeltme: `_breast_transverse_bbox` — dilim "göğüs duvarı" sayılır eğer su-dışı sayısı
+   hacim-geneli transvers bbox alanının %90'ını aşarsa; sayılar da bbox da su dolgusundan
+   etkilenmediği için tanım hizalama ÖNCESİ ve SONRASI aynı dilimleri seçer (verify gerçekten
+   ölçebilir). Dokuz gerçek fantomda yeni survey birebir AYNI grid'i veriyor ve hiçbirinde
+   kırpma clamp'i yok → eski üretim yeni tanıma göre de doğru merkezli (doğrulandı).
+2. **NaN-körü doğrulama.** Her sayısal kapı "bant dışıysa raise" kıyasıydı ve NaN için
+   her kıyas False → NaN'li hacim temiz geçerdi. `isfinite` kapısı eklendi (build + verify).
+3. **RAM rayı yoktu.** Fitted peak fantom başına 6.1–15.0 GB (24 GB makinede); plan artık
+   en kötü peak'i basıyor, build boş RAM'den büyükse `--force`'suz reddediyor.
+4. **`savez_compressed` seviye 6'ya çivili (~3 MB/s).** Elle zip (aynı npz düzeni,
+   `compresslevel=1`, ~20 MB/s, aynı boyut) — `np.load`/`LabelVolume.load_npz`/`load_phantom`
+   değişmeden okuyor.
+5. **236 Mvox'ta ölçek maliyetleri.** `PhantomAsset.__post_init__`'teki `np.unique`
+   (945 MB kopya + 5.7 s, fantom başına 5 kez) → min/max + chunk'lı histogram;
+   `_nonwater_bbox`'taki `np.isin` (11.7 s) → `!= 0` (0.2 s); sınıf-başına bant kontrolü
+   40 maske+extract geçişi (72 s) → tek chunk'lı geçiş: `bincount` (count/sum/sumsq) +
+   `ufunc.at` (min/max), ~8 s.
+6. **Manifest alt-küme rebuild'de ezilip dosyalar öksüz kalıyordu.** Artık aynı tarifli
+   rebuild MEVCUT grid'i benimseyip manifest'e BİRLEŞİR; farklı tarif (ör. `--f0 3`)
+   dosya adı sadece dx kodladığından sessiz ezme demekti → reddedilir (`--force` bilinçli
+   ezme). `--verify` manifest format tag'ini, dosya başına dataset tag'ini VE manifest'in
+   listelemediği `uwcem-*.npz` dosyalarını (öksüzleri) da kontrol ediyor.
+7. **CLI/launcher kabloları.** `--verify` yanındaki id/build bayraklarını sessizce yutuyordu
+   → kullanım hatası (rc 2); `--verify --json` çıktısına insan satırı ekleniyordu → saf JSON
+   (progress stderr'e); launcher tek-atış modda `DatasetError`'da ham traceback basıyordu →
+   menüyle aynı dostane hata; launcher'ın yükleme snippet'i dx'e bakmadan `dx0p25` yazıyordu
+   → `dataset_filename(id, dx)`.
+
+Çürütülenler (örnek): survey'in z-yüz haritalama konvansiyonu resampler'ınkinden farklı ama
+hata SAFETY_VOX içinde kalıyor (ulaşılabilir kırılım yok); `detailed` sabitken etiket==kod
+varsayımı kırılamaz; CLI literal defaultları sabitlerle bugün eşit.
+
+### Kanıt
+- **Tam suite yeşil** (taşıma sonrası, düzeltmeler sonrası iki ayrı tam koşu; 32'si yeni
+  dataset testi — hizalama sentetikleri, NaN, RAM rayı, CLI kablo/routing testleri,
+  manifest birleştirme + farklı-tarif reddi, format/öksüz/ön-yüz sabotaj yakalama,
+  dx=1 mm'de iki fantomla gerçek uçtan uca). `ruff check` temiz.
+- **`python -m uwcem_phantoms dataset --verify`: 9/9 dosya her kontrolü geçti** —
+  format tag'leri, ortak şekil/dx, ön yüz z=20, meme merkezi ±1 voxel, su dolgusu
+  değerleri, sınıf-başına özellik bantları (pval kontratı: her voxel kendi medya
+  numarasının [lo, hi] bandında, NaN yok), öksüz dosya yok.
+- pval gerçekten dokuyu değiştiriyor: doğrulayıcı pval'li sınıflarda sınıf-içi std > 0
+  şartını her dosyada sağladı.
+
+### Açık uçlar
+- Dosyalar eski (yavaş) kayıt yoluyla yazıldı; içerik doğrulandı, yeniden üretim gerekmiyor —
+  ama bir sonraki tam rebuild ~2× hızlı olur (deflate seviye 1).
+  *(Sonraki oturumda M6e rebuild'i bunu doğruladı: fantom başına 492 s → 50–92 s.)*
+- Manifest'teki fantom girdileri eski hizalama sözlüğünü taşıyor (breast_center_vox alanı
+  sonraki rebuild'de eklenir); verify diskten yeniden ölçtüğü için kontrat etkilenmiyor.
+- Colab'a taşımada 5.66 GB'lık `data/phantoms/` Drive üzerinden taşınabilir ya da Colab'da
+  `python -m uwcem_phantoms dataset` ile (~1 saat) yeniden üretilebilir.
+  *(M6e ile grid 100 mm'ye tavanlandı: 4.2 GB, ~13 dk — aşağıdaki oturum.)*
+
+---
+
+## 2026-08-19 — Oturum 9 (Opus): dataset denetim raporu + M6e derinlik tavanı (100 mm)
+
+### Bölüm 1 — üretilen datasetlerin bağımsız denetimi (kullanıcı talebi, geçici)
+
+"Ürettiğin datasetleri kontrol et, rapor oluştur, 3D ve kesitlerle" — ve **rapora ait hiçbir
+kod repoda kalmayacak**. Denetim `uwcem_phantoms`'tan HİÇBİR ŞEY import etmeden yapıldı: düz
+`numpy.load` ve her beklenti dosyanın KENDİ `meta.materials_table` kaydından yeniden türetildi,
+böylece bir hata onu üreten mantığın aynısıyla değil dışarıdan yakalanabilecekti. Rapor
+artifact olarak yayımlandı; bütün script'ler scratchpad'de kaldı (`git status` temiz).
+
+En güçlü sonuç — **ortak-p kontratı**: p, c/ρ/α/β'nın her birinden AYRI AYRI geri hesaplandı ve
+dördü birbirini 4·10⁻⁶ içinde tutuyor (denetim ajanı aynı testi iki dosyanın 236 milyon
+voxel'inin tamamında koşturdu: 9.6·10⁻⁸). Özellik başına ayrı p ya da birleştirilmiş band
+üzerinden blend olsaydı bu mertebelerce patlardı. "pval'lar düzgün hesaplandı" iddiasının
+kanıtı budur; bant-içi-aralık istatistiği değil.
+
+Adversarial tur (31 ajan, 26 aday bulgu, 14'ü ayakta kaldı). Kritik iddiaları kendim yeniden
+ölçüp İKİSİNİ daralttım: (a) "merkez 16 mm kayık" abartılıydı — bbox ±0.25 mm, kütle merkezi
+≤8.07 mm; (b) "5 mm ön pay PML'i odağı bozar" — payı belirleyen kesiti kaplayan slab kenarı,
+çıkıntı yapan meme hiçbir fantomda 5.75 mm'nin altında değil. (c) p=1'de birikmenin (doku
+voxel'lerinin %22–37'si) boru hattımızdan mı geldiğini HAM arşivden kontrol ettim: 062204'ün
+işlenmemiş pval dosyasında zaten %36.9 — kaynağın karakteri, sadakatle taşınmış.
+
+### Bölüm 2 — M6e: derinlik tavanı (önce 100, sonra 120 mm)
+
+Kullanıcı: "göğüs duvarının ilerisi boş; o boşluğu almak ya da saklamak istemiyorum — hepsi
+yine aynı ızgarada kalsın, en küçük memede bilgi kaybı olmasın; derinlik sınırını 100 mm yap."
+
+Önce ölçtüm (dokuz dosyanın z-başına sınıf histogramı):
+
+| | z |
+|---|---|
+| ön su payı | 0 → 5.00 mm (her dosyada) |
+| çıkıntı yapan meme biter (kesit kaplaması < %90) | 83.0 – 132.0 mm |
+| kesiti TAMAMEN kaplayan göğüs duvarı slab'ı | 21.5 mm (65 voxel yağ + 21 voxel kas) |
+| doku biter | 104.5 – 153.5 mm |
+| arkada saf su | 2.75 – 51.75 mm |
+
+Yani 156.25 mm'lik eksenin arka yarısı su + düz slab. 100 mm tavan bunu atıyor ama **yıkıcı**:
+en sığ fantom (012304, doku 104.5 mm'de biter) SIFIR meme dokusu kaybediyor — kullanıcının
+"en küçük memede bilgi kaybı olmayacak" beklentisi birebir tutuyor — buna karşılık derin
+fantomlar kas dışı dokularının %27–49'unu kaybediyor. Kaybın büyük kısmı göğüs duvarı yağ
+slab'ı (Fatty-1/2), meme değil. Bu bilinçli bir karar olduğu için kod bunu SESSİZ yapmıyor.
+
+- `depth_limit_mm` (varsayılan 100 mm, `--depth`, `0` = tavansız) plan → build → CLI → launcher.
+  Tavan TAVAN olduğu için z `prev_fft_friendly` ile aşağı yuvarlanır (yeni yardımcı; diğer iki
+  eksen hâlâ yukarı) — istenen mm asla aşılmaz. 100/0.25 = 400 zaten 2/3/5/7-düzgün.
+- `_align_into_common` arkadan kesiyor ve kesileni sınıf sınıf sayıyor:
+  `back_trim_vox/_mm`, `truncated_tissue_vox`, `truncated_by_class`, `tissue_at_back_face`
+  → manifest + `asset.meta["warnings"]` + build günlüğünde fantom başına WARNING satırı.
+  `--dry-run` maliyeti build'den ÖNCE fantom fantom yazıyor.
+- **Tavan yokken** aynı taşma survey hatası sayılıp reddediliyor — sessiz kırpma yolu yok.
+- `DATASET_FORMAT` /1 → /2 ve `depth_limit_mm` tarif anahtarlarına eklendi: eski (156 mm) ve
+  yeni (100 mm) dosyalar aynı dizinde karışamaz, dosya adı sadece dx kodladığı için.
+- `verify` iki yeni kapı: grid ilan ettiği tavanı gerçekten sağlıyor mu; ve kesim kaydı dosyayla
+  çelişiyor mu — "kesildi" diyen fantomun SON z düzleminde doku olmak ZORUNDA (gövde z boyunca
+  bitişik). Kesilen doku geri getirilemez ama iddia tek yönde yanlışlanabilir.
+
+**Ara bulgu (kendi hatam, dry-run ile yakalandı):** transvers merkez survey'de TÜM hacimden
+ölçülüyordu; meme tabana doğru genişlediği için atılacak dilimler hem merkezi hem gerekli
+yarı-genişliği yanlış veriyordu. Survey ve build artık ikisi de KALAN dilim üzerinden ölçüyor;
+düzeltme ortak kutuyu x'te 540 → 560 büyüttü. İlk (yanlış) rebuild bu yüzden iptal edilip
+baştan koşuldu.
+
+### Üretim ve kesim maliyeti (manifest'ten, fantom başına)
+
+**560×700×400 @ 0.25 mm = 140×175×100 mm, 156.8 Mvox**; 9 dosya toplam **4.2 GB**
+(önce 5.3 GB), ~13 dk (fantom başına 50–92 s).
+
+| fantom | ACR | kesilen | kesilen doku | kas dışı | kas dışının %'si |
+|---|---|---|---|---|---|
+| 071904 | 1 | 53.50 mm | 45.5 M | 39.9 M | %47.95 |
+| 012804 | 1 | 29.50 mm | 35.3 M | 28.3 M | %33.82 |
+| 012204 | 2 | 46.00 mm | 48.6 M | 41.6 M | %48.65 |
+| 070604PA1 | 2 | 47.00 mm | 47.2 M | 40.5 M | %48.38 |
+| 010204 | 2 | 22.50 mm | 16.8 M | 12.8 M | %26.95 |
+| 080304 | 3 | 28.00 mm | 19.9 M | 15.8 M | %31.21 |
+| 070604PA2 | 3 | 25.00 mm | 25.7 M | 20.0 M | %32.90 |
+| 062204 | 3 | 6.50 mm | 4.8 M | 0.9 M | %2.69 |
+| 012304 | 4 | 4.50 mm | 3.5 M | 0 | **%0.00** |
+
+En sığ fantom (012304) yalnız kas slab'ını kaybediyor — meme dokusundan tek voxel gitmiyor.
+Kesilenin ağırlığı Fatty-1/2, yani göğüs duvarı yağ slab'ı.
+
+**Çapraz doğrulama:** kesim sayılarını build'den ÖNCE, ESKİ 625 derinlikli dosyalardan z>400
+histogramıyla bağımsız hesaplamıştım; build'in kendi `bincount` sayımı dokuzunda da BİREBİR
+aynı çıktı (45,544,884 / 35,317,288 / …). İki ayrı kod yolu, aynı voxel sayısı.
+
+Doğrulama: `dataset --verify` 9/9; verify'ın diskten kendi ölçümü dokuzunda da şekil
+560×700×400, ön yüz z=20, arka yüz z=400 (doku SON düzleme değiyor), meme merkezi kutu
+merkezinden en fazla 0.5 voxel sapma.
+
+### Bölüm 3 — "simülasyon hazır mı?" ve ön payın 20 mm'ye çıkması
+
+Zinciri konuşmak yerine koşturdum: 012304'ü 0.8 mm'de kurup (1 MHz'te builder 1.8 ppw diye
+HAKLI OLARAK reddetti; f0'ı 0.4 MHz'e indirdim → 4.45 ppw), 6.4 mm PML, F/1.5 ROC 54.6 mm
+çanak, apex 8.8 mm, kabuk 11.9 mm'de bitiyor (deri 38.4 mm) → **264 adım / 76 s, period 22'de
+yakınsadı, tepe 0.701 MPa, 2. harmonik 0.025 MPa.** Odak geometrik konumdan **10.4 mm öne**
+kaydı: yağ (1440–1475 m/s) sudan yavaş, yakınsayan hüzme arayüzde kırılıyor — heterojenlik
+gerçekten iş görüyor.
+
+Planner, gerçek 0.25 mm gridi için: A100'e **sığıyor** (17.0 / 38.9 GiB, 2534 adım, datasheet
+tahmini ~3.5 dk; H100'de ~77 s).
+
+**Ama transducer sığmıyordu.** Ön pay 5 mm ve tipik PML de 5 mm (0.25 mm'de 20 voxel), sünger
+grid'in İÇİNDE → serbest su tam 0 mm. Odaklı bir çanak ayrıca kendi kabuğu için yer istiyor:
+
+| dizilim | kabuk derinliği | gereken ön su |
+|---|---|---|
+| üretim spirali (128 el, ROC 100) | 11.6 mm | ≥ 18.6 mm |
+| çanak F/1.0 ROC 60 | 8.0 mm | ≥ 15.0 mm |
+| çanak F/1.5 ROC 60 | 3.4 mm | ≥ 10.4 mm |
+
+Kullanıcı kararı: **ön pay 20 mm, tavan 120 mm** (doku kapsamı 100 mm'de sabit).
+`FRONT_GAP_MM` 5 → 20, `DEPTH_LIMIT_MM` 100 → 120, grid **560×700×480 = 140×175×120 mm,
+188.2 Mvox**, 9 dosya 4.5 GB, ~13 dk. Tavan artık 9/9 değil 8/9 fantomu kesiyor:
+
+| fantom | kesilen | kesilen doku | kas dışı |
+|---|---|---|---|
+| 071904 | 48.50 mm | 42.1 M | 36.4 M |
+| 070604PA1 | 42.00 mm | 43.4 M | 36.7 M |
+| 012204 | 41.00 mm | 44.8 M | 37.9 M |
+| 012804 | 24.50 mm | 31.2 M | 24.2 M |
+| 080304 | 23.00 mm | 17.6 M | 13.5 M |
+| 070604PA2 | 20.00 mm | 21.6 M | 16.0 M |
+| 010204 | 17.50 mm | 13.4 M | 9.3 M |
+| 062204 | 1.50 mm | 1.1 M | **0** |
+| 012304 | 0.00 mm | **0** | **0** |
+
+**Yerleştirme doğrulaması (gerçek dosyalar üzerinde):** 5 mm PML → 15 mm serbest su; deri ön
+düzlemi z=80 (20.00 mm), eksende 23.00 mm. Üretim 128-elemanlı spirali apex z=22 (5.50 mm),
+kabuk 17.13 mm'de bitiyor → deriyi 2.87 mm boşlukla geçiyor; 65,826 voxel, **128/128 eleman**
+temsil ediliyor, `validate()` geçiyor, DAS ile 60 mm'ye yönlendirilen odak Transitional dokuda.
+F/1.5 ROC 60 çanak da sığıyor (odak 65.5 mm, Fibroglandüler-1). Planner: A100'de **20.36 /
+38.88 GiB, 2016 adım, ~3.4 dk**.
+
+**Yolda bulunan sessiz hata:** yerel k-space çözücüsü, tamamı süngerin içinde kalan bir kaynağı
+reddetmiyordu — koşu hata vermeden yakınsıyor ve sessizce yanlış alan döndürüyordu (k-Wave
+adaptöründe kontrol vardı, yerel yolda yoktu; 5 mm su + 5 mm PML tam da bu tuzağı kuruyordu).
+`SolverBase.validate` → `check_source_clears_pml`. İlk versiyonum FAZLA sıkıydı ve dört testi
+kırdı: tam genişlikli bir düzlem kaynağın yanal uçları zaten yanal PML'e girer, o normal
+düzlem-dalga kurulumu. Doğru kural: **hiçbir voxeli süngerin dışında değilse** reddet. Ayrıca
+sünger tüm domaini kaplayacak kadar küçük gridlerde kontrol devre dışı (engine'in kendi
+convergence-region mantığıyla aynı gerekçe).
+
+### Açık uçlar / bilinmesi gerekenler
+- **Arka sınır dokunun İÇİNDE** (8/9 fantomda). Buradaki PML yarı-sonsuz gövdeyi kesmenin
+  standart yolu; eskiden orada duran şey (kusursuz düz kas/su düzlemi) zaten kaynak verinin
+  modeliydi, fizik değil. Ama geri yansıyan alanla çalışıyorsanız göğüs duvarı yansıtıcısı YOK.
+- `apps/focus_study`'de **fantom senaryosu yok** (water_bowl / spiral_array / layered_tissue).
+  Fantom koşusunun glue'u şu an elde yazılıyor; senaryo haline getirilmeli.
+- **cupy bu makinede kurulu değil.** Çözücü döngüsü tamamen backend-generic (`xp` +
+  `backend.fft`), yani Colab'da cupy kurulur kurulmaz koşmalı; M7 kernel füzyonu (hız) —
+  ilk GPU koşusu planner'ın datasheet tahmininden yavaş olacaktır.
+- alpha hâlâ 1 MHz'e gömülü; başka f0 için `--f0` verip yeniden üretin.
+- Tam suite yeşil (296 test); `ruff check src uwcem_phantoms apps tests` temiz.
+
+### Bölüm 4 — geometri raporu (4 dizilim × 9 fantom) ve M6f: depolanmış kurulumlar
+
+Kullanıcı transducer + PML geometrisi için bol resimli bir rapor istedi: 64 elemanlı dört
+Arşimet spirali, boyut ve eğrilik farklarıyla, dokuz fantomun hepsinde. Tasarım matrisi
+2×2 kuruldu — açıklık (60/100 mm) × eğrilik (ROC 60–150) — böylece her fark iki eksene
+atfedilebilir. 36 yerleşimin **hiçbirinde çakışma yok**, en dar geçiş 9.25 mm.
+
+Sezgiye aykırı bulgu: **geniş dizilimler daha rahat sığıyor.** Meme dışbükey olduğu için
+büyük yarıçapta doku çok daha derinde; dar bir çanağın kenarı memenin en öne çıkan bölgesine
+denk geliyor.
+
+Asıl mühendislik sonucu: odağı deri + 25 mm'ye çekmek için gereken yönlendirme, ROC oranı
+olarak S1'de %17–32, S3'te %50–59, S2'de %58–66, S4'te %67–73. Yani **bu domain için doğru
+eğrilik ROC ≈ 60 mm**; uzun ROC'lu tasarımların doğal odağı domainin arkasında kalıyor.
+
+Görselleştirmede iki karar kayda değer. (1) **Kabuk her yerde tek bir "alet rengi"nde (altın)**,
+dizilim başına renkle değil: doku paleti zaten kırmızı-turuncuyu (deri), macentayı (kas),
+camgöbeğini (fibroglandüler) ve moru (transitional) kullanıyor, dizilim rengi verseydim kabuk
+bir doku sınıfı gibi okunurdu. Dizilim renkleri (Okabe–Ito türevi, iki yüzey için ayrı adım,
+renk körlüğü doğrulayıcısından geçti) sayfada ve tissue içermeyen figürlerde yaşıyor.
+(2) **Yan görünümde analitik ark çiziliyor**, sadece düzlemi kesen voxeller değil — bir spiral
+herhangi bir düzlemi bir avuç yerde keser, ham kesit iki kopuk parça gösteriyordu.
+
+Ayrıca kodda belgeli bir voxelizasyon artefaktı sayısallaştırıldı: `voxelize` disk testini xy
+düzleminde yapıp z'yi sonradan kaydırdığı için eğik elemanın yaması ~1/cos(eğim) fazla alan
+kaplıyor — 30° yarı-açılı S1/S3'te **+15.5%**. Yerleşimi değil, kenar elemanların göreli
+kaynak gücünü etkiliyor.
+
+### M6f — `uwcem_phantoms/setup.py`
+
+Kullanıcı S1'i seçti ve dokuz geometriyi "simülasyona yüklemeye hazır" depolamayı istedi.
+Sorulan dört karar: **JSON tarif + yükleyici** (npz pişirme değil), **apex dokuzunda sabit
+z = 5.50 mm**, **doğal odak 65.50 mm — yönlendirme yok**, **9 kurulum**.
+
+Tasarımın özü: dosya tarif, gerçek değil. Eleman konumları ve 23.283 kaynak voxeli yükleme
+anında türetiliyor; dosyanın kaydettiği türetilmiş değerler (eleman yarıçapı, kabuk derinliği,
+r_max, voxel sayısı, PML payı) bunlara karşı sınanıyor. Dizilim kurulumu kütüphanede değişirse
+koşu sessizce başka bir transducer'la devam etmiyor — yükleme patlıyor ve nedenini söylüyor.
+
+`build_setups` yazmayı REDDETTİĞİ durumlar: kabuk dokuya giriyorsa, odak suya düşüyorsa,
+dataset'in pişirdiğinden farklı bir f0 isteniyorsa (alpha yanlış olurdu), ya da tek bir kaynak
+voxeli süngerin içindeyse. Bu son kural çözücüdekinden **daha sıkı** ve bilinçli: genel kapı
+kısmi örtüşmeye izin vermek zorunda (tam genişlikli düzlem kaynağın yanal uçları), depolanmış
+bir kurulumun ise böyle bir mazereti yok. Bunu testte apex'i z=2'ye taşıyarak buldum — genel
+kapı geçirdi, çünkü kabuğun bir kısmı bandın dışındaydı.
+
+Kayıt bölgesi de kurulumda: hüzme kutusu (±35 mm yanal, sünger dışı eksen) 34.5 Mvox — tam
+gridi kaydetmek harmonik başına 1.5 GB döndürürdü.
+
+### Kanıt
+- Dokuz kurulum yazıldı ve `setup --verify` 9/9 geçti; su yolu 16.00–24.75 mm, kabuk–deri
+  geçişi 9.25–14.50 mm, odak dokuz fantomda da dokuda (sınıf 3/5/6/7), odak deri altı
+  35.25–44.00 mm. Sayılar rapor için yapılan bağımsız ölçümle birebir aynı.
+- `load_setup("s1-012304")` → `westervelt.validate()` OK; planner A100'de 20.36/38.88 GiB,
+  1890 adım, ~3.1 dk.
+- Tam suite yeşil (307 test, 11'i yeni setup testi); `ruff check` temiz.
+- Scratchpad 591 MB → 7.8 MB (eski denetim turlarının ~200 tek kullanımlık script'i,
+  `pref.npy` 309 MB, `ds04/` 160 MB, `cref.npy` 77 MB, eski ekran görüntüleri silindi).
+
+
+---
+
+## 2026-08-19 — Oturum 10 (Fable): Colab entegrasyon planı (a-yolu) MILESTONES'a işlendi
+
+### Bağlam
+Kullanıcının hedefi: lokalde ayarları yap → `job.json` Drive'a düşür → Colab'daki DEĞİŞMEYEN
+notebook koşsun → çıktı Drive'a insin → lokalde sonuç görüntülensin. İki varyant soruldu
+(a: GUI'siz, b: GUI ile); önce a-yolu, GUI hariç tam entegrasyona kadar planlandı. Kod
+değişikliği YOK — yalnız MILESTONES.md yeniden yapılandırıldı.
+
+### Kullanıcı kararları (soruldu, cevaplandı)
+1. **Repo erişimi:** public'leşme M11'den öne çekildi → yeni **M10e** (Colab clone token'sız;
+   `v0.1` tag M11'de kalıyor).
+2. **Dataset staging:** kullanıcı ölçütü "H100'de < 5 dk ise yeniden üret". Ölçüm: 9 fantomun
+   yerel üretimi ~8 dk (data/phantoms dosya damgaları 18:04→18:12) + indirme/decode; iş CPU'da
+   (scipy resample), H100 GPU'su katkısız → eşik aşılıyor. Karar: **Drive birincil + checksum;
+   fallback yerinde üretim** (kullanıcı isteğiyle fallback her koşulda duruyor).
+3. **Kuyruk:** ayrı milestone (**M10g** — jobs/pending→running→done protokolü); ileride GUI'nin
+   "Run in Colab" düğmesinin altyapısı.
+4. **Job şeması:** TAM genişletme (**M10b**): sadece dokuz stored setup değil; scene (CSG),
+   volume import ve serbest array reçetesi de job'dan tarif edilebilecek.
+
+### MILESTONES.md değişiklikleri
+- Faz Grubu C yeniden adlandı: "Veri, IO, Colab entegrasyonu (v1 çizgisi)" + omurga girişi:
+  M10 → M10b → M10c → M10d (hepsi CPU) → M10e public → M10f Colab köprüsü → ilk Colab oturumu
+  (M7+M8 kapılarıyla birleşik) → M10g kuyruk.
+- **M10** genişledi: koşu-içi checkpoint eklendi (her N periyotta atomik alan durumu;
+  checkpoint-resume kriteri: kesintisiz koşuya fazor rel < 1e-6).
+- Yeni milestone'lar: **M10b** JobConfig (`hifusim-job/1`, medium/source tagged union'ları,
+  override katmanı, `hifusim validate`), **M10c** runner (`hifusim run`: plan-önce, OOM reddi,
+  status.json kalp atışı, `--dry-run/--resume/--max-hours`, ortam+planner damgası), **M10d**
+  rapor+önizleme (`hifusim report`, ≤10 MB önizleme paketi, focus_study figür kodu ortak modüle),
+  **M10e** public'leşme, **M10f** `hifusim.colab` + değişmeyen notebook (mantık repoda, notebook
+  4–5 hücre; kontrat testi), **M10g** kuyruk.
+- M11 v1 ön-etiketi güncellendi (public M10e'ye taşındı); M13'e runner+kuyruk bağı, M14'e
+  "job akışıyla koşar" notu; üst nottaki GUI satırı tazelendi (GUI ayrıca planlanacak; M10b/M10d/
+  M10g onun kontratları).
+- "Sıradaki iş" güncellendi: sıra M10'dan başlıyor; ilk Colab oturumu tek seferde üç kapıyı
+  kapatıyor (M7 parite/tam-boy + M8 VRAM ±%10 ve kalibre süre ±%25 + M10f E2E).
+
+### Açık uçlar
+- M10e isim kararı kullanıcıda (PyPI/GitHub çakışma kontrolüyle).
+- M10 checkpoint'in N periyot varsayılanı ve VRAM/disk maliyeti M10 sırasında ölçülecek.
+- Colab'ın önceden kurulu cupy sürümüyle `cupy-cuda12x>=13` uyumu M10f ortam kontrolünde ele
+  alınacak (yeniden kurulum gerektirmeden kullanmak tercih).
+
+
+---
+
+## 2026-08-19 — Oturum 10 devamı (Fable): M10 kapandı — IO kontratı + atomik yazım + resume + koşu-içi checkpoint
+
+### Yapılanlar
+- **`src/hifusim/io/` paketi** (4 modül, ayrık kaygılar):
+  - `atomic.py` — `atomic_write()` context manager (tmp → `os.replace`; istisnada tmp silinir,
+    hedef ya eski ya tam) + `sweep_temp_debris()` (v12.2 dersi: .tmp cesetleri açılışta süpürülür).
+  - `quantize.py` — `try_float16()`: alan kendi tepe değerine bölünüp float16'ya atılır, round-trip
+    hatası ÖLÇÜLÜR; kontrat (vars. 1e-3·|peak|) aşılırsa float32'de kalır. Ölçülen hata dosyayla taşınır.
+  - `store.py` — **`hifusim-result/1`** HDF5 kontratı: `input/` (kaynak voxelleri+fazlar+drive),
+    `output/p_real_h{n}`, `p_imag_h{n}`, `p_max` (kuantizeli, her dataset'te scale/stored_dtype/
+    quant_norm_err/reload tarifi), `convergence/history`; kökte format/sürüm/çözücü/backend/dt/spp/
+    bölge/grid + **faz konvansiyonu ve absorpsiyon modeli attr'ları HER dosyada** (downstream
+    sözleşmesi). amp/faz asla saklanmaz, hep türetilir. `ResultStore` = DriveResilientStore portu:
+    doğrulanmış mkdir (FUSE mkdir yalanına karşı isdir+backoff), write-probe (yazılamayan klasör
+    ŞİMDİ patlar), yazım anında yeniden mkdir doğrulaması (v12.3), resume skip-guard
+    (`missing()`: liste bir kez okunur, yalnız su-çizgisi yapısal doğrulanır; `deep=True` hepsi).
+  - `checkpoint.py` — koşu-içi durum: `CheckpointSpec(path, every_periods, stop_when)`,
+    `RunInterrupted`, `CheckpointMismatch`; sıkıştırmasız atomik `.npz` (np.savez'in ".npy" uzantı
+    oyununa karşı açık dosya tanıtıcısıyla).
+- **Motor entegrasyonu** (`engine.py`): settle for-döngüsü while'a çevrildi (davranış birebir —
+  yakınsamada prev_peak güncellenmez, aynı sıra); periyot sınırında `_period_boundary()` kancası
+  (kadans yazımı + `stop_when` yoklaması); kayıt penceresi ÖNCESİ zorunlu "record" anlık görüntüsü
+  (kayıt sırasında ölüm = pencereyi aynı durumdan birebir yeniden koşmak); başarıda checkpoint
+  silinir. **Parmak izi**: scheme etiketi + çözücü/backend/grid/dx/pml/spp/f0/genlik/ramp/
+  harmonikler/nonlineer/kayıt bölgesi/referans noktası/spec + kaynak-SHA1 + medium-SHA1 (c,rho,
+  alpha,beta) — tutmayan checkpoint FARKLI ANAHTARLARI İSİMLEYEREK reddedilir. `linear`/
+  `westervelt` `checkpoint=` alır; kwave adaptörü açıkça reddeder (harici binary durduramayız).
+- h5py **lazy kaldı**: `hifusim/io/__init__` PEP 562 `__getattr__` ile store'u geç yükler;
+  motor yalnız `io.checkpoint`'e (numpy-only) bağımlı → `import hifusim.solvers` h5py çekmez.
+
+### Kanıt (M10 kriterleri)
+- **Tam suite 330 test yeşil** (önceki 307 + 23 yeni: `test_io.py` 16, `test_checkpoint.py` 7);
+  2:55 dk; `ruff check` + `ruff format` temiz.
+- float16 round-trip ≤ 1e-3 ölçülüp doğrulandı; 1e-5 kontratı float32'ye düşürüyor (birebir eşit).
+- Kill kapısı GERÇEK: subprocess yazımın ortasında `proc.kill()` (TerminateProcess) —
+  hedef dosya YOK, .tmp cesedi var, süpürme temizliyor. Python cleanup'ı koşmadan test edildi.
+- Resume kapısı: 10 dosyalık mini set, ortadaki silindi → `missing()` = yalnız o; sayaçla tek
+  yeniden üretim kanıtlandı. Su-çizgisi bozulması (çöp bayt) yakalanıyor; derin tarama her yerde.
+- **Checkpoint-resume: BİREBİR AYNI** (beklenen rel < 1e-6'dan güçlü): float32 durum sıkıştırmasız
+  npz'den bit-kayıpsız döner, adım döngüsü deterministik → kesilen+devam eden koşunun fazor,
+  p_max, TÜM harmonikler ve yakınsama geçmişi kesintisiz koşuyla `assert_array_equal` düzeyinde
+  eşit. Kapsam: 1D linear, 2D westervelt (beta yolu + u-listesi), zincirleme iki kesinti,
+  record-aşaması anlık görüntüsünden devam, parmak izi reddi (genlik ve medium değişimi).
+
+### Notlar / açık uçlar
+- `every_periods` varsayılanı 8; tam gridde bir checkpoint ≈ 4 × padded float32 hacim (~3 GB
+  sınıfı) host'a iner — GPU'da maliyet M10f oturumunda ölçülüp kadans ona göre belgelenecek.
+- `stop_when` kancası M10c `--max-hours`ın hazır temeli; kayıt penceresi içinde yoklanmıyor
+  (2 periyot, bilinçli).
+- Backend adı parmak izinde: numpy checkpoint'i cupy'de devam ETTİRİLMEZ (bit-eşitlik ancak aynı
+  backend'de anlamlı; çapraz devam istenirse bilinçli bir karar olarak açılır).
+
+
+---
+
+## 2026-08-19 — Oturum 10 devamı (Fable): M10b kapandı — `hifusim-job/1` + `python -m hifusim validate`
+
+### Yapılanlar
+- **`src/hifusim/config/job.py`**: tek JSON = tam koşu. İki job kind'ı (`kind` ile ayrışık):
+  `stored_setup` (data/setups referansı + override katmanı) ve `explicit` (tam ağaç).
+- **TASARIM SAPMASI (bilinçli, MILESTONES'a not düşüldü)**: plan `stored_setup`'ı source
+  union'ına koymuştu; JOB seviyesine alındı — depolanmış kurulum medium+grid+yerleşim+run'ı
+  birlikte sabitler, onu source yapıp başka medium'la eşleştirmek M6f garantilerini kırardı.
+- `medium` union: `phantom_dataset` (grid dosyadan; job'da grid bölümü YASAK — pml_mm tek seçim;
+  odak sınıf 0/su'ya düşerse JobError) | `scene` (malzeme tablosu eksik etiketi kurulumda
+  yakalar) | `volume_import` (tek-import'lu SceneConfig üzerinden aynı yerleştirme yolu) |
+  `homogeneous`. `source`: `array` reçetesi — spiral (n_el/d_outer/d_inner/roc/af) | bowl
+  (d_outer/roc; yarıküre üstü reddedilir; steer/faz isteği "single focused element" hatası).
+  Odak: natural (apex+roc) | steered (DAS fazları, c0=1500 su varsayımı belgelendi) | açık faz
+  listesi. Kullanıcı birimleri mm/MHz/kPa; her model extra=forbid + JSON round-trip.
+- Override katmanı: amplitude/harmonics/run-policy/steer; **f0 override eşitse no-op, farklıysa
+  alpha gerekçesiyle RED** (M6f override katmanından sağ çıkıyor). Steering voxel kümesine
+  dokunmuyor (parite testi indeksleri birebir doğruluyor), yalnız fazlar + odak voxeli değişiyor;
+  kaynak-PML kontrolü yeniden koşuyor.
+- `check_derived()`: M6f "hiçbir şey pişirilmiyor" deseninin genellemesi — job çıktısına
+  damgalanan türetilmiş geometri (elem_radius/shell_depth/r_max/f_number/half_angle) yeniden
+  türetilip karşılaştırılıyor; oynanan değer İSİMLE reddediliyor. M10c runner damgası bunu kullanacak.
+- **`python -m hifusim validate job.json [--fast]`** (`src/hifusim/__main__.py`): şema (typo),
+  dosya varlığı, kaynak-PML, odak-dokuda (dataset işleri; steered stored-setup'ta etiketler
+  yüklenip sınanıyor), çözücü yetenekleri (medium yüklüyse; yüklü değilse ERTELENDİĞİNİ söyleyen
+  uyarı), harmonik başına ppw (medium'suz yollarda "approx. c_min" etiketiyle). Exit 0/2.
+- Lazy sınırlar korundu: `hifusim.config.__init__` job'ı PEP 562 ile geç yüklüyor (geometry↔config
+  döngüsü kırık); `uwcem_phantoms` yalnız iki kind'da ve import anında değil kullanım anında.
+
+### Kanıt (M10b kriterleri)
+- `tests/test_job.py` 35 test; **tam suite 365 yeşil**; ruff temiz.
+- Round-trip: 12 düğüm parametrize + union + dump/load; typo üst VE iç içe seviyede hata.
+- Parite: stored job == load_setup — grid/indeksler/fazlar/genlik/f0/ramp/spec/bölge/odak birebir.
+- Scene smoke: bowl + fat-top sahnesi gerçek mini çözüm; odakta alan > 0.5·genlik; medium c
+  min/max doğru (1450/1500).
+- validate yakalıyor: typo, bozuk setup referansı, PML'e gömülü çanak, suya çekilen odak
+  (dataset), bilinmeyen çözücü (kzk), lineer çözücüde beta≠0, --fast ertelme uyarısı.
+- CLI gerçek çağrı: stored-setup job → exit 0 + özet; olmayan dosya → exit 2.
+
+### Notlar / açık uçlar
+- Stored-setup'ın ucuz yolunda c_min bilinmiyor → ppw "approx. c_min (1450)" etiketiyle; h2
+  2.90 ppw uyarısı bu yaklaşıklıktan (gerçek dataset c_min'iyle ~3.0 sınırında). M10c koşu
+  damgası gerçek medium'dan kesin ppw yazacak.
+- Steering DAS fazları su yolu (c0=1500) varsayıyor — doku aberasyonu M23 planlama işi, job
+  knob'u değil (docstring'de).
+- `output.folder/quantize/max_norm_err` şemada hazır; M10d önizleme alanı gerektiğinde eklenecek
+  (şema genişlemesi geriye uyumlu: yeni alan default'lu gelir).
+
+
+---
+
+## 2026-08-19 — Oturum 10 devamı (Fable): M10c runner kapandı + adversarial review turu (M10/M10b/M10c)
+
+### M10c — `python -m hifusim run job.json`
+- `src/hifusim/runner.py` (+ `__main__.py run` alt komutu): focus_study'nin kuralı korunur —
+  planner konuşmadan pahalı hiçbir şey olmaz. Akış: yükle→kur→plan yazdır/kaydet→VRAM kapısı
+  (cupy'de cihaz VRAM'i, testlerde `--vram-limit-gib`)→çöz→M10 store→damga. Çıktı düzeni
+  deterministik ve JOB DOSYASINA göreli (CWD kayması resume'u bozamaz): job.json, plan.json/.txt,
+  status.json, checkpoint.npz, result.h5, run_meta.json.
+- Ayrık exit kodları: 0 (başarı/zaten-tam skip-guard) · 2 config · 3 OOM reddi · 4 çözücü/store ·
+  5 kesildi-resumable. Kuyruk (M10g) metin ayrıştırmadan tepki verebilecek.
+- Kalp atışı: `CheckpointSpec.stop_when` yoklaması periyot sayacı olarak kullanılır (motor
+  değişikliği/adım başı maliyet YOK); ETA planner değil ölçülen kadanstan. `--max-hours` 0 dahi
+  anlamlı (ilk periyot sınırında checkpoint + zarif duruş). Resume AÇIK istek: checkpoint varken
+  `--resume`suz koşu exit 2; `--resume` var ama checkpoint yoksa yüksek sesli not.
+- Damga: git commit + ortam (GPU adı/driver/cupy; numpy'da boş) + planner-vs-gerçekleşen
+  (M8'in iki Colab kapısı bu dosyadan ölçülecek) + türetilmiş geometri (check_derived kontratı).
+- Testler: `tests/test_runner.py` 14 test — dry-run hiçbir şey çözmez; exit kodları; uçtan uca
+  damga; skip-guard mtime'ı bile değişmez; kesinti+resume BİREBİR; status alanları; CLI.
+- Yakalanan gerçek bug (test yazarken): `--max-hours 0` truthiness yüzünden limiti kapatıyordu →
+  `is not None`.
+
+### Adversarial review turu — 5 boyut, 14 bulgu → 12 düzeltme + 1 belgelendi + 1 çürütüldü
+Workflow'un doğrulama ayağı oturum limitine takıldı; 3 boyutun 14 bulgusu elle doğrulandı,
+eksik 2 boyut (motor-checkpoint, job-config/steering) elle tarandı.
+- **[HIGH] kwave job'ları hiç koşamıyordu**: runner her çözücüye `backend=` geçiyordu, kwave
+  adaptörü bilinmeyen kwarg'ı reddeder → TypeError. `backend`/`checkpoint` artık yalnız native
+  çözücülere gider; sahte-harici-çözücü testi eklendi (plan.json yok + run_meta.planner null).
+- **[HIGH] explicit phantom_dataset yolu M6f f0-alpha korumasını ATLIYORDU**: stored yol reddeder,
+  explicit yol 1.5 MHz'i sessizce 1.0 MHz alpha'sıyla koşardı. `_check_dataset_f0` asset
+  meta'sındaki pişirilmiş f0'ı sürücüyle karşılaştırır; testli (JobError "alpha").
+- **[HIGH] save_result çökmesi bitmiş çözümü yutuyordu**: motor checkpoint'i başarıda siliyordu,
+  store sonra patlarsa geriye hiçbir şey kalmıyordu. `CheckpointSpec.keep_on_success` eklendi:
+  runner checkpoint'i result GÜVENLE yazıldıktan sonra siler; store çökmesi exit 4 + "çözüm
+  kayıp değil, --resume yalnız kayıt penceresini yineler" mesajı; testli (sahte OSError →
+  resume → baseline'la birebir). Yazım öncesi ensure_dir_verified (v12.3) eklendi.
+- **[MED] pre-solve delikler exit 1 sızdırıyordu** (bilinmeyen `--gpu`, plan yazım hatası) →
+  config-try genişletildi, exit 2; testli.
+- **[MED] outdir CWD'ye görelidi** → job dosyasının klasörüne göreli (Colab CWD kayması resume'u
+  sıfırdan başlatamaz); `output.folder` göreli testi eklendi.
+- **[MED] steered stored su-odağı reddi yalnız validate'teydi** (run kabul ederdi) → build'e
+  taşındı (npz'den YALNIZ labels üyesi okunur, ucuz); run ve validate artık aynı fikirde; testli.
+- **[MED] atomik tmp adı deterministikti**: iki oturak aynı adı paylaşıp torn dosyayı final ada
+  terfi ettirebilirdi → yazar-benzersiz ad (pid+token). **[MED] süpürme canlı komşunun tmp'sini
+  silebilirdi** → yalnız bayat (mtime>1 saat; testler 0 ile zorlar). **[LOW] os.replace Windows
+  kilidi tam yazılmış tmp'yi sildiriyordu** → PermissionError'da retry, son çarede tmp KORUNUR
+  ("preserved" mesajıyla); ikisi de testli. **[LOW] probe adı id() türeviydi** → pid+entropi.
+- **[LOW] dataset job'da etiket kontrolü GB'lik to_medium'dan SONRAYDI** → yeniden sıralandı
+  (tüm geometri redleri medium kurulumundan önce). **[LOW] tam-grid kayıt sessizdi** → validate
+  özet satırı + >10 Mvox uyarısı; testli.
+- **Belgelendi (kozmetik)**: heartbeat pre-record yoklamada periyodu +1 sayar — status telemetri,
+  kesin sayaçlar checkpoint meta/run_meta'da (docstring'e yazıldı).
+- **Çürütüldü**: "steering apex-çerçeve dönüşümü yanlış olabilir" — voxelize okundu: eleman
+  voxeli = apex_vox + round(pos/dx), yarım-voxel kayması yok; `target_m - apex_vox*dx` doğru.
+
+### Kanıt
+- Tam suite 383 test yeşil; ruff temiz. Yeni bulgu-regresyon testleri: test_io +2 (replace-retry,
+  bayat süpürme), test_job +3 (f0 guard, su-steer build reddi, tam-grid uyarısı), test_runner +4
+  (kwave kwarg, bilinmeyen gpu, store-çökmesi kurtarma, job-göreli outdir).
+
+## 2026-08-21 — Oturum 11 (Fable): M10d kapandı — `hifusim.report` + önizleme paketi + `hifusim report`
+
+### Ne yapıldı
+- **`hifusim.report` paketi** (yeni): figür/metrik/rapor kodu `apps/focus_study`'den kütüphaneye
+  çıkarıldı. İçe aktarma disiplini `hifusim.io` ile aynı: `metrics` + `preview` numpy-only ve
+  eager; `figures` (matplotlib) ve `run_report` (h5py) lazy — matplotlib'siz bir Colab/başsız
+  ortamda runner önizleme yazabilir, yalnız `hifusim report` figür çizerken matplotlib ister
+  (`pip install hifusim[report]`; dev extra'ya da eklendi).
+- **Metrik tek doğruluk kaynağı**: `focus_metrics(result, dx, grid_shape, pml_vox, apex_vox,
+  focus_vox, source_amplitude, medium, solver)` — peak/target/focal_spot/run/harmonics
+  alt-ağaçları focus_study `analyze()` çıktısıyla ANAHTAR SIRASI dahil aynı; `analyze()` artık
+  delege edip yalnız O'Neil çapraz kontrolünü ekliyor (senaryo bilgisi — aperture/ROC — result
+  dosyasında yok, focus_study'de kalması doğru). Eksik girdiler dürüst düşer: medium yoksa
+  isppa=None, amplitude yoksa gain=None, focus yoksa target bölümü yok.
+- **Önizleme paketi** (`hifusim-preview/1`, `preview.npz` + `metrics.json`, atomik): tepe
+  voxel'inden geçen 3 eksen dilimi (her harmonik + p_max), blok-ortalama kabalaştırılmış
+  fundamental amp hacmi (dinamik float16 + scale, M10 kontratı), mm eksenleri, yakınsama
+  geçmişi, meta_json. Kabalaştırma adımı bütçeden (varsayılan 10 MB'ın %60'ı hacme) hesaplanır
+  ve paket YAYIMLANMADAN önce bellekte ölçülür — sığmazsa adım büyütülür (kriter tahmin değil
+  ölçüm). Bilinçli sapma: milestone metni "orta dilimler" diyordu; gerçekleşen TEPE voxel'inden
+  geçen dilimler seçildi (odak kaçtıysa orta dilim boş su gösterir) ve meta_json'a not düşüldü.
+- **Runner entegrasyonu**: başarılı store'dan sonra `focus_metrics` (medium elde — isppa dolu)
+  + `write_preview`; önizleme çökmesi koşuyu düşürmez (result zaten güvende, yalnız warning).
+  result.h5 attrs'ına `apex_vox`/`focus_vox` damgası eklendi — rapor, job/medium olmadan
+  apex-çerçeveli mm konumları üretebilsin.
+- **`python -m hifusim report <out-dir>`**: result.h5 varsa tam figür seti (alan haritaları,
+  profiller, harmonikler, yakınsama; kaynak noktaları h5'teki input grubundan) + REPORT.md +
+  index.html; `--preview` ile (ya da result yokken) yalnız paketten quicklook figürü. Boş
+  klasör exit 2. metrics.json varsa ona güvenir (runner medium'la hesapladı); yoksa h5'ten
+  yeniden hesaplar ve isppa'nın neden olmadığını Caveats'e yazar.
+- **focus_study ince adaptör**: `analysis` delege + O'Neil; `figures` Setup→FigureContext
+  çevirisi; `report` ortak render (CSS/markdown/html iskeleti + Focus/Focal spot/Run/Harmonics
+  satır üreticileri `hifusim.report.html`'de) üstüne Setup/Analytic/Planner satırları.
+
+### Kriter kanıtları
+- **Regresyon (bayt)**: water_bowl + layered_tissue (dx=0.6, min/max settle 2/6, --no-measure)
+  refactor ÖNCESİ ve SONRASI koşuldu; REPORT.md ve index.html bayt-aynı (wall-time satırı
+  normalize edilerek karşılaştırıldı — süre koşudan koşuya değişir), metrics.json'da tek fark
+  `--out` yolunu içeren `command` alanı. Diff scripti scratchpad'de.
+- **≤10 MB tam gridde**: 256³ sentetik alan (float16 ham hacim 32 MB olurdu) → paket ölçüldü,
+  ≤ 10 MB, coarse_step>1; dilimler f16 kontratı içinde (atol 1.1e-3·peak) — testli.
+- **Tek kaynak**: `test_focus_study_and_library_compute_identical_metrics` bölüm bölüm dict
+  eşitliği; `test_metrics_from_result_file_match_the_runner_metrics` h5-roundtrip yakınlık
+  (quantize=False job'da; isppa istisnası açıkça assert edilir). Anahtar-sırası koruması ayrı test.
+- Uçtan uca duman: mini job (dx=0.5, westervelt h1+h2) → run → preview.npz 135 KB + metrics.json
+  → `hifusim report` 4 figür + REPORT.md + index.html; `--preview` yalnız paketten render etti.
+
+### Kanıt
+- Tam suite **393 test yeşil** (383 + 10 yeni `tests/test_report.py`), ruff temiz.
+
+## 2026-08-21 — Oturum 11 devamı (Fable): İSİM DEĞİŞTİ — hifusim → caustica (M10e ilerleme)
+
+### Karar
+- Kullanıcı önce "Kymata" istedi; PyPI'da `kymata` DOLU çıktı (Cambridge Kymata Atlas, v1.0.6,
+  aktif; ayrıca ünlü `kymatio` wavelet kütüphanesiyle marka yakınlığı). İkinci turda kullanıcı
+  **caustica**'yı seçti: PyPI'da BOŞ (simple index 404); GitHub'da aynı adlı en görünür proje bir
+  Minecraft ray-tracer (Java, farklı ekosistem) — bizim ad alanımız `ebx0/caustica`.
+- Ad fizikte de oturuyor: odaklanmış dalga alanlarının kostik (caustic) yüzeyleri.
+
+### Ne yapıldı
+- `git mv src/hifusim src/caustica` + kod ve YAŞAYAN dokümanlarda (src/tests/apps/
+  uwcem_phantoms/scripts, pyproject, README, PLAN, MILESTONES, phantoms.bat/sh, .gitignore)
+  hifusim→caustica / Hifusim→Caustica / HIFUSIM→CAUSTICA. Devlog ve benchmarks/reports
+  TARİHÇE olarak bırakıldı (eski girdiler eski adla doğru).
+- Format etiketleri de yeni ada geçti (`caustica-job/1`, `caustica-result/1`,
+  `caustica-checkpoint/1`, `caustica-preview/1`, `caustica-setup/1`, `caustica-phantom/1`,
+  `caustica-phantom-dataset/2`). **5.66 GB dataset REBUILD EDİLMEDİ**: okuyucular eski
+  etiketleri belgeli legacy alias olarak kabul eder (`LEGACY_FORMAT_TAGS` asset.py,
+  `LEGACY_DATASET_FORMATS` dataset.py+setup.py) — yeni yazımlar hep yeni etiketi yazar.
+- İnce tuzak: setup üretimi `dataset_format`'ı SABİTTEN kaydediyordu; diskteki npz'ler legacy
+  etiket taşıdığı için load_setup'ın "aynı build mi" kontrolü kırılırdı → setup artık dataset
+  manifest'inin GERÇEK etiketini kaydeder. 9 setup yeniden üretildi (`caustica-setup/1`),
+  `setup --verify` 9/9.
+- Kalibrasyon dizini `~/.caustica/` oldu (eski `~/.hifusim` kalibrasyonu yetim kalır —
+  yeniden kalibre etmek saniyeler). Env var `CAUSTICA_PHANTOM_DATA`. Editable kurulum
+  yenilendi (`pip install -e .`), ruff format tüm pakete uygulandı (CI format kapısı).
+- GitHub: repo ZATEN public'ti (baştan beri) — `gh repo rename` ile **ebx0/caustica** oldu
+  (GitHub eski URL'den yönlendirir), origin güncellendi. README "working name" notu
+  "hifusim'den yeniden adlandırıldı" notuna çevrildi; PyPI kontrolü: `caustica` boş.
+- Yerel klasör adı `Desktop\hifusim` BİLEREK kaldı: .venv mutlak yolları ve oturum
+  hafıza bağlaması klasör adına bağlı; istenirse ayrı bir adımda taşınır (venv yeniden kurulur).
+
+### Kanıt
+- Tam suite **393 test yeşil** (rename sonrası; aynı günkü janitor turu 402'ye çıkardı), ruff check + format temiz.
+- M10e'nin kalan kriterleri commit+push bekliyor: public repoda CI yeşili + temiz ortamda
+  `pip install git+https://github.com/ebx0/caustica` (push kullanıcı onayına bağlı — commit
+  kuralı: kullanıcı istemeden commit atılmaz).
+
+## 2026-08-21 — Oturum 11 devamı (Fable): Janitor turu #1 — 44 bulgu, 22 düzeltme, `janitor/` defteri
+
+### Süreç
+- Kullanıcı isteği: bakım işleri lokal bir klasörde ticket olarak tutulacak (yaz/sil),
+  gelecek planları güncellenecek, eski hatalar test edilecek, gereken refactor'lar yapılacak.
+- 7 boyutlu çok-ajanlı tarama başlatıldı (rename-kalıntıları, TODO/ölü-kod, doc-drift,
+  paketleme/CI, test boşlukları, eski-hata→test haritası, refactor adayları) + boyut başına
+  adversarial doğrulayıcı. Oturum limiti 3 tarayıcı + doğrulayıcıları düşürdü (M10c turundaki
+  gibi) → eksik boyutlar elle tarandı, kullanılan bulgular elle doğrulandı. 4 tamamlanan
+  boyuttan 44 bulgu geldi.
+
+### En kritik düzeltme
+- **Wheel `gpu_db.json` içermiyordu**: `pip install` (Colab'ın yapacağı şey) sonrası
+  `planner.estimate` FileNotFoundError'la çökerdi. pyproject'e `[tool.setuptools.package-data]`
+  eklendi; `pip wheel` ile paket kuruldu, wheel'den import edilip `planner.estimate` CANLI
+  koşturularak doğrulandı (M10e "pip install çalışır" kriterinin ön şartıydı).
+
+### Diğer düzeltmeler (hepsi testli ya da davranış-nötr refactor)
+- `caustica report` bozuk/yarım-sync preview.npz'de raw traceback kusuyordu (Drive'ın NORMAL
+  arıza modu) → geniş yakalama + temiz exit 2; `--preview` paket yokken yönlendiren mesaj;
+  render_html boş rows'ta sahte `</table>`; run_report metrics.json atomik yazım.
+- Tek-kaynaklaştırma: FIG_CAPTIONS (iki kopya → `report.html`), float16 geri-yükleme tarifi
+  (5 site → `quantize.restore()`), figures._mm_axes (metrics.mm_axes'e delege — delegasyonda
+  yakalanan ×1e3 çifte-ölçek hatası dahil), legacy alias koşulları (4 site → `ACCEPTED_*`).
+- Runner: 35 satırlık inline önizleme bloğu `_write_preview_package` yardımcısına; apex_vox
+  tek kez türetiliyor.
+- focus_study: analysis/figures ölü re-export'ları kırpıldı (tüketici analizi: cli yalnız
+  region_origin/analyze/profiles + make_all kullanıyor), report.py çift import bloğu birleşti.
+- Dokümanlar: README'ye CLI bölümü (`validate|run|report`) + Layout'a io//report//runner +
+  extras listesi; apps/README.md sed'den kaçan 5 hifusim düzeltildi; MILESTONES M0 notu ve
+  PLAN.md'nin sed'le YANLIŞLANAN tarihsel ad satırları gerçek tarihçeye döndürüldü (editör
+  notuyla); uwcem `plan` üst-seviye export (README'nin vaat ettiği import çalışmıyordu).
+- Paketleme/CI: SPDX lisans (`license = "MIT"` + license-files, setuptools>=77), ruff pini
+  (>=0.16,<0.17 — format kapısı sürüm atlamasında kırılmasın), CI'ya ubuntu-3.10 taban ayağı
+  (requires-python >=3.10 hiç test edilmiyordu; 3.11+ sözdizimi taraması temiz), `runs/`
+  .gitignore'a, bayat `src/hifusim.egg-info` silindi.
+
+### Eski hatalar
+- `janitor/eski-hatalar-haritasi.md`: 2026-08-11 fizik+geometri, 2026-08-19 dataset + M10c,
+  2026-08-21 turlarının HER bulgusu → bugünkü koruyucu test eşlemesi. Korumasız üç kalem
+  açıkça işaretli (probe entropisi, etiket-kontrol sıralaması, heartbeat ±1 belgeli).
+  Bu turda üç tarihsel bulguya İLK koruma testi eklendi: periyodik-sınır uyarısı
+  (2026-08-10 footgun), tmp yazar-benzersiz adlar (M10c), önizleme-çökmesi sözleşmesi (M10d).
+- Yürütülen kanıt: tam suite 402 test yeşil (393 + 9 yeni: rapor 6, runner 1, io 1, pml 1),
+  ruff check + format temiz.
+
+### Janitor defteri
+- `janitor/` (gitignore'lu, lokal): 00-durum özeti, 7 açık ticket (en önemlisi 06 —
+  push sonrası M10e kapanış kontrolleri), eski-hatalar haritası. Kural: bir dosya = bir iş,
+  bitince sil.

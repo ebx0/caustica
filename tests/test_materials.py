@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from hifusim.materials import Material, MaterialDB, breast_default, water
+from caustica.materials import Material, MaterialDB, breast_default, water
 
 # Verbatim from the production notebook (v6-v12): id -> (alpha, rho, c, beta).
 NOTEBOOK_TISSUE_PROPS = {
