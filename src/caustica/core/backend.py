@@ -17,7 +17,9 @@ Design notes
 
 from __future__ import annotations
 
+import functools
 import logging
+import os
 from dataclasses import dataclass
 from types import ModuleType
 from typing import Any, Literal
@@ -29,6 +31,74 @@ log = logging.getLogger("caustica")
 BackendName = Literal["auto", "numpy", "cupy"]
 
 _CUPY_STATE: dict[str, Any] = {"checked": False, "available": False, "module": None}
+
+
+class CausticaWarning(UserWarning):
+    """Base category for every warning caustica itself emits.
+
+    Filterable without silencing the rest of the ecosystem::
+
+        warnings.filterwarnings("ignore", category=caustica.CausticaWarning)
+    """
+
+
+#: Thread-count override for CPU (scipy.fft) transforms; ``None`` defers to
+#: the ``CAUSTICA_CPU_WORKERS`` env var, then the default of 1. The default
+#: is DELIBERATELY single-threaded: two measurement rounds on a 10-core
+#: i5-13450HX (2026-08-22, devlog) found no reproducible speed-up from any
+#: worker count at 1-26 Mvox engine shapes — apparent per-cell wins and
+#: losses did not survive a repeat. Machines that do profit can opt in via
+#: the env var or :func:`set_cpu_fft_workers`; pocketfft splits nd
+#: transforms into 1-D lines per thread without changing summation order,
+#: so fields stay bit-identical across worker counts (asserted by test).
+_CPU_FFT_WORKERS: int | None = None
+
+
+def cpu_fft_workers() -> int:
+    """Active ``workers=`` value for CPU FFTs (setter > env var > 1)."""
+    if _CPU_FFT_WORKERS is not None:
+        return _CPU_FFT_WORKERS
+    try:
+        return int(os.environ.get("CAUSTICA_CPU_WORKERS", "1"))
+    except ValueError:
+        return 1
+
+
+def set_cpu_fft_workers(n: int | None) -> None:
+    """Set (or with ``None`` reset) the process-wide CPU FFT worker count.
+
+    Takes effect for backends resolved afterwards; a running solve keeps
+    the handle it grabbed at start.
+    """
+    global _CPU_FFT_WORKERS
+    _CPU_FFT_WORKERS = None if n is None else int(n)
+
+
+class _ScipyFFTWithWorkers:
+    """``scipy.fft`` facade with a default ``workers=`` injected into the
+    plan-level transforms.
+
+    This exists so the *one* branch between threaded-CPU and GPU FFTs lives
+    here instead of in the solvers' hot loops: ``cupyx.scipy.fft`` has no
+    ``workers`` parameter (verified against CuPy docs, 2026-08-22), so the
+    cupy path returns the raw module and never sees the kwarg. An explicit
+    ``workers=`` at a call site still wins over the injected default.
+    """
+
+    _WORKERED = frozenset(
+        {"fft", "ifft", "rfft", "irfft", "fft2", "ifft2", "fftn", "ifftn", "rfftn", "irfftn"}
+    )
+
+    def __init__(self, module: ModuleType, workers: int):
+        self._module = module
+        self._workers = workers
+
+    def __getattr__(self, name: str) -> Any:
+        fn = getattr(self._module, name)
+        if name in self._WORKERED:
+            fn = functools.partial(fn, workers=self._workers)
+        self.__dict__[name] = fn  # cache: later lookups skip __getattr__
+        return fn
 
 
 def cupy_available() -> bool:
@@ -63,13 +133,15 @@ class Backend:
         return self.name == "cupy"
 
     @property
-    def fft(self) -> ModuleType:
-        """dtype-preserving FFT module for this backend.
+    def fft(self) -> Any:
+        """dtype-preserving FFT interface for this backend.
 
         numpy.fft always upcasts float32 -> complex128, which would break
         fp32 production parity between CPU and GPU; scipy.fft (pocketfft)
         and cupyx.scipy.fft both keep float32/complex64. Solvers must use
-        ``backend.fft``, never ``numpy.fft``.
+        ``backend.fft``, never ``numpy.fft``. On CPU the transforms carry a
+        default ``workers=`` (see :func:`cpu_fft_workers`) so multi-core
+        machines are not silently single-threaded (D32).
         """
         if self.is_gpu:
             import cupyx.scipy.fft as cufft  # noqa: PLC0415 (lazy on purpose)
@@ -77,7 +149,10 @@ class Backend:
             return cufft
         import scipy.fft as spfft  # noqa: PLC0415 (lazy on purpose)
 
-        return spfft
+        workers = cpu_fft_workers()
+        if workers == 1:
+            return spfft
+        return _ScipyFFTWithWorkers(spfft, workers)
 
     def asarray(self, a: Any, dtype: Any = None) -> Any:
         """Move/convert ``a`` onto this backend."""
