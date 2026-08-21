@@ -79,6 +79,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="refuse to start if the planner needs more than this (default: device VRAM on cupy)",
     )
+    r.add_argument(
+        "--allow-slow-cpu",
+        action="store_true",
+        help="accept a CPU run over the CAUSTICA_CPU_LIMIT_MIN (default 5 min) estimate gate",
+    )
     r.add_argument("--stop-after-periods", type=int, default=None, help=argparse.SUPPRESS)
 
     ex = sub.add_parser(
@@ -137,6 +142,7 @@ def main(argv: list[str] | None = None) -> int:
                 status_interval_s=args.status_interval,
                 vram_limit_gib=args.vram_limit_gib,
                 stop_after_periods=args.stop_after_periods,
+                allow_slow_cpu=args.allow_slow_cpu,
             ),
         )
     if args.command == "example":
