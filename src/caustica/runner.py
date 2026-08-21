@@ -35,7 +35,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import platform
 import subprocess
 import sys
 import time
@@ -50,6 +49,7 @@ import numpy as np
 import caustica
 from caustica.config.job import BuiltJob, build_job, dump_job, load_job
 from caustica.core.backend import CausticaWarning, get_backend
+from caustica.env import env_report, gpu_environment
 from caustica.io.atomic import atomic_write
 from caustica.io.checkpoint import CheckpointSpec, RunInterrupted
 from caustica.io.store import (
@@ -96,28 +96,10 @@ def _git_commit() -> str:
         return "unknown"
 
 
-def _gpu_environment(backend_name: str) -> dict:
-    """Device/driver/cupy stamp when running on CUDA; empty otherwise."""
-    if backend_name != "cupy":
-        return {}
-    try:  # pragma: no cover - requires a GPU
-        import cupy
-
-        dev = cupy.cuda.Device()
-        props = cupy.cuda.runtime.getDeviceProperties(dev.id)
-        free_b, total_b = dev.mem_info
-        return {
-            "gpu_name": props["name"].decode()
-            if isinstance(props["name"], bytes)
-            else str(props["name"]),
-            "driver_version": cupy.cuda.runtime.driverGetVersion(),
-            "cuda_runtime_version": cupy.cuda.runtime.runtimeGetVersion(),
-            "cupy_version": cupy.__version__,
-            "vram_total_gib": round(total_b / 2**30, 3),
-            "vram_free_gib": round(free_b / 2**30, 3),
-        }
-    except Exception as exc:
-        return {"gpu_probe_error": f"{type(exc).__name__}: {exc}"}
+# Promoted to caustica.env (M10i) — the runner keeps calling the same
+# function, so the run_meta stamp and a notebook's env_report() cannot
+# disagree. The alias stays because the VRAM block below uses it.
+_gpu_environment = gpu_environment
 
 
 def _vram_pool_peak_gib(backend_name: str) -> float | None:
@@ -631,13 +613,9 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
         "backend": backend_name,
         "generated": _now_iso(),
         "git_commit": git_commit,
-        "environment": {
-            "caustica": caustica.__version__,
-            "python": platform.python_version(),
-            "numpy": np.__version__,
-            "platform": platform.platform(),
-            **_gpu_environment(backend_name),
-        },
+        # env_report keeps the historical key names (M8's Colab gates read
+        # them) and only ADDS facts — see caustica.env.
+        "environment": env_report(backend_name),
         "planner": plan_payload,  # None for non-native solvers
         "actual": actual,  # planner-vs-actual: M8's Colab gates read this
         "derived": built.derived,  # re-derivable geometry (check_derived contract)

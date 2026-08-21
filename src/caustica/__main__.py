@@ -126,7 +126,13 @@ def main(argv: list[str] | None = None) -> int:
         print(report.render())
         return 0 if report.ok else 2
     if args.command == "run":
+        import logging
+
         from caustica.runner import RunnerOptions, run_job_file
+
+        # D33: the LIBRARY installs no logging handler on import; the CLI is
+        # an application and turns logging on at its entry point.
+        logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
         return run_job_file(
             args.job,

@@ -20,6 +20,7 @@ from __future__ import annotations
 import functools
 import logging
 import os
+import warnings
 from dataclasses import dataclass
 from types import ModuleType
 from typing import Any, Literal
@@ -31,6 +32,10 @@ log = logging.getLogger("caustica")
 BackendName = Literal["auto", "numpy", "cupy"]
 
 _CUPY_STATE: dict[str, Any] = {"checked": False, "available": False, "module": None}
+
+#: One warning per process for the auto->numpy fallback (D33): visible once,
+#: noise never. Tests reset this directly.
+_AUTO_FALLBACK_WARNED = False
 
 
 class CausticaWarning(UserWarning):
@@ -193,6 +198,19 @@ def get_backend(name: BackendName = "auto") -> Backend:
     if name == "auto":
         if cupy_available():
             return Backend("cupy", _CUPY_STATE["module"])
+        global _AUTO_FALLBACK_WARNED
+        if not _AUTO_FALLBACK_WARNED:
+            # ONCE per process (D33): the old INFO log had no handler and was
+            # never seen by anyone; a warning is visible in notebooks and CI,
+            # and once is signal — per-call would be noise (the suite calls
+            # this hundreds of times).
+            _AUTO_FALLBACK_WARNED = True
+            warnings.warn(
+                "backend 'auto': no usable CUDA GPU found — falling back to numpy "
+                "(CPU). Expect CPU speeds; see caustica.require_gpu() for the fix.",
+                CausticaWarning,
+                stacklevel=2,
+            )
         log.info("backend auto-select: no CUDA GPU found, using numpy (CPU).")
         return Backend("numpy", np)
     raise ValueError(f"Unknown backend name {name!r}; expected 'auto', 'numpy' or 'cupy'.")

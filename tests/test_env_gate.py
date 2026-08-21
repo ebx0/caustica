@@ -20,6 +20,16 @@ def opts(**kw) -> RunnerOptions:
 
 
 def run_recording_warnings(job, o):
+    """Run and collect the RUN-level CausticaWarnings.
+
+    The auto->numpy backend fallback is its own once-per-process warning
+    (tested separately below); arming its flag first keeps these counts
+    order-independent. A fresh CLI process therefore shows both: one
+    fallback notice, plus exactly one gate warning per run.
+    """
+    from caustica.core import backend as B
+
+    B._AUTO_FALLBACK_WARNED = True
     with _warnings.catch_warnings(record=True) as rec:
         _warnings.simplefilter("always")
         code = run_job_file(job, o)
@@ -112,3 +122,79 @@ def test_cli_wires_allow_slow_cpu(tmp_path, monkeypatch):
             )
             == EXIT_OK
         )
+
+
+# ------------------------------------------------------- env_report (M10i)
+
+
+def test_env_report_returns_dict_and_keeps_the_stamp_keys():
+    from caustica import env_report
+
+    rep = env_report()
+    assert isinstance(rep, dict)
+    # historical stamp keys — renaming any of these breaks M8's Colab gates
+    for key in ("caustica", "python", "numpy", "platform"):
+        assert key in rep, f"stamp key {key!r} disappeared from env_report()"
+    assert rep["resolved_backend"] in ("numpy", "cupy")
+    import json
+
+    json.dumps(rep)  # stamp must stay JSON-serializable
+
+
+def test_run_meta_environment_composes_env_report(tmp_path):
+    import json
+
+    out = tmp_path / "out"
+    code, _ = run_recording_warnings(mini_job(tmp_path), opts(out=out))
+    assert code == EXIT_OK
+    env = json.loads((out / "run_meta.json").read_text(encoding="utf-8"))["environment"]
+    for key in ("caustica", "python", "numpy", "platform"):
+        assert key in env
+    assert env["resolved_backend"] == "numpy"
+
+
+def test_require_gpu_messages_name_the_right_fix(monkeypatch):
+    from caustica import cupy_available, require_gpu
+
+    if cupy_available():  # pragma: no cover - dev machines have no GPU
+        import pytest
+
+        pytest.skip("GPU present: refusal messages not reachable")
+    # local machine: the fix is an install THE USER runs (never pip from us)
+    monkeypatch.delenv("COLAB_RELEASE_TAG", raising=False)
+    try:
+        require_gpu("test")
+        raise AssertionError("should have raised")
+    except RuntimeError as exc:
+        assert "pip install cupy-cuda12x" in str(exc)
+    # Colab: the real failure is a CPU runtime; pip cannot fix it
+    monkeypatch.setenv("COLAB_RELEASE_TAG", "release-x")
+    try:
+        require_gpu()
+        raise AssertionError("should have raised")
+    except RuntimeError as exc:
+        msg = str(exc)
+        assert "Change runtime type" in msg
+        assert "pip install cupy" not in msg
+
+
+def test_auto_fallback_warns_exactly_once_per_process():
+    from caustica.core import backend as B
+
+    if B.cupy_available():  # pragma: no cover
+        import pytest
+
+        pytest.skip("GPU present: no fallback to warn about")
+    old = B._AUTO_FALLBACK_WARNED
+    try:
+        B._AUTO_FALLBACK_WARNED = False
+        with _warnings.catch_warnings(record=True) as rec:
+            _warnings.simplefilter("always")
+            B.get_backend("auto")
+            B.get_backend("auto")
+            B.get_backend("auto")
+        hits = [w for w in rec if issubclass(w.category, CausticaWarning)]
+        assert len(hits) == 1  # once per process, not per call
+        assert "falling back to numpy" in str(hits[0].message)
+    finally:
+        B._AUTO_FALLBACK_WARNED = old
