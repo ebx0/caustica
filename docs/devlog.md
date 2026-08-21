@@ -1227,3 +1227,48 @@ eksik 2 boyut (motor-checkpoint, job-config/steering) elle tarandı.
   `network` markası şu an hiçbir teste takılı değil (plan metni tam olarak bunu istiyor —
   marka + CI dışlaması; ağa çıkan testler W0'da uwcem repo'suna gidiyor); README quickstart
   satırları test-pinli değil (W1 kabulü bunu kapsam dışı bırakıyor; [report] satırı var).
+
+## 2026-08-22 — Oturum 13 (Fable): M10h borcu kapandı (CI yeşil) + M10i başladı
+
+### M10h borcu
+- Kullanıcı raporu kabul etti ama milestone'u `[~]`'ye çevirdi: "CI'da yeşil" ölçütü CI'da
+  hiç koşmadan işaretlenemez. Ders kayda geçti: doğrulanmamış ölçüt = `[~]`, istisna açık yazılır.
+- Push (kullanıcı onayı) + draft PR #1 (library-first → master, merge YOK — pull_request
+  tetikleyicisi CI'ı koşturuyor). İlk tur: wheel + windows YEŞİL, iki ubuntu ayağı KIRMIZI —
+  taşınan M6c kodunda platform hatası: `x\y` export adı POSIX'te meşru dosya adı, "plain
+  filename" korkuluğu tetiklenmiyor (kod ilk kez Linux görüyor). Korkuluk her platformda `\`
+  reddedecek şekilde düzeltildi (`efc86dd`). İkinci tur **4/4 YEŞİL**
+  (run 32529033382; wheel 21 sn). Örnek eşikten çekildi: f0 1.0→0.8 MHz, ppw 3.75 (`60b73c1`).
+
+### M10i adım 1 — workers (D32): ölçüm karara üstün geldi, varsayılan 1
+- Tesisat: `Backend.fft` numpy yolunda `_ScipyFFTWithWorkers` (tek nokta; çözücü sıcak
+  döngüsünde dallanma yok); `cupyx.scipy.fft`'de `workers` parametresi YOK (CuPy stable
+  docs'tan doğrulandı: `rfftn(x, s, axes, norm, overwrite_x, *, plan)`) — cupy yolu ham modül.
+  Çözünürlük: `set_cpu_fft_workers()` > `CAUSTICA_CPU_WORKERS` > 1.
+- Ölçüm ortamı (rapor şartı): tam boşta DEĞİL — kullanıcının Edge/dwm süreçlerinden %14–22
+  arka plan yükü (16 mantıksal CPU'nun ~2-3'ü); benim süreçlerimden koşan yoktu (CI izleyicisi
+  yalnız ağ+bekleme). i5-13450HX, 10 çekirdek (6P+4E), 16 mantıksal; scipy 1.15.3.
+- Tarama (medyan adım ms; motor adım karışımı `measure_step_time` ile):
+  | şekil | w=1 | w=2 | w=4 | w=8 | w=16 | w=-1 |
+  |---|---|---|---|---|---|---|
+  | 96³ | 51.2 | 50.3 | 70.2 | 68.6 | 70.7 | 70.6 |
+  | 64×80×100 | 39.0 | 39.1 | 40.2 | 38.7 | 37.3 | 38.6 |
+  | 240×300×360 | 2369 | 2410 | 1600 | 1861 | 2396 | 2388 |
+- Teyit turu iki "sinyali" de ÇÜRÜTTÜ: 96³ w=-1 → 51.8 ms (regresyon yok; ilk turdaki 70 ms
+  gürültüymüş), 240×300×360 w=4 → 2322 ms (1.48× kazanç tekrarlanmadı; w=1 aynı anda 2250 ms).
+  İki tur birlikte: hiçbir worker sayısı KARARLI kazanç vermiyor (bellek bantgenişliği sınırlı
+  + hibrit çekirdek + arka plan gürültüsü). Kullanıcının kendi ölçümü de aynı yönde.
+- KARAR (kullanıcı yetkisi "ölçüm karara üstün gelir"): varsayılan **workers=1**; isteyen
+  `CAUSTICA_CPU_WORKERS` / `set_cpu_fft_workers` ile açar. D32'nin "-1 varsayılan" kararı
+  MILESTONES'ta ölçüm referansıyla düzeltildi. Hızlanma sayısı: **1.00× (tekrarlanabilir
+  kazanç yok)** — beklenen değil, ölçülen.
+- Bit-aynılık kapısı (kullanıcı ölçümüyle uyumlu, SIKI): w=1 vs w=-1 fazor alanları
+  `assert_array_equal` ile BİREBİR — linear 3D + westervelt 3D mini çözümlerde (testli;
+  pocketfft 1-D dilimleri thread'lere dağıtır, toplama sırası değişmez).
+
+### M10i adım 2 — planner CPU kalibrasyonu
+- Önceki durum: `~/.caustica/calibration.json` HİÇ YOKTU (bu makine hiç kalibre edilmemiş).
+- Kalibrasyon yükü: %13.7–18.9 (öncesinde ölçüldü); workers=1 (yeni varsayılan) ile koştu.
+- Yeni cpu girdisi: **a = 2.831e-09, b = 0.0** (48³: 4.12 ms, 72³: 19.86 ms). Sağlama:
+  model 240×300×360 için ~1.8 s öngörüyor, ölçülen 2.25-2.37 s (~%20 altında — iki küçük
+  şekilli fit için makul; eşik 5 dk ölçeğinde bu sapma karar değiştirmez).
