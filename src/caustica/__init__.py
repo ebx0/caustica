@@ -19,6 +19,7 @@ from caustica.core.backend import (
 )
 from caustica.core.grid import Grid
 from caustica.core.pml import PMLSpec
+from caustica.env import env_report, require_gpu
 from caustica.materials import Material, MaterialDB
 from caustica.medium import Medium
 
@@ -35,6 +36,8 @@ __all__ = [
     "__version__",
     "cpu_fft_workers",
     "cupy_available",
+    "env_report",
     "get_backend",
+    "require_gpu",
     "set_cpu_fft_workers",
 ]
