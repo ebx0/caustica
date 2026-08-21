@@ -40,6 +40,7 @@ import subprocess
 import sys
 import time
 import traceback
+import warnings
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -48,7 +49,7 @@ import numpy as np
 
 import caustica
 from caustica.config.job import BuiltJob, build_job, dump_job, load_job
-from caustica.core.backend import get_backend
+from caustica.core.backend import CausticaWarning, get_backend
 from caustica.io.atomic import atomic_write
 from caustica.io.checkpoint import CheckpointSpec, RunInterrupted
 from caustica.io.store import (
@@ -217,6 +218,37 @@ class RunnerOptions:
     status_interval_s: float = 30.0
     vram_limit_gib: float | None = None  # None -> actual device VRAM on cupy
     stop_after_periods: int | None = None  # deterministic stop (tests/ops)
+    allow_slow_cpu: bool = False  # M10i/D20: override the CPU time gate
+
+
+def _cpu_limit_min() -> float:
+    """CPU refusal threshold in minutes (``CAUSTICA_CPU_LIMIT_MIN``, default 5)."""
+    try:
+        return float(os.environ.get("CAUSTICA_CPU_LIMIT_MIN", "5"))
+    except ValueError:
+        return 5.0
+
+
+def _cpu_time_estimate(est, grid_shape: tuple[int, ...], opts: RunnerOptions):
+    """CPU wall-time estimate feeding the D20 gate: ``(seconds, source)``.
+
+    With the default ``measure=True`` the planner already timed ~20 real
+    steps on THIS machine (source ``"measured"``) — trustworthy. With
+    ``--no-measure`` the plan's number targets the ``--gpu`` datasheet, so
+    gating on it would let a 10-hour CPU job through; rescale through the
+    calibrated cpu entry instead. ``None`` when neither exists — the gate
+    then cannot judge and says so instead of pretending.
+    """
+    if opts.measure:
+        return est.t_expected_s, est.source
+    from caustica.planner.calibration import find_calibration_for  # noqa: PLC0415
+    from caustica.planner.model import fft_sizes, step_time  # noqa: PLC0415
+
+    entry = find_calibration_for("cpu")
+    if entry is None:
+        return None
+    _, p_elems, _ = fft_sizes(tuple(grid_shape))
+    return est.steps_expected * step_time(entry["a"], entry["b"], p_elems), "calibrated"
 
 
 def _plan(built: BuiltJob, backend_name: str, opts: RunnerOptions):
@@ -385,6 +417,54 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
             ):
                 print(f"  -> {a}", file=sys.stderr)
             return EXIT_OOM
+
+        # ---- CPU gate (M10i/D20): refuse an hours-long numpy run BEFORE
+        # paying for it; the message names its own escapes. Reuses
+        # EXIT_CONFIG — the exit-code set is the queue's API (no sixth code).
+        if backend_name == "numpy":
+            limit_min = _cpu_limit_min()
+            cpu_est = _cpu_time_estimate(est, built.grid.shape, opts)
+            if cpu_est is None:
+                warnings.warn(
+                    "running on the numpy (CPU) backend with NO wall-time estimate "
+                    "(--no-measure and no cpu calibration): the slow-CPU gate cannot "
+                    "judge this run. Drop --no-measure or run planner.calibrate() once.",
+                    CausticaWarning,
+                    stacklevel=2,
+                )
+            else:
+                t_cpu, cpu_src = cpu_est
+                if t_cpu > limit_min * 60.0 and not opts.allow_slow_cpu:
+                    print(
+                        f"REFUSED before solving: estimated wall time on the numpy (CPU) "
+                        f"backend is ~{t_cpu:.0f} s (~{t_cpu / 3600:.1f} h, estimate source: "
+                        f"{cpu_src}), over the {limit_min:g} min CPU limit.",
+                        file=sys.stderr,
+                    )
+                    print(
+                        "  -> run on a GPU backend (--backend cupy / backend='cupy'), or",
+                        file=sys.stderr,
+                    )
+                    print(
+                        "  -> accept the wait: --allow-slow-cpu (CLI) / allow_slow_cpu=True; "
+                        "the threshold itself is CAUSTICA_CPU_LIMIT_MIN (minutes).",
+                        file=sys.stderr,
+                    )
+                    return EXIT_CONFIG
+                if t_cpu > limit_min * 60.0:
+                    warnings.warn(
+                        f"slow CPU run ACCEPTED via allow_slow_cpu: estimated ~{t_cpu:.1f} s "
+                        f"(~{t_cpu / 3600:.1f} h, source: {cpu_src}) on the numpy backend.",
+                        CausticaWarning,
+                        stacklevel=2,
+                    )
+                else:
+                    warnings.warn(
+                        f"running on the numpy (CPU) backend: estimated ~{t_cpu:.1f} s "
+                        f"(source: {cpu_src}). A GPU backend would be faster for real runs.",
+                        CausticaWarning,
+                        stacklevel=2,
+                    )
     else:
         print(f"(planner models the native engine only; '{built.solver}' runs unplanned)")
 
