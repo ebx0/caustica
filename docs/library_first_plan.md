@@ -339,38 +339,31 @@ bit-identical phasor/p_max for the packaged example; an unsupported input raises
 once per settled period (the T1 regression test); a `kwave` job with `progress=` set does not raise;
 a callback that throws does not fail the run.
 
-### W5 — Bring your own setup (M10m) — **Medium** — 1.5 sessions
+### W5 — Bring your own setup (M10m) — **DONE (2026-08-22)**
 
-The workstream that answers "would a stranger actually use this?". Needs W0c (it returns to
-`config/job.py`).
+Shipped as the `elements` array kind (`arrays/elements.py` + `ElementsArrayConfig`), the two
+kind registries (`config/kinds.py`, entry-point groups `caustica.medium_kinds` /
+`caustica.array_kinds`), `caustica schema`, `docs/job_reference.md`, `docs/conventions.md` and
+the README's "Bring your own setup" section. Gates in MILESTONES §M10m; evidence and the
+outsider rehearsal in the devlog (2026-08-22).
 
-**Files:** `config/job.py`, `arrays/`, `__main__.py`, new `docs/job_reference.md`, new
-`docs/conventions.md`, README.
+Three notes that outlived the plan:
 
-- **`elements` array kind (D27).** Explicit element positions + normals, inline in the job or from
-  an `.npz`/`.csv`, plus element radius and focal length. `TransducerArray`
-  (`arrays/transducer.py:29`) already accepts arbitrary `(n, 3)` positions and normals — only the
-  schema door is missing. Keep the `derived()` pattern the spiral config uses (`job.py:271`): a
-  reload re-derives geometry and the stored numbers exist to falsify a silent library change.
-  Validate what the existing builders validate: matching shapes, no duplicate voxels after
-  voxelization, source clear of the PML.
-- **`caustica schema` (D29)** — emit the `caustica-job/1` JSON Schema, generated from the pydantic
-  models. Never a hand-written second definition.
-- **`docs/job_reference.md`** — every medium kind, every array kind, the drive/run/output sections,
-  each with a working snippet.
-- **`docs/conventions.md`** — the things that make results silently wrong when unknown: phasor
-  convention `p(t)=Re{P·e^{-iωt}}` with outgoing `e^{+ikx}`; Np/m ↔ dB/cm; what `amplitude` means
-  after the `2c·dt/dx` mass-source normalization; the coordinate frame (+z beam axis, apex frame);
-  that the PML is part of the grid.
-- **README Colab quickstart** — `pip install git+…` → packaged example → `caustica report`, no
-  external data, top to bottom.
-
-**Acceptance:** `tests/test_elements_array.py` — a job whose elements come from an `.npz` runs end
-to end and its `derived()` matches on reload. `tests/test_schema_doc.py` — the kind list in
-`caustica schema` output matches the headings in `docs/job_reference.md`, so the document cannot
-rot silently. **Plus a manual outsider rehearsal**: in a clean environment outside the repo, using
-only the README and the job reference, author and run a bowl-in-water scenario; write the steps
-into the devlog. If that rehearsal needs a source dive, the workstream is not done.
+- **The registry work landed HERE, not in M10n.** D27/D29 needed a schema door anyway, so the
+  medium and array axes of K15 were done together with the kind they exist for. M10n inherits
+  only `backend` and `report renderer` — plus `docs/extending.md`, which should be written
+  against the seam that now exists rather than invented.
+- **`roc_mm` is deliberately NOT a field on `ArrayKindConfig`.** Pydantic hoists a base-class
+  field to the front of the field order, which would have changed the key order of the runner's
+  normalized `job.json`. The base asks for a `focal_length_mm()` method instead; a plugin picks
+  its own field name and the bytes stay put.
+- **A kind union cannot be a plain module global.** Pydantic re-resolves a field annotation only
+  when it previously FAILED to resolve, so `model_rebuild(force=True)` after a late
+  `register()` kept the stale union. The registries hand out a deferred annotation
+  (`Annotated[Any, _LazyKindUnion(registry)]`) whose `__get_pydantic_core_schema__` asks the
+  registry at schema-generation time. Error wording, the JSON-Schema `discriminator` mapping and
+  serialization are unchanged. **M10n's backend / report-renderer seams should reuse this
+  registry, not re-derive it.**
 
 ### W6 — Colab bridge (revises M10f) — **Medium**, **Hard** dependency — 1.5 sessions + 1 live session
 
@@ -501,6 +494,23 @@ a rebuild is a failed change, not a migration.
 **T8 — W0 removes a third of the test suite from this repo.** 137 tests move to `uwcem-phantom`.
 Expect the local count to drop from 402 to ~265 and do not read that as regression — but *do* verify
 each moved test still runs in its new home before deleting it here.
+
+**T9 — A registry-built pydantic union cannot be a plain module global.** Pydantic re-resolves a
+field annotation only when it previously *failed* to resolve (`rebuild_model_fields` skips a
+`FieldInfo` whose `_complete` is True), so reassigning the global and calling
+`model_rebuild(force=True)` leaves the model validating against the OLD union — silently, and
+with a correct-looking "expected tags" error that simply omits the new kind. `config/kinds.py`
+solves it with a deferred annotation (`Annotated[Any, _LazyKindUnion(registry)]`) whose
+`__get_pydantic_core_schema__` asks the registry at schema-generation time. **M10n's backend and
+report-renderer seams must reuse `KindRegistry`, not re-derive this.** (Found M10m, 2026-08-22,
+by the plugin test — the in-process registration path is the only one that exposes it; an
+entry-point plugin is discovered before the models are built and would have hidden the bug.)
+
+**T10 — Adding a field to a config base class reorders the JSON.** Pydantic puts base-class
+fields first, including ones a subclass overrides. Hoisting `roc_mm` into `ArrayKindConfig`
+would have changed the key order of the runner's normalized `job.json` copy — an audit artifact.
+Put shared *behaviour* on a base as methods (`focal_length_mm()`); leave shared *data* in the
+subclasses.
 
 ---
 
