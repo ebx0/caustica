@@ -22,10 +22,6 @@ import caustica
 
 
 def build_parser() -> argparse.ArgumentParser:
-    # Lazy: keeps `python -m caustica --help` from importing the report
-    # package (numpy metrics + preview) just to read one default name.
-    from caustica.report.renderers import DEFAULT_RENDERER  # noqa: PLC0415
-
     p = argparse.ArgumentParser(
         prog="caustica",
         description="caustica job tools (job format: caustica-job/1)",
@@ -137,8 +133,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     rep.add_argument(
         "--renderer",
-        default=DEFAULT_RENDERER,
-        help=f"which registered report renderer to use (default: {DEFAULT_RENDERER}); "
+        default=None,
+        help="which registered report renderer to use (default: matplotlib); "
         "third-party renderers arrive through the 'caustica.report_renderers' "
         "entry-point group",
     )
@@ -225,10 +221,18 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(job_schema(), indent=None if args.compact else 2, sort_keys=False))
         return 0
     if args.command == "report":
-        from caustica.report.renderers import render_report
+        # Imported HERE, not at parser-build time: `caustica.report.renderers`
+        # pulls in `caustica.report`, whose __init__ eagerly imports the numpy
+        # metrics and preview modules. Reading one default name there doubled
+        # startup for EVERY command, `--help` included (M10n review).
+        from caustica.report.renderers import DEFAULT_RENDERER, render_report
 
         try:
-            html = render_report(args.outdir, preview_only=args.preview, renderer=args.renderer)
+            html = render_report(
+                args.outdir,
+                preview_only=args.preview,
+                renderer=args.renderer or DEFAULT_RENDERER,
+            )
         except Exception as exc:
             # A half-synced preview.npz or torn result.h5 is the NORMAL
             # failure mode on a Drive mount — the report command must say

@@ -39,6 +39,10 @@ class SolverRegistry(PluginRegistry[type[SolverBase]]):
         else:
             log.warning("%s plugin '%s' is not a SolverBase subclass; ignored", self.group, ep_name)
 
+    def collision_message(self, name: str, held: Any) -> str:
+        # "solver NAME '...'": the pre-M10n wording, kept verbatim.
+        return f"solver name '{name}' already registered by {held.__name__}"
+
 
 #: The registry the built-in solvers register into (no private path).
 solver_registry = SolverRegistry("solver", SOLVER_GROUP)

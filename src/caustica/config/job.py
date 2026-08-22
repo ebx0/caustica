@@ -707,7 +707,14 @@ class ExplicitJobConfig(CausticaModel):
     drive: DriveConfig
     run: RunConfig = Field(default_factory=RunConfig)
     solver: str = "westervelt"
-    backend: str = "auto"
+    backend: str = Field(
+        "auto",
+        description=(
+            "'auto' | 'numpy' | 'cupy' | any name registered through the "
+            "'caustica.backends' entry-point group (docs/extending.md)"
+        ),
+        json_schema_extra={"examples": ["auto", "numpy", "cupy"]},
+    )
     output: OutputConfig = Field(default_factory=OutputConfig)
 
     @field_validator("backend")

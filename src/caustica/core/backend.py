@@ -247,7 +247,7 @@ def get_backend(name: str = "auto") -> Backend:
     """
     if name == "auto":
         if cupy_available():
-            return backends.get("cupy")()
+            return _checked("cupy", backends.get("cupy"))
         global _AUTO_FALLBACK_WARNED
         if not _AUTO_FALLBACK_WARNED:
             # ONCE per process (D33): the old INFO log had no handler and was
@@ -262,9 +262,37 @@ def get_backend(name: str = "auto") -> Backend:
                 stacklevel=2,
             )
         log.info("backend auto-select: no CUDA GPU found, using numpy (CPU).")
-        return backends.get("numpy")()
+        return _checked("numpy", backends.get("numpy"))
     try:
         factory = backends.get(name)
     except UnknownPluginError:
         raise _unknown_backend(name) from None
-    return factory()
+    return _checked(name, factory)
+
+
+def _checked(name: str, factory: Any) -> Backend:
+    """Call a registered factory and hold it to the contract.
+
+    Both checks exist because the closed ``Literal`` used to make them
+    unreachable (M10n review). Everything downstream — the run stamp in
+    ``run_meta.json``, the ``backend`` attr in ``result.h5``, the checkpoint
+    fingerprint that decides whether a resume is the SAME run — reads
+    ``Backend.name``, never the name that was asked for. A factory whose
+    name disagrees with its registry key would therefore mislabel a run and
+    let a checkpoint written under one backend resume as another, with
+    nothing to notice it.
+    """
+    backend = factory()
+    if not isinstance(backend, Backend):
+        raise TypeError(
+            f"backend factory for '{name}' returned {type(backend).__name__}, "
+            f"not a caustica.core.backend.Backend"
+        )
+    if backend.name != name:
+        raise ValueError(
+            f"backend factory for '{name}' returned a Backend named "
+            f"{backend.name!r}. The registry key and Backend.name must match: "
+            f"the run stamp, the result file and the checkpoint fingerprint all "
+            f"record Backend.name, so a mismatch mislabels the run."
+        )
+    return backend
