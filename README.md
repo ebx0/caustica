@@ -50,6 +50,9 @@ Two documents are the contract, and both are kept honest by tests:
   result *silently* wrong if you assume otherwise: the phasor convention
   `p(t) = Re{P·e^(-iωt)}`, Np/m vs dB/cm, what `amplitude` actually means, the
   `+z` beam-axis frame, and that the PML is inside `grid.size_mm`.
+- **[docs/extending.md](docs/extending.md)** — the five extension points
+  (solver, medium kind, array kind, backend, report renderer), their frozen
+  entry-point group names, and a copy-paste plugin package that uses all five.
 
 Edit the packaged example, or start from the two entry points below.
 

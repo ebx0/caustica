@@ -53,9 +53,10 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--out", type=Path, default=None, help="output folder (default: runs/<name>)")
     r.add_argument(
         "--backend",
-        choices=("auto", "numpy", "cupy"),
         default=None,
-        help="override the job's backend field",
+        help="override the job's backend field: auto | numpy | cupy | any backend "
+        "registered through the 'caustica.backends' entry-point group. An "
+        "unregistered name is refused before the run, listing what IS registered",
     )
     r.add_argument("--gpu", default="A100", help="GPU for the datasheet estimate")
     r.add_argument("--no-measure", action="store_true", help="skip the ~20-step timing probe")
