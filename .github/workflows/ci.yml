@@ -17,6 +17,12 @@ jobs:
           # Prove the requires-python >=3.10 floor on one cheap leg.
           - os: ubuntu-latest
             python-version: "3.10"
+          # The environment the library is ACTUALLY run in: Colab ships
+          # 3.13 (measured 3.13.15, first GPU session 2026-08-22). Testing
+          # 3.10 and 3.12 while every real run happens on 3.13 left the
+          # working environment untested.
+          - os: ubuntu-latest
+            python-version: "3.13"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -57,3 +63,14 @@ jobs:
           /tmp/cleanenv/bin/caustica example water_bowl_mini --to /tmp/exdir
           /tmp/cleanenv/bin/caustica validate /tmp/exdir/water_bowl_mini.json
           /tmp/cleanenv/bin/caustica run --dry-run /tmp/exdir/water_bowl_mini.json
+      # Fix A1: a wheel install has no checkout, so the commit must come from
+      # the stamp the build froze in. This is the Colab case exactly - before
+      # it, every run there was stamped "unknown".
+      - name: The wheel's run_meta carries a real commit (no repo in sight)
+        run: |
+          cd /tmp
+          /tmp/cleanenv/bin/caustica run /tmp/exdir/water_bowl_mini.json --no-measure --no-progress --out /tmp/exrun
+          HEAD=$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)
+          STAMPED=$(python -c "import json; print(json.load(open('/tmp/exrun/run_meta.json'))['git_commit'])")
+          echo "stamped=$STAMPED  head=$HEAD"
+          test "$STAMPED" = "$HEAD"
