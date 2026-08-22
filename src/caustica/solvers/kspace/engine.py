@@ -32,12 +32,15 @@ all integer harmonics leakage-free in one pass).
 from __future__ import annotations
 
 import logging
+import time
+import warnings
+from collections.abc import Callable
 from itertools import product
 from math import ceil, floor
 
 import numpy as np
 
-from caustica.core.backend import get_backend
+from caustica.core.backend import CausticaWarning, get_backend
 from caustica.core.grid import Grid
 from caustica.io.checkpoint import (
     CheckpointSpec,
@@ -138,6 +141,7 @@ def run_cw_kspace_pstd(
     nonlinear: bool = False,
     harmonics: tuple[int, ...] = (1,),
     checkpoint: CheckpointSpec | None = None,
+    progress: Callable[[dict], None] | None = None,
 ) -> SolverResult:
     """Execute one steady-state CW solve (see module docstring for the scheme).
 
@@ -147,6 +151,27 @@ def run_cw_kspace_pstd(
     resumes from it instead of starting over, and the file is removed on
     completion. ``checkpoint.stop_when`` turns the same machinery into a
     graceful session-budget stop (:class:`~caustica.io.checkpoint.RunInterrupted`).
+
+    ``progress`` is called with ONE dict per period boundary and once more at
+    the settle -> record transition — never per step, which would force a
+    device->host sync every step and destroy GPU throughput. The payload is
+    the library-wide progress contract (PLAN.md section 8)::
+
+        {period, periods_expected, step, steps_expected, peak,
+         converge_delta, elapsed_s, eta_s, stage}   # stage: settle | record
+
+    plus one key that is deliberately NOT part of the serializable contract:
+    ``snapshot``, a zero-argument callable returning a 2-D (1-D in 1-D) slice
+    of the live pressure field through ``reference_point``. It is lazy on
+    purpose — the copy happens only if the consumer asks, so a consumer that
+    renders a mid-run preview every N periods pays exactly one device->host
+    copy on those periods and nothing on the others. Consumers that serialize
+    the payload (``status.json``, a GUI socket) drop the key.
+
+    Progress is independent of ``checkpoint``: an in-memory run (the facade's
+    ``out=None``) has no checkpoint and still reports. A callback that raises
+    warns once and the solve continues — a broken notebook widget must not
+    cost hours of compute.
     """
     harmonics = tuple(dict.fromkeys(int(h) for h in harmonics))
     if not harmonics or harmonics[0] != 1 or any(h < 1 for h in harmonics):
@@ -219,6 +244,15 @@ def run_cw_kspace_pstd(
 
     # ---- time of flight: farthest reference the wave must reach ----
     tof_periods = cw_tof_periods(grid, medium, source, reference_point)
+
+    # Settling bounds are derived here (not in the loop below) because the
+    # progress payload has to quote them before the first period runs.
+    # The convergence test must not arm before the source ramp has ended:
+    # the flattening cosine-ramp tail can dip below convergence_tol while
+    # the drive is still rising (review finding, 2026-08-11; the k-Wave
+    # adapter's fixed schedule already guards this).
+    eff_min = tof_periods + max(spec.min_settle_periods, int(ceil(source.ramp_periods)) + 1)
+    eff_max = max(tof_periods + spec.max_settle_periods, eff_min)
 
     # ---- convergence monitoring region (interior, PML shaved) ----
     margin = grid.pml_vox + 2
@@ -296,8 +330,78 @@ def run_cw_kspace_pstd(
             fingerprint=fingerprint,
         )
 
+    # ---- progress reporting (independent of checkpointing) ----
+    periods_expected = eff_max
+    if spec.t_end_min_us is not None:
+        periods_expected = max(
+            periods_expected, ceil(spec.t_end_min_us * 1e-6 / period) - spec.n_record_periods
+        )
+    periods_expected += spec.n_record_periods
+    steps_expected = periods_expected * spp
+    t_progress0 = time.monotonic()
+    steps_at_start = n  # resume offset: ETA measures THIS session's cadence
+    last_peak: float | None = prev_peak
+    last_delta: float | None = None
+    progress_warned = False
+
+    def _snapshot() -> np.ndarray:
+        """ONE device->host copy: the live field sliced through the reference.
+
+        Lazy by contract — the consumer decides how often a mid-run preview
+        is worth a copy, the engine only offers the array (the renderer lives
+        outside the solver, see :mod:`caustica.progress`).
+        """
+        if nd == 1:
+            return b.to_numpy(p[active[0]])
+        if nd == 2:
+            return b.to_numpy(p[active[0], active[1]])
+        j = int(reference_point[1]) if reference_point is not None else grid.shape[1] // 2
+        return b.to_numpy(p[active[0], j, active[2]])
+
+    def _emit_progress(stage_now: str) -> None:
+        """One payload per period boundary; a broken consumer never stops us."""
+        if progress is None:
+            return
+        nonlocal progress_warned
+        elapsed = time.monotonic() - t_progress0
+        done = n - steps_at_start
+        eta = None
+        if done > 0 and steps_expected > n:
+            eta = round((steps_expected - n) * (elapsed / done), 1)
+        try:
+            progress(
+                {
+                    "period": periods_done,
+                    "periods_expected": periods_expected,
+                    "step": n,
+                    "steps_expected": steps_expected,
+                    "peak": last_peak,
+                    "converge_delta": last_delta,
+                    "elapsed_s": round(elapsed, 3),
+                    "eta_s": eta,
+                    "stage": stage_now,
+                    "snapshot": _snapshot,  # NOT serializable; see the docstring
+                }
+            )
+        except Exception as exc:  # noqa: BLE001 - a widget must not kill a solve
+            if not progress_warned:
+                progress_warned = True
+                warnings.warn(
+                    f"progress callback raised {type(exc).__name__}: {exc}. The solve "
+                    f"continues; further progress failures are silent.",
+                    CausticaWarning,
+                    stacklevel=2,
+                )
+
     def _period_boundary() -> None:
-        """Checkpoint cadence + graceful-stop poll, once per settled period."""
+        """Progress + checkpoint cadence + graceful-stop poll, once per period.
+
+        Progress comes FIRST and unconditionally: this call site used to
+        return immediately when no checkpoint was configured, which made a
+        callback added here invisible to exactly the in-memory notebook run
+        it exists for (trap T1 in docs/library_first_plan.md).
+        """
+        _emit_progress("settle")
         if checkpoint is None:
             return
         stop = checkpoint.stop_when is not None and checkpoint.stop_when()
@@ -333,12 +437,6 @@ def run_cw_kspace_pstd(
         )
 
     # ---- settle until the per-period peak stops moving ----
-    # The convergence test must not arm before the source ramp has ended:
-    # the flattening cosine-ramp tail can dip below convergence_tol while
-    # the drive is still rising (review finding, 2026-08-11; the k-Wave
-    # adapter's fixed schedule already guards this).
-    eff_min = tof_periods + max(spec.min_settle_periods, int(ceil(source.ramp_periods)) + 1)
-    eff_max = max(tof_periods + spec.max_settle_periods, eff_min)
     if converged_period is None:
         converged_period = eff_max
     period_idx = periods_done  # 0 fresh; the resumed period count otherwise
@@ -351,15 +449,11 @@ def run_cw_kspace_pstd(
             xp.maximum(period_peak, xp.abs(p[conv]).max(), out=period_peak)
         peak = float(period_peak)
         periods_done = period_idx
+        rel = abs(peak - prev_peak) / max(prev_peak, 1e-9) if prev_peak is not None else None
+        last_peak, last_delta = peak, rel
         if period_idx >= tof_periods:
-            rel = (
-                abs(peak - prev_peak) / max(prev_peak, 1e-9)
-                if prev_peak is not None
-                else float("nan")
-            )
-            history.append((period_idx, peak, rel))
-        if period_idx >= eff_min and prev_peak is not None:
-            rel = abs(peak - prev_peak) / max(prev_peak, 1e-9)
+            history.append((period_idx, peak, float("nan") if rel is None else rel))
+        if period_idx >= eff_min and rel is not None:
             if peak > 0.0 and rel < spec.convergence_tol:
                 converged_period = period_idx
                 converged = True
@@ -378,13 +472,18 @@ def run_cw_kspace_pstd(
             _period_boundary()
 
     # ---- record window: leakage-free single-bin DFTs + time peak ----
-    if checkpoint is not None and stage == "settle":
-        # Snapshot the exact pre-record state: a kill DURING the (short)
-        # record window resumes by redoing the window from here, bit-exact.
+    if stage == "settle":
+        # The stage flip is reported whether or not a checkpoint exists (T1):
+        # "settling done, recording now" is the one transition a watcher
+        # needs, and an in-memory run has no checkpoint at all.
         stage = "record"
-        _write_ckpt("record")
-        if checkpoint.stop_when is not None and checkpoint.stop_when():
-            raise RunInterrupted(checkpoint.path, "record", periods_done, n)
+        _emit_progress("record")
+        if checkpoint is not None:
+            # Snapshot the exact pre-record state: a kill DURING the (short)
+            # record window resumes by redoing the window from here, bit-exact.
+            _write_ckpt("record")
+            if checkpoint.stop_when is not None and checkpoint.stop_when():
+                raise RunInterrupted(checkpoint.path, "record", periods_done, n)
     rec_steps = spec.n_record_periods * spp
     buffers = {h: xp.zeros(p[rec].shape, dtype=xp.complex64) for h in harmonics}
     pmax = xp.zeros(p[rec].shape, dtype=xp.float32)

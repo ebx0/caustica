@@ -10,6 +10,7 @@ nonlinear update entirely. The engine docstring documents the numerics
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from caustica.core.grid import Grid
@@ -44,6 +45,7 @@ class LinearKSpacePSTD(SolverBase):
         reference_point: tuple[int, ...] | None = None,
         harmonics: tuple[int, ...] = (1,),
         checkpoint: CheckpointSpec | None = None,
+        progress: Callable[[dict], None] | None = None,
         **kwargs: Any,
     ) -> SolverResult:
         if kwargs:
@@ -62,4 +64,5 @@ class LinearKSpacePSTD(SolverBase):
             nonlinear=False,
             harmonics=harmonics,
             checkpoint=checkpoint,
+            progress=progress,
         )
