@@ -1419,3 +1419,87 @@ PM sistemi MILESTONES.md. Bu tur kod değil, plan/temizlik turuydu:
   **M10n**). Panzehir kuralı: çekirdek kendi plugin API'sinin birinci müşterisi.
 - **uwcem-phantom push kararı**: şimdilik YEREL (tek kopya riski kullanıcıya söylendi, kabul).
 - Sıra onaylandı: M10m → M10n → M10j → M10l → M10f → ilk Colab oturumu → M10g → UWCEM kalanları.
+
+## 2026-08-22 — M10m: kendi kurulumunu getir (elements kind + kind registry'leri + şema + dokümanlar)
+
+Kabul sorusu: *hiç tanımadığımız bir araştırmacı kendi problemini koşabiliyor mu?* Bu tur o
+sorunun üç ayağını kapattı: transducer tarafında açık eleman tablosu, iki kind ekseninin
+registry'ye dönmesi, ve şemayı okumak için pydantic kaynağına inme zorunluluğunun kalkması.
+
+### Yapılanlar
+- **`config/kinds.py`** — `KindRegistry` (çözücü registry'sinin kalıbı) + `MediumKindConfig` /
+  `ArrayKindConfig` tabanları + `MediumPrep`. Entry-point grupları `caustica.medium_kinds` ve
+  `caustica.array_kinds`. Union **kayıt sırasından** kuruluyor (alfabetik DEĞİL) — pydantic
+  beklenen-etiket metni bu yüzden bit-aynı kaldı.
+- **`elements` array kind'ı** + `arrays/elements.py`: `.npz` (`positions`, opsiyonel `normals`)
+  ve 3/6 sütunlu `.csv` okuyucusu, `elements_array()` kurucusu. Normaller opsiyonel — yoksa her
+  eleman `(0,0,roc_mm)`'ye bakar. Job tarafı mm, Python tarafı m; 1 m'yi aşan açıklık "unit
+  mistake" diye reddediliyor.
+- **`caustica schema`** (+ `--kinds`, `--compact`): `job_schema()` pydantic'ten üretiyor.
+- **`docs/job_reference.md`** ve **`docs/conventions.md`**; README'ye "Bring your own setup".
+
+### Üç tasarım kararı
+1. **`isinstance` yerine seam metodları.** `_build_explicit` artık `provides_grid` +
+   `prepare()` (grid'i dosyadan veren kind'lar için) ve `resolve_paths()` üzerinden çalışıyor.
+   `MediumPrep.build_medium()` tek atımlık: çağrılınca kind'ın hacme olan referansını BIRAKIYOR
+   — eski koddaki `del volume` davranışının seam'e taşınmış hâli (tam boy fantomda GB'lar).
+2. **`roc_mm`'yi tabana ALMADIM.** Pydantic taban sınıfta tanımlanan alanı en öne alıyor; bu,
+   runner'ın yazdığı normalize `job.json` içindeki anahtar SIRASINI değiştirirdi. Bunun yerine
+   taban `focal_length_mm()` metodu istiyor — plugin kendi alan adını seçebiliyor, baytlar aynı.
+3. **Ertelenmiş anotasyon (`_LazyKindUnion`).** İlk hâlde union modül-global'iydi; geç kayıt
+   (notebook'ta tanımlanan kind, ya da testin zorladığı yeniden tarama) sonrası
+   `model_rebuild(force=True)` union'ı GÜNCELLEMİYORDU. Sebep pydantic 2.13'te net:
+   `rebuild_model_fields` yalnız `field_info._complete is False` olan alanı yeniden çözüyor —
+   ilk seferde başarıyla çözülmüş bir anotasyon bir daha okunmuyor. Çözüm: alan
+   `Annotated[Any, _LazyKindUnion(registry)]` ile işaretli; `__get_pydantic_core_schema__` her
+   şema üretiminde registry'ye soruyor. Hata metni, JSON Schema `discriminator` haritası ve
+   serileştirme aynı kaldı (prototiple doğrulandı, sonra süitle).
+
+### Kanıtlar
+- Süit **279 → 311** (309 passed / 2 skipped / 0 failed). Yeni: `test_elements_array.py` (12),
+  `test_kind_registry.py` (7), `test_schema_doc.py` (13).
+- **Altın karşılaştırma**: M10m öncesi commit bir worktree'ye alındı; üç job (bowl/homojen,
+  spiral/scene, spiral/steered) için normalize `job.json` baytları, `derived` anahtar SIRASI ve
+  değerleri, `focus_vox`, kaynak voxel sayısı, faz toplamı, `validate` çıktısı ve sekiz farklı
+  hata metni iki sürümde üretilip diff'lendi. **Tek fark**: array beklenen-etiket listesi
+  `'elements'` kazandı. Medium etiket listesi, PML reddi, scene etiket reddi, `extra_forbidden`,
+  format reddi, steered-bowl reddi — hepsi kelimesi kelimesine aynı.
+- **Doküman çürümesi mutasyonla sınandı**: `### \`bowl\`` başlığı `bowls` yapılınca ve bir
+  parçada `active_fraction` → `activ_fraction` yazılınca süit kırmızıya döndü, sonra geri alındı.
+- **`import caustica`**: 210.6 ms → 207.0 ms (medyan, 9 alt-süreç; gürültü içinde). Entry-point
+  taraması tek başına 2.9 ms ve YALNIZCA `caustica.config.job` import edilince koşuyor —
+  `test_import_caustica_does_not_scan_entry_points` bunu yapısal olarak sabitliyor.
+
+### Yabancı-kullanıcı provası (adım adım)
+Repo dışında, `%TEMP%\...\outsider` altında **temiz venv** (sistem Python 3.12), wheel kurulumu
+`pip install C:\Users\bulbu\Desktop\hifusim`. Sonra YALNIZCA README + `docs/job_reference.md`
+okunarak:
+1. `water_bowl.json` elle yazıldı — homojen su (β=3.5, α=0.025 Np/m), dx 0.25 mm,
+   20×20×28 mm, PML 2.5 mm, bowl d=12 mm / ROC 16 mm, apex (10,10,4) mm, 1 MHz / 200 kPa,
+   harmonics [1,2], westervelt.
+2. `caustica validate water_bowl.json` → OK, uyarı yok (ppw 6.00, 80×80×112).
+3. `caustica run --dry-run` → planner ~9 s (measured), 0.08 GiB.
+4. `caustica run` → 9.1 s, 252 adım, period 19'da yakınsadı, tepe |P| = 1.337 MPa.
+5. `caustica report` → **ImportError: matplotlib yok** (kurulumu `[report]` extra'sız yapmıştım;
+   mesaj tam olarak ne yapılacağını söyledi). `pip install "caustica[report] @ file://..."`
+   sonrası `index.html` + dört figür.
+6. Kendi tablomu getirdim: 16 elemanlı halka `my_array.npz` (mm, apex çerçevesi) →
+   `{"kind":"elements","file":"my_array.npz","elem_radius_mm":1.0,"roc_mm":16.0}` + steered
+   odak → validate OK → 9.7 s koşu → rapor. `run_meta.derived`: `n_elements 16`,
+   `elements_represented 16`, `f_number 1.6`.
+7. **Pozitif kontrol** (dokümanın L1 kesitinden): `archimedean_spiral(...)` ile 24 elemanlı dizi
+   kurulup eleman tablosu `.npz`'ye yazıldı ve AYNI job iki kez koşuldu — bir kez
+   `archimedean_spiral` kind'ıyla, bir kez o tabloyu okuyan `elements` kind'ıyla. Sonuç:
+   tepe basınç `678863.1 Pa` (ikisinde de, son haneye kadar), aynı voxel, aynı `derived`,
+   aynı 995 kaynak voxeli. Yeni kapı doğrulanmış kapıyla bit-aynı alan üretiyor.
+
+**Kaynak koda inmem gerekmedi.** Tek eksik nokta: pozitif kontrolde `TransducerArray.positions`
+/ `.elem_radius` alanlarını okumak istedim, bu ikisi hiçbir dokümanda yazılı değildi (API
+şeklinden çıkardım) — `job_reference.md`'nin `elements` bölümüne bir satır eklendi.
+
+**Fizik notu (bug değil):** üç kurulumda da tepe geometrik odağın ÖNÜNDE çıkıyor (bowl: apex'ten
+12 mm, odak 16 mm). Bu düşük kazançlı O'Neil davranışı — a/λ = 4, eksenel −6 dB genişliği
+15.5 mm. `bowl` (doğrulanmış kind) ve `elements` aynı kaymayı gösteriyor; halka dizide daha
+belirgin, çünkü halka eksende her noktaya eşit uzaklıkta olduğundan eksenel odaklama yapmaz,
+yalnız 1/r düşüşü kalır. `metrics.json` bunu `hit_ratio` + `displacement_norm_mm` ile dürüstçe
+raporluyor.
