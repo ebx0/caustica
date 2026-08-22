@@ -12,7 +12,9 @@ to run identically on a local workstation and on Google Colab (T4/L4/A100/H100).
 > `hifusim`; renamed to `caustica` before the first public release (2026-08-21).
 > See [MILESTONES.md](MILESTONES.md) for the roadmap
 > with per-milestone acceptance criteria and current progress, [PLAN.md](PLAN.md) for the
-> architecture plan, and [docs/devlog.md](docs/devlog.md) for the engineering log.
+> architecture plan, [docs/job_reference.md](docs/job_reference.md) +
+> [docs/conventions.md](docs/conventions.md) for the job format and its conventions, and
+> [docs/devlog.md](docs/devlog.md) for the engineering log.
 
 ## Quickstart (no checkout, no external data)
 
@@ -32,6 +34,63 @@ would write into `site-packages`. The `[report]` extra pulls matplotlib for
 install. GPU (CuPy) support is packaged (`pip install "caustica[gpu]"`) but
 **not yet verified on real hardware** — every solver result above is
 CPU-validated (see [MILESTONES.md](MILESTONES.md), M7).
+
+Runs identically in a Colab cell (prefix each line with `!`); the same four
+commands are the whole workflow.
+
+## Bring your own setup
+
+Two documents are the contract, and both are kept honest by tests:
+
+- **[docs/job_reference.md](docs/job_reference.md)** — every field of the job
+  file: each medium kind, each array kind, drive / run / output, with a working
+  snippet per kind. `caustica schema` prints the same thing as JSON Schema,
+  generated from the models.
+- **[docs/conventions.md](docs/conventions.md)** — the five things that make a
+  result *silently* wrong if you assume otherwise: the phasor convention
+  `p(t) = Re{P·e^(-iωt)}`, Np/m vs dB/cm, what `amplitude` actually means, the
+  `+z` beam-axis frame, and that the PML is inside `grid.size_mm`.
+
+Edit the packaged example, or start from the two entry points below.
+
+**Your transducer** — an explicit element table (`.npz`, `.csv` or inline),
+millimetres in the apex frame; normals optional (omit them and every element
+aims at the geometric focus):
+
+```json
+"source": {
+  "kind": "array",
+  "array": {"kind": "elements", "file": "my_array.npz",
+            "elem_radius_mm": 1.2, "roc_mm": 12.0},
+  "apex_mm": [9.0, 9.0, 6.0]
+}
+```
+
+```python
+import numpy as np
+np.savez("my_array.npz", positions=positions_mm)   # (n, 3); optional: normals=...
+```
+
+**Your medium** — a `medium_volume` `.npz` carrying labels + a material table
+(or dense per-voxel `c`/`rho`/`alpha`/`beta`). The file fixes shape and `dx`, so
+the job carries no `grid` section:
+
+```json
+"medium": {"kind": "medium_volume", "file": "my_medium.npz", "pml_mm": 5.0}
+```
+
+```python
+from caustica.io import write_medium_volume
+write_medium_volume("my_medium.npz", dx=0.5e-3, labels=labels, materials=db)
+```
+
+`caustica validate my_job.json` checks all of it — schema, files, geometry, PML
+clearance, focus placement, points-per-wavelength — before a GPU is booked.
+
+Neither axis is a closed list: medium kinds and array kinds are registries with
+entry-point groups (`caustica.medium_kinds`, `caustica.array_kinds`), so a
+package can add its own without touching caustica — see the end of the job
+reference.
 
 ## Solvers (one API, a registry of engines)
 
@@ -82,7 +141,7 @@ medium = scene.to_medium(grid, breast_default(), supersample=3)
 scenes serialize to JSON (`SceneConfig`) with imported files kept as references
 (CSG trees, affine transforms and half-spaces included).
 
-## Bring your own volume (`medium_volume`)
+## Volume media and anatomical phantoms
 
 Volume media enter caustica through ONE door: a `medium_volume` `.npz`
 carrying a label map + a `MaterialDB` (or dense per-voxel `c`/`rho`/`alpha`/
@@ -153,9 +212,11 @@ src/caustica/
   core/       # Grid, PML, backend dispatch (numpy|cupy)
   config/     # Pydantic models: strict fields, mm-in / voxels-derived, JSON round-trip
               # + job.py: the caustica-job/1 schema one JSON = one full run
+              # + kinds.py: medium/array kind registries (entry-point plugin seam)
   materials.py, medium.py, sources.py, spectral.py
   analytic/   # Rayleigh, O'Neil, Fubini, cap sampling — the ground-truth layer
-  arrays/     # transducer geometry (Archimedean spiral), DAS phasing, voxelization
+  arrays/     # transducer geometry (spiral, explicit element tables), DAS phasing,
+              # voxelization
   geometry/   # CSG shapes, scenes, label-volume import + dx-resampling
   planner/    # pre-run VRAM + wall-time estimates (db | calibrated | measured)
   solvers/    # registry + capability declarations; kspace engine; kwave adapter
@@ -164,7 +225,7 @@ src/caustica/
   report/     # focal metrics (single source of truth), <=10 MB preview package,
               # figures + HTML report rendering
   runner.py   # plan-first job execution: disjoint exit codes, heartbeat, resume
-  __main__.py # the CLI: python -m caustica {validate | run | report}
+  __main__.py # the CLI: python -m caustica {validate | run | report | schema | example}
 apps/            # focus study (library consumer; not in the wheel)
 tests/        # pytest; CPU-only by default; kwave/gpu tests auto-skip
 scripts/      # validation-report generator
@@ -184,6 +245,9 @@ python -m caustica run job.json --allow-slow-cpu   # accept a CPU run the 5-min 
 python -m caustica run job.json --preview-only     # skip result.h5: preview + metrics only
 python -m caustica report out/                # local HTML + figures from result.h5
 python -m caustica report out/ --preview      # quick look from the <=10 MB preview only
+python -m caustica schema                     # the caustica-job/1 JSON Schema, generated
+python -m caustica schema --kinds             # which medium/array kinds are registered
+python -m caustica example                    # list the packaged zero-data example jobs
 ```
 
 On CPU, a native run first prints the plan (wall-time estimate, memory, the
@@ -200,7 +264,7 @@ git clone https://github.com/ebx0/caustica && cd caustica
 python -m venv .venv
 .venv/Scripts/python -m pip install -e .[dev,kwave]   # kwave extra optional
 .venv/Scripts/python -m pytest
-.venv/Scripts/python -m ruff check src tests apps uwcem_phantoms
+.venv/Scripts/python -m ruff check src tests apps
 ```
 
 Extras: `[gpu]` (CuPy/CUDA 12 backend), `[kwave]` (the k-Wave reference solver),
