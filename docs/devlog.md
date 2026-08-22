@@ -1510,3 +1510,77 @@ olduğu için `git status` uyarmıyor).
 belirgin, çünkü halka eksende her noktaya eşit uzaklıkta olduğundan eksenel odaklama yapmaz,
 yalnız 1/r düşüşü kalır. `metrics.json` bunu `hit_ratio` + `displacement_norm_mm` ile dürüstçe
 raporluyor.
+
+### M10m gözden geçirme turu — iki mercek, altı gerçek bulgu
+
+İki bağımsız tur koşturuldu: (a) "mevcut davranış sessizce bozuldu mu?" (diferansiyel harness:
+M10m öncesi ağaç bir scratch dizine çıkarılıp ~60 senaryo iki sürümde bayt bayt karşılaştırıldı),
+(b) şüpheci doğrulayıcı (her iddiayı ÇÜRÜTMEYE çalışan). İkisi de değer üretti.
+
+**Çürütülen iddia (en önemli bulgu).** "Eleman tablosu diskte değişirse yeniden yükleme yakalar"
+YANLIŞTI. `derived()`'in sayıları sıra istatistiği: `n_elements`, `r_max_mm`, `shell_depth_mm` —
+`elem_radius_mm` config'ten kopya, `f_number` ve `half_angle_deg` ise bu ikisinin cebiri. Doğrulayıcı
+asimetrik bir tabloyla diskte dört mutasyon yaptı ve dördü de kontrolden GEÇTİ:
+
+| diskteki mutasyon | kontrol | odak |P| | alan bağıl L2 |
+|---|---|---|---|
+| x aynalama | KAÇIRDI | 84.68 kPa | %53.0 |
+| 37° döndürme | KAÇIRDI | 84.03 kPa | %59.1 |
+| r_max hariç hepsini yeniden saçma | KAÇIRDI | 72.65 kPa | %57.9 |
+| iki elemanın yarıçapını takas | KAÇIRDI | 83.58 kPa | %47.9 |
+
+(taban 84.64 kPa). Ayrıca yalnız-normal değişiklikleri ve satır sırası + `phases_rad` bileşimi de
+görünmezdi. Onarım: `table_sha256` — pozisyon+normal içeriğinin özeti. **Dosyanın değil
+GEOMETRİNİN** özeti, çünkü aynı dizinin inline / `.npz` / `.csv` hâlleri aynı özeti vermeli, ve
+geometrisi değişmeden baytları değişen bir dosya sapma değildir. `check_derived` sayısal olmayan
+değerler için tam eşitlik dalı kazandı. Diğer array kind'larına özet EKLENMEDİ: onların geometrisi
+zaten job'daki birkaç sayıdan üretiliyor, açıklığı sabitlemek transducer'ı sabitliyor (ve eklemek
+mevcut `run_meta.derived` baytlarını değiştirirdi).
+
+**Diğer beş bulgu.**
+1. `f_number: Infinity` — eksen üstü tabloda `run_meta.json` JSON olmayan bir token yazıyordu
+   (Python okur; `JSON.parse`, `jq`, Go, serde reddeder). Artık anahtar yazılmıyor.
+2. **Plugin kurmak caustica'nın kendi süitinden ALTI testi düşürüyordu** — registry'nin var olma
+   sebebi, onu etkinleştiren kütüphanenin süitini bozuyordu. Üçü registry'nin tam içeriğini,
+   üçü de "referans her kayıtlı kind'ı belgelemeli"yi iddia ediyordu (bir yabancının paketini
+   bizim dokümanımız belgeleyemez). `core_kinds()` (tanımlandığı modüle bakar) ile onarıldı;
+   gerçek bir plugin `PYTHONPATH`'te iken tam süit koşturularak doğrulandı.
+3. `importlib.reload(caustica.config.job)` patlıyor ve modülü YARI değiştirilmiş bırakıyordu
+   (`DriveConfig` yeni, `ExplicitJobConfig` bayat; reload sonrası bir örnek artık `isinstance`
+   değil, ve hiçbir yerde hata yok). Sebep: kimlik tabanlı çakışma kontrolü, reload'un ürettiği
+   YENİ sınıfı aynı etiketle görüp "kendisiyle çakışıyor" diyordu. `%autoreload 2` = notebook
+   akışı, yani tam hedef kitlemiz. modül+qualname eşleşmesi = yeniden tanım kuralıyla onarıldı;
+   `on_change` de aynı kuralla tekilleştiriliyor (yoksa her reload bir kanca daha yığardı).
+4. `validate_job` hâlâ `isinstance(job.medium, MediumVolumeConfig)` ile dallanıyordu — üçüncü
+   taraf bir grid-veren kind, hiçbir şeye mal olmama sözü veren `validate` içinde GB'ları
+   materyalize ederdi. Kind'a soruluyor artık.
+5. `register()` `discover()`'ın try'ı İÇİNDEydi: kanca patlarsa kind registry'de kalıp modeller
+   bayat kalıyordu — `available()` ve `caustica schema` şemanın reddettiği bir kind'ı ilan
+   ederken log "plugin failed to load" diyerek tutarsızlığı açıklanmış gösteriyordu. Kayıt artık
+   ya tamamen olur ya hiç (geri alır ve yeniden fırlatır).
+
+**Doküman düzeltmeleri** (hepsi kaynağa karşı doğrulandı): `phasor_convention` → **`phase_convention`**
+(yanlış anahtar adı; dokümanı izleyen `KeyError` alırdı) + kaynak metnin taşıdığı "mutlak faz sıfırı
+kaynak-referanslı değil" uyarısı geri kondu; `amplitude` iddiaları abartılıydı (süit native yolu
+−%10/+%12 ile sınırlıyor, değişmezliği yalnız `c_max`/`dt` ekseninde iddia ediyor, k-Wave çapraz
+doğrulaması normalize ettiği için mutlak genliği HİÇ iddia etmiyor — ölçülen ile iddia edilen
+ayrıldı); `elements_represented` kısmi kaybı raporlayamaz (voxelize önce reddediyor), makbuz olduğu
+yazıldı; `volume_import` npz'si `labels`+`dx`+**`origin`** ister (eksik anahtar hatası opak,
+`LabelVolume.save_npz` gösterildi); `homogeneous` parçası (β=3.5) altındaki "varsayılan β=0" düz
+yazısıyla çelişir okunuyordu; tam-grid kayıt uyarısı açık verilmiş büyük bölge için ÇALIŞMIYOR;
+`archimedean_spiral` parçası 100 mm üretim dizisi ve sayfanın kendi örnek grid'inde odağı dışarı
+düşüyor (söylendi + sığan bir parça eklendi). Sonuncusu artık testli:
+`test_every_array_kind_has_a_snippet_that_fits_the_documented_grid` — bir parçanın şema-geçerli
+olması yetmiyor, dokümanın kendi job'ında KOŞMASI gerekiyor.
+
+**Çürütülüp doğrulanan (yani bulgu ÇIKMAYAN) yerler**, kayda değer olanlar: `_build_explicit`
+reddetme SIRASI vaka vaka aynı (f0-uyuşmazlığı + grid-dışı apex birlikte verildiğinde ikisi de f0'ı
+raporluyor); bellek davranışı sadece eşdeğer değil ÖLÇÜLDÜ — gerçek 188 Mvox fantomda tepe
+**3.71 GiB / 3.59 GiB yerleşik, iki sürümde de iki ondalığa kadar aynı**, weakref probe'u hacmin
+`build_job` dönerken ölü olduğunu gösteriyor; `derived` anahtar sırası ve içerikleri korunmuş;
+taşınan dallardaki hata metinleri karakter-aynı; yol çözümlemesinde ne çift ne eksik çözüm (job'a
+göre/iç içe/mutlak/eksik dosya/`base_dir=None` hepsi aynı, ve `resolve_paths` kopya döndürdüğü için
+`dump_job` hâlâ göreli yolu yazıyor); ertelenmiş anotasyon ile kapalı union arasında
+serileştirme/eşitlik/`model_copy`/pickle/deepcopy/strict mod/`extra=forbid`/alan sırası/JSON Schema
+farkı YOK (tek fark: alanın *bildirilen* anotasyonu `Any` — kodda belgelendi, repoda kimse okumuyor);
+import döngüsü yok; dokuz `data/setups/s1-*.json` iki sürümde bayt-aynı çıktı veriyor.
