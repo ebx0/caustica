@@ -281,8 +281,9 @@ class MediumVolumeConfig(MediumKindConfig):
         )
 
 
-#: Discriminated union of every REGISTERED medium kind (see config.kinds).
-MediumConfig = medium_kinds.union()
+#: Field annotation for the ``medium`` section: the discriminated union of
+#: every REGISTERED medium kind, re-read from the registry on every rebuild.
+MediumConfig = medium_kinds.annotation()
 
 
 # ---------------------------------------------------------------- array kinds
@@ -538,8 +539,8 @@ class ElementsArrayConfig(_ElementArrayConfig):
         }
 
 
-#: Discriminated union of every REGISTERED array kind (see config.kinds).
-ArrayConfig = array_kinds.union()
+#: Field annotation for ``source.array``: see :data:`MediumConfig`.
+ArrayConfig = array_kinds.annotation()
 
 
 class FocusConfig(CausticaModel):
@@ -701,14 +702,12 @@ def _rebuild_kind_unions() -> None:
     """Re-derive the medium/array unions after the registries changed.
 
     Entry-point plugins are discovered while this module is still importing
-    (the unions ask for them), so the common case needs no rebuild at all.
-    This exists for the other case: a package that calls ``register`` later,
-    e.g. from a notebook cell. Both unions are module globals, so a forced
-    ``model_rebuild`` re-resolves the annotations that name them.
+    (the annotations ask for them), so the common case needs no rebuild at
+    all. This exists for the other case: a package that calls ``register``
+    later, e.g. from a notebook cell. The annotations defer to the registry,
+    so a forced ``model_rebuild`` is enough to pick the new kind up.
     """
-    global MediumConfig, ArrayConfig, _JOB_ADAPTER
-    MediumConfig = medium_kinds.union()
-    ArrayConfig = array_kinds.union()
+    global _JOB_ADAPTER
     ArraySourceConfig.model_rebuild(force=True)
     ExplicitJobConfig.model_rebuild(force=True)
     _JOB_ADAPTER = TypeAdapter(JobConfig)
