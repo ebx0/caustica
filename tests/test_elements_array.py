@@ -244,6 +244,26 @@ def test_schema_refusals_teach(tmp_path):
         ElementsArrayConfig(elem_radius_mm=ROC_MM, roc_mm=ROC_MM, positions_mm=[(0, 0, 0)])
 
 
+def test_degenerate_tables_are_refused_by_the_builder():
+    """What only shows up at build time: empty, NaN, and a zero-length normal."""
+    common = {"elem_radius_mm": 1.2, "roc_mm": ROC_MM}
+    with pytest.raises(JobError, match="element table is empty"):
+        ElementsArrayConfig(positions_mm=[], **common).build()
+    with pytest.raises(JobError, match="NaN/inf"):
+        ElementsArrayConfig(positions_mm=[(float("nan"), 0.0, 0.0)], **common).build()
+    with pytest.raises(JobError, match="sits exactly on the geometric focus"):
+        ElementsArrayConfig(positions_mm=[(0.0, 0.0, ROC_MM)], **common).build()
+    with pytest.raises(JobError, match="zero-length normal"):
+        ElementsArrayConfig(
+            positions_mm=[(4.0, 0.0, 0.7)], normals_mm=[(0.0, 0.0, 0.0)], **common
+        ).build()
+    # ...but an element aimed AWAY from the focus is a choice, not a mistake
+    arr = ElementsArrayConfig(
+        positions_mm=[(4.0, 0.0, 0.7)], normals_mm=[(0.0, 0.0, -1.0)], **common
+    ).build()
+    assert arr.normals[0][2] == -1.0
+
+
 def test_missing_element_file_names_the_path(tmp_path):
     d = elements_job_dict(
         {"kind": "elements", "file": "nowhere.npz", "elem_radius_mm": 1.2, "roc_mm": ROC_MM}

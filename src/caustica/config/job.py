@@ -301,6 +301,14 @@ class _ElementArrayConfig(ArrayKindConfig):
         """The transducer this recipe describes (always re-derived, never baked)."""
         raise NotImplementedError(f"{type(self).__name__} must implement build()")
 
+    def derived(self, arr: TransducerArray | None = None) -> dict[str, float]:
+        """As :meth:`ArrayKindConfig.derived`, but reusing an already-built array.
+
+        :meth:`build_source` passes the array it just voxelized so the table is
+        read (and the spiral integrated) once per build, not twice.
+        """
+        raise NotImplementedError(f"{type(self).__name__} must implement derived()")
+
     def _shape_derived(self, arr: TransducerArray) -> dict[str, float]:
         """Aperture numbers every element array can report."""
         r = np.linalg.norm(arr.positions[:, :2], axis=1)

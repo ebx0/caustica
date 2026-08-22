@@ -106,10 +106,10 @@ def elements_array(
     table of un-normalized direction vectors is accepted as-is.
     """
     pos = np.asarray(positions, np.float64)
+    if pos.size == 0:
+        raise ValueError("element table is empty: need at least one element")
     if pos.ndim != 2 or pos.shape[1] != 3:
         raise ValueError(f"positions must be (n, 3), got {pos.shape}")
-    if pos.shape[0] == 0:
-        raise ValueError("element table is empty: need at least one element")
     if not np.isfinite(pos).all():
         raise ValueError("element positions contain NaN/inf")
     r_max = float(np.linalg.norm(pos[:, :2], axis=1).max())
