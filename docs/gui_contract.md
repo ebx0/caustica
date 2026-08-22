@@ -32,8 +32,9 @@ file by path — a 4.5 GB array does not belong inside a JSON document.
 **Output is ONE folder.** Deliberately a folder and not a single file: resume
 and live progress cannot work through one file. What a GUI needs in order to
 *show* a finished run is nevertheless one small package — `preview.npz` plus
-`metrics.json`, ≤ 10 MB together — so a remote run stays viewable over a slow
-link without downloading a multi-GB `result.h5`.
+`metrics.json`, where the preview is budgeted at ≤ 10 MB and the metrics are a
+couple of KB — so a remote run stays viewable over a slow link without
+downloading a multi-GB `result.h5`.
 
 ```
 caustica run job.json --out <folder>      # one job file in, one folder out
@@ -112,9 +113,10 @@ Exit 5 is not a failure: a checkpoint is on disk and `--resume` finishes the
 run. A resumed run reproduces the uninterrupted one bit for bit on one backend
 (the documented band is rel < 1e-6).
 
-In-process the same codes arrive as exceptions: `caustica.SimulationRefused`
-(the pre-run gates, carrying code 2 or 3) and `caustica.SimulationError`
-(code 4), both with `.exit_code`.
+In-process the same codes arrive as ONE exception carrying the same number:
+`caustica.SimulationError`, with `.exit_code`. A pre-run gate raises it with
+code 2 or 3, a failed solve with code 4 — the classification lives in the
+attribute, not in the class hierarchy.
 
 ---
 
@@ -245,7 +247,8 @@ involved.
 `caustica run job.json --out <folder> --dry-run` exits 0 having written
 `job.json`, `plan.json` and `plan.txt` and nothing else — no solve, no result,
 no status. This is how a GUI answers "will this fit, and how long will it
-take?" before committing a GPU.
+take?" before committing a GPU. A non-native solver writes only `job.json`:
+there is nothing to plan, so there is no `plan.json` to read.
 
 ### plan.json: fields
 

@@ -14,6 +14,7 @@ on a CPU box — those names are checked against the source text of
 ``caustica/env.py`` instead, which still catches a rename.
 """
 
+import importlib
 import json
 import re
 from pathlib import Path
@@ -251,6 +252,25 @@ def test_config_error_advice_points_at_commands_the_page_documents(tmp_path):
     advice = " ".join(json.loads((out / ERROR_FILE).read_text(encoding="utf-8"))["advice"])
     assert "caustica validate" in advice and "caustica schema" in advice
     assert "caustica validate" in doc_text() and "caustica schema" in doc_text()
+
+
+def test_every_caustica_name_on_the_page_actually_exists():
+    """The hole the review found: the page named an exception that does not
+    exist (``caustica.SimulationRefused`` — the facade raises
+    ``SimulationError`` for the gates too). A page that invents an API is
+    worse than one that omits it, so every ``caustica.NAME`` it mentions is
+    resolved here against the real package."""
+    import caustica
+
+    named = set(re.findall(r"`caustica\.(\w+)\(?\)?`", doc_text()))
+    assert named, "the page no longer mentions any caustica.* name"
+    missing = sorted(n for n in named if not hasattr(caustica, n))
+    assert missing == [], f"docs/gui_contract.md names non-existent caustica.{missing}"
+    # and the dotted paths it gives (caustica.io.store.load_result, ...)
+    for dotted in sorted(set(re.findall(r"`caustica((?:\.\w+){2,})\(", doc_text()))):
+        parts = dotted.strip(".").split(".")
+        mod = importlib.import_module("caustica." + ".".join(parts[:-1]))
+        assert hasattr(mod, parts[-1]), f"caustica{dotted} does not exist"
 
 
 def test_the_page_points_at_the_import_direction_gate():
