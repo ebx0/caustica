@@ -76,12 +76,17 @@ def env_report(backend_name: str | None = None) -> dict:
         report["platform"] = platform.platform()
     except Exception:
         pass
-    for key, dist in (
-        ("numpy", "numpy"),
-        ("scipy", "scipy"),
-        ("pydantic", "pydantic"),
-        ("h5py", "h5py"),
-    ):
+    # numpy via the imported module, like the historical stamp — it can never
+    # be None there, and a gate reading environment["numpy"] may assume str.
+    # The ADDED keys use dist metadata (kept import-free: h5py stays lazy, T6)
+    # and may honestly be None on exotic installs.
+    try:
+        import numpy as np  # noqa: PLC0415
+
+        report["numpy"] = np.__version__
+    except Exception:
+        report["numpy"] = None
+    for key, dist in (("scipy", "scipy"), ("pydantic", "pydantic"), ("h5py", "h5py")):
         report[key] = _version_of(dist)
     try:
         if backend_name is None:

@@ -166,6 +166,7 @@ def estimate(
     record_region: tuple[slice, ...] | None = None,
     reference_point: tuple[int, ...] | None = None,
     measure: bool = False,
+    measure_backend: str = "auto",
     calibration_path: str | Path | None = None,
 ) -> Estimate:
     """Predict VRAM and wall time for one CW solve WITHOUT running it.
@@ -174,7 +175,10 @@ def estimate(
     truth) and settling policy: ``expected`` assumes convergence at
     time-of-flight + ``min_settle_periods``; ``worst`` runs to
     ``max_settle_periods``. ``measure=True`` times ~20 real steps on the
-    current machine and overrides the model (source ``"measured"``).
+    current machine and overrides the model (source ``"measured"``) —
+    ``measure_backend`` must be the backend the run will actually use: on a
+    GPU machine forced to numpy, an ``"auto"`` probe would time cuFFT and
+    label an hours-wrong number "measured" (review finding, 2026-08-22).
     """
     if solver not in ("linear", "westervelt"):
         raise ValueError(
@@ -204,7 +208,9 @@ def estimate(
 
     warnings: list[str] = []
     if measure:
-        run = measure_step_time(grid.shape, nonlinear=nonlinear, n_steps=20)
+        run = measure_step_time(
+            grid.shape, nonlinear=nonlinear, backend=measure_backend, n_steps=20
+        )
         t_step = run["t_step_s"]
         src_label = "measured"
         if run["backend"] == "numpy":
