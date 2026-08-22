@@ -1393,3 +1393,11 @@ eksik 2 boyut (motor-checkpoint, job-config/steering) elle tarandı.
   (diskte duruyor); .gitignore `data/` bütününe indirgendi; apps/README ve README işaretçilere
   döndü. Kullanıcı görünür değişiklik: `phantoms.bat` artık uwcem-phantom repo'sunda;
   `CAUSTICA_PHANTOM_DATA=C:\Users\bulbu\Desktop\hifusim\data` kullanıcı env değişkeni kuruldu.
+
+### D28 tamamlaması (tam tur beklenirken kendi yakaladığım boşluk)
+- Yeni repodaki `PhantomAsset.save` taşıma sonrası hâlâ KENDİ el-yapımı yazıcısını taşıyordu —
+  D28 "uwcem repo caustica'nın yazıcısını çağırır, formatın tek kaynağı" der. Rewire edildi
+  (`67cbc73`): asset yalnız NEYİN gireceğine karar veriyor (etiketler, yoğun hacimler,
+  extent/histogram metadata'sı), baytların düzenini `caustica.io.write_medium_volume` yazıyor.
+  Yeni exportlar `caustica-medium-volume/1` etiketi taşıyor; okuyucular eski etiketleri kabul
+  etmeye devam ediyor (rebuild yok). Yeni repo süiti 166 passed.
