@@ -1,7 +1,7 @@
 """``medium_volume`` — the ONE door for volume media (M10k/W0a, D16/D28).
 
 A single ``.npz`` that a simulation eats directly, owned by caustica. Every
-phantom source (UWCEM or anyone else's) enters the library through this
+phantom source — whoever produced it — enters the library through this
 format; nothing source-specific lives here.
 
 Layout (a single ``.npz``)::
@@ -26,12 +26,13 @@ The grid belongs to the file: shape and dx are read, never chosen, so a job
 cannot silently run a resampled ghost of the data (the ``medium_volume`` job
 kind rejects an explicit ``grid`` section).
 
-Compatibility: this is the ``uwcem_phantoms`` export layout promoted into the
-library — the reader accepts the pre-split tags (``caustica-phantom/1`` and
-the pre-rename ``hifusim-phantom/1``) so the existing multi-GB local datasets
-load unchanged, byte for byte, with no rebuild (T7). The writer is public
-(D28): ``write_medium_volume(...)`` is the single source of the format, and
-the ``uwcem-phantom`` repository calls it instead of carrying its own.
+Compatibility: this is the pre-split phantom exporter's layout promoted
+into the library — the reader accepts the pre-split tags
+(``caustica-phantom/1`` and the pre-rename ``hifusim-phantom/1``) so the
+existing multi-GB local datasets load unchanged, byte for byte, with no
+rebuild (T7). The writer is public (D28): ``write_medium_volume(...)`` is
+the single source of the format, and external phantom tooling calls it
+instead of carrying its own.
 """
 
 from __future__ import annotations
@@ -50,8 +51,8 @@ from caustica.materials import MaterialDB, water
 from caustica.medium import Medium
 
 MEDIUM_VOLUME_FORMAT = "caustica-medium-volume/1"
-#: Tags written by the pre-split ``uwcem_phantoms`` exporter (and its
-#: pre-rename spelling). Readers accept them so the existing local datasets
+#: Tags written by the pre-split phantom exporter (and its pre-rename
+#: spelling). Readers accept them so the existing local datasets
 #: — hours of CPU work — never need a rebuild just to restamp a string.
 LEGACY_FORMAT_TAGS = frozenset({"caustica-phantom/1", "hifusim-phantom/1"})
 #: What the reader accepts — retire aliases by shrinking THIS set only.

@@ -27,8 +27,6 @@ from caustica.geometry.shapes import (
 )
 from caustica.geometry.volumes import (
     LabelVolume,
-    breast_phantom_mapping,
-    load_breast_phantom,
     load_labels_txt,
     resample_scalar,
 )
@@ -49,8 +47,6 @@ __all__ = [
     "Shape",
     "Union",
     "VolumeImportConfig",
-    "breast_phantom_mapping",
-    "load_breast_phantom",
     "load_labels_txt",
     "resample_scalar",
 ]

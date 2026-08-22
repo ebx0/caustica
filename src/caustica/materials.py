@@ -87,12 +87,12 @@ PML_ID = 0
 
 # --------------------------------------------------------------------------
 # Literature acoustic tissue values (M10k/W0b, D17). MOVED verbatim from the
-# uwcem_phantoms tissue table — these numbers are generic soft-tissue
-# literature, not UWCEM's (that repository is an electromagnetic dataset and
-# ships no acoustic values). The UWCEM media-number -> tissue-class mapping
-# and its interpolated sub-group ramp stay with the phantom package; only
-# the literature-anchored endpoints live here. A moved value that changes is
-# a bug (pinned to the digit by test).
+# phantom package's tissue table — these numbers are generic soft-tissue
+# literature, not that source's (an electromagnetic repository shipping no
+# acoustic values). The source's media-number -> tissue-class mapping and
+# its interpolated sub-group ramp stay with the phantom package; only the
+# literature-anchored endpoints live here. A moved value that changes is a
+# bug (pinned to the digit by test).
 # --------------------------------------------------------------------------
 
 #: 1 dB/cm = 100/(20*log10(e)) Np/m.
@@ -165,8 +165,8 @@ _ITIS = "IT'IS Foundation Tissue Properties Database (acoustic)"
 #: Literature-anchored tissues (names kept verbatim from the pre-split table
 #: — the name travels inside exported MaterialDB JSON, so renaming would be a
 #: value change). ``fibroglandular`` and ``fat`` are the highest-water and
-#: lowest-water ENDPOINTS the UWCEM sub-group ramp interpolates between; the
-#: interpolated in-between rows are a UWCEM modelling choice and stay there.
+#: lowest-water ENDPOINTS the phantom package's sub-group ramp interpolates
+#: between; the interpolated in-between rows are its modelling choice.
 TISSUE_LIBRARY: dict[str, AcousticTissue] = {
     # Degassed water at body temperature, the standard HIFU coupling bath.
     # Absorption is tiny but NOT zero.

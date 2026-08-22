@@ -464,9 +464,16 @@ olur, UWCEM işleri ayrı repoya taşınır, yerine genel `medium_volume` kind'�
       olarak kullanıyor. KANIT: `test_tissue_library_values_pinned_to_the_digit` (rakamlar
       donmuş literal), `test_uwcem_table_uses_the_moved_library_rows` (tek kaynak), 93 fantom
       testi değişmeden yeşil
-- [ ] `_require_uwcem`, `PhantomDatasetMediumConfig`, `StoredSetupJobConfig` SİLİNİR;
-      `caustica-job/1` iki kind kaybeder — **kırıcı şema değişikliği**, devlog'a yazılır, format
-      numarası değişmez (v1.0 öncesi stabilite garantisi yok, PLAN.md K14)
+- [x] (W0c, 2026-08-22) `_require_uwcem`, `PhantomDatasetMediumConfig`, `StoredSetupJobConfig`
+      (+ `StoredSetupOverrides`, `RunPolicyOverrides` — yalnız stored katmanının parçasıydı,
+      ölü kod bırakılmadı) SİLİNDİ; `MediumConfig` = homogeneous|scene|volume_import|
+      medium_volume; `geometry`'den `load_breast_phantom`/`breast_phantom_mapping` ve
+      `VolumeImportConfig`'ten `breast_phantom_txt` formatı çıktı (`load_labels_txt` generik,
+      KALDI). **Kırıcı şema değişikliği**: `caustica-job/1` iki kind + bir import formatı
+      kaybetti, format numarası değişmedi (K14; devlog'da). `grep -ri uwcem src/` = 0 ve
+      import-yönü AST testi YEŞİL (`tests/test_import_direction.py` — W0c'den önce bilerek
+      kırmızı yazıldı); UWCEM'e bağlı 11 test bloğu verbatim staging'e alındı (W0d'de yeni
+      repoya)
 - [ ] `uwcem-phantom` ayrı (private) repo: catalog / reader / builder / dataset / setup / spec /
       processing / heterogeneity / orientation / paths / cli + `apps/phantom_launcher.py` +
       137 test taşınır. caustica'ya bağımlıdır; ürettiği şey `medium_volume` dosyası ve
