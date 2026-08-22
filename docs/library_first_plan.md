@@ -505,6 +505,9 @@ solves it with a deferred annotation (`Annotated[Any, _LazyKindUnion(registry)]`
 report-renderer seams must reuse `KindRegistry`, not re-derive this.** (Found M10m, 2026-08-22,
 by the plugin test — the in-process registration path is the only one that exposes it; an
 entry-point plugin is discovered before the models are built and would have hidden the bug.)
+*Closed in M10n (2026-08-22):* the shared half moved to `caustica/registry.py`
+(`PluginRegistry`/`FactoryRegistry`) and `KindRegistry` subclasses it; the deferred annotation
+stayed where it was, in `config/kinds.py`, because only a pydantic axis needs it.
 
 **T10 — Adding a field to a config base class reorders the JSON.** Pydantic puts base-class
 fields first, including ones a subclass overrides. Hoisting `roc_mm` into `ArrayKindConfig`

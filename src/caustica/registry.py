@@ -6,8 +6,8 @@ and report renderers — and every one of them needs the same four things:
 * a name -> implementation table a third party can add to,
 * an ``importlib.metadata`` entry-point group, so adding one needs no change
   to caustica's source,
-* a **lazy** scan: ``import caustica`` must never pay for a metadata sweep,
-  and a registry that has never been asked a question has never scanned,
+* a **lazy** scan: a registry that has never been asked a question has never
+  swept the installed distributions — ``import caustica`` does not pay for it,
 * a lookup failure that lists what IS registered and names the group to
   register through.
 
@@ -185,9 +185,11 @@ class PluginRegistry(Generic[T]):
         if self._loaded:
             return
         self._loaded = True  # set first: a broken scan must not retry forever
-        # Imported here, not at module scope: `importlib.metadata` pulls in
-        # email/zipfile machinery, and `caustica.core.backend` (which owns a
-        # registry) IS on the `import caustica` path. Lazy keeps that free.
+        # Imported here, not at module scope. Not for the import cost —
+        # pydantic already puts `importlib.metadata` in sys.modules at its own
+        # import time, so there is nothing to save (measured, M10n review) —
+        # but so that `caustica.core.backend`, which owns a registry and IS on
+        # the `import caustica` path, states its dependency where it uses it.
         from importlib import metadata  # noqa: PLC0415
 
         try:

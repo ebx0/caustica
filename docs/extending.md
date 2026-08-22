@@ -254,6 +254,12 @@ so merely listing the backends stays free.
 `Backend.fft` must be dtype-preserving (`scipy.fft` / `cupyx.scipy.fft`; plain
 `numpy.fft` upcasts float32 to complex128 and destroys CPU/GPU parity).
 
+**The `Backend.name` you return must equal the name you registered under.**
+`get_backend` refuses a mismatch: the run stamp in `run_meta.json`, the
+`backend` attribute in `result.h5` and the checkpoint fingerprint that decides
+whether a resume is the same run all record `Backend.name`, never the name
+that was asked for.
+
 Two things `"auto"` will not do for you:
 
 * **`"auto"` only chooses between `numpy` and `cupy`.** It is a policy over the
