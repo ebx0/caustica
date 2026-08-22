@@ -2138,3 +2138,116 @@ v0.1 odağını korudu) · dataset vitrini en sona.
 Yeni sıra: CANLI COLAB OTURUMU (ilk iş) → M11 → M18 → M15 → M16 → M25/M26 → M27 → M19 →
 M21→v0.1 → ikinci faz → vitrin. M9 KZK ertelendi-damgalı; eski M21 "−6dB 0.2–0.6 mm" kriteri
 kaynaktan doğrulanamadığı için gerçek 2022 koridorlarıyla değiştirildi.
+
+---
+
+## 2026-08-23 — İlk Colab oturumunun üç düzeltmesi + GPU kapı süiti (`caustica.validation`)
+
+Bu oturumun girdisi bir ÖLÇÜMDÜ: operatör 2026-08-22'de `water_bowl_mini`'yi gerçek bir
+NVIDIA A100-SXM4-40GB'de koşturdu (`colab-run-results/`). Sonuç metrik seviyesinde kusursuzdu —
+aynı job CPU'da koşuldu, tepe basınç bağıl fark 1.8e-7, geometri/−6dB/hacim birebir, yakınsama
+yörüngesi aynı (periyot 11, 104 adım). Ama üç şey kırıktı ve hiçbiri fizikle ilgili değildi.
+
+### [A] Üç düzeltme
+
+**A1 — `git_commit: "unknown"` (commit `fb47b12`).** Colab wheel'den kuruyor; wheel'in yanında
+checkout yok; runner'ın `git rev-parse`'ı boşa düşüyordu. İzlenebilirlik deliği tam da
+tekrarlanması en zor makinedeydi. Çözüm build anında damgalamak: `setup.py` (proje metadata'sı
+DEĞİL, yalnız bu kanca) `build_stamp.stamp()` çağırıyor, o da `src/caustica/_build_info.py`ye
+VERSION/COMMIT/BUILT_AT yazıyor. `setuptools_scm` bilerek EKLENMEDİ: yeni bağımlılık getirir ve
+elle tutulan sürüm türetimini de devralır.
+
+Runtime tarafı `caustica.env.git_commit()`: önce canlı checkout (bir sonraki commit'ten sonra da
+doğru kalan tek kaynak), yoksa gömülü damga, o da yoksa `"unknown"`. İki incelik:
+- **Kuşatan repo reddediliyor.** `git rev-parse` yukarı yürür, dolayısıyla başka birinin
+  repo'su içine kurulmuş bir venv o projenin HEAD'ini her koşuya damgalayabilirdi.
+  `--show-toplevel == root` kontrolü hem build hem runtime kopyasında var; ikisi
+  `test_env_and_build_stamp_agree_on_this_checkouts_head` ile birbirine çivili (build zamanı
+  `caustica.env`'i import EDEMEZ — numpy henüz yok, o yüzden iki kopya var).
+- **Sdist kuralı:** git yoksa ve damga zaten oradaysa ÜZERİNE YAZILMIYOR. Aksi hâlde sdist'ten
+  wheel üretmek, o dağıtımın sahip olacağı tek provenance'ı `"unknown"` ile silerdi.
+
+Kanıt: `tests/test_packaging.py`e 5 test — biri geçici bir git checkout'undan wheel kurup
+`--target`'a yükleyerek repo'nun GÖRÜNMEDİĞİ bir cwd'den gerçek koşu yapıyor ve
+`run_meta.git_commit == HEAD` diyor. CI'ın wheel bacağı aynı şeyi temiz venv'de tekrarlıyor.
+
+**A2 — `t_step_measured_s` ısınmayı gizliyordu (commit `87573b9`).** Damga 26.6 ms/adım diyordu,
+planner probu AYNI SÜREÇTE aynı şekil için 1.03 ms — 25.9×. Ama CPU kontrolü 0.96×. Bu ikisi
+birlikte teşhisi veriyor: muhasebe doğru, model EKSİK. 2.77 s'lik bir koşuda ~2.66 s tek seferlik
+cuFFT-plan + kernel-JIT + ilk tahsis maliyeti 104 adıma bölünüyordu.
+
+- Planner artık `t_expected = warmup + steps·t_step` hesaplıyor. `model.GPU_WARMUP_S = 3.0`
+  (o oturumdan, yukarı yuvarlanmış), `calibrate()` cihazda bir ısınma ölçüp saklıyor,
+  `planner.record_warmup()` gerçek bir koşunun ÖDEDİĞİNİ geri yazıyor (prob tam bir çözüm
+  değil — property map'leri kurmaz, kaynağı serpmez — bu yüzden eksik sayar).
+- Runner tarafında `_StepTiming`, motorun ZATEN yaydığı periyot-sınırı payload'ını tüketiyor:
+  yeni enstrümantasyon yok, ekstra device sync yok. Kararlı hız, sınırlar ARASI aralıkların
+  medyanı; koşunun başından ilk sınıra kadarki aralık asla dahil değil, çünkü ısınmayı ödeyen
+  tam olarak o aralık. Üçten az sınır varsa cevap `None` — destekleyemediği bir sayı yerine
+  "ölçülmedi" demek.
+- **Hiçbir anahtar değişmedi.** `t_step_measured_s` aynı tanımla duruyor (M8'in Colab kapıları
+  ve `gui_contract` onu okuyor); eklenenler `warmup_s`, `t_step_steady_s`, `steady_samples` ve
+  plan.json'da `warmup_s`. `gui_contract` testi zaten kırıldı ve doküman güncellendi — sözleşme
+  sayfası makine-kontrollü olduğu için EKLEME bile sessizce geçemiyor (tasarım gereği).
+
+**A3 — CI Colab'ın Python'unu test etmiyordu (commit `297752b`).** 3.10 (requires-python tabanı)
+ve 3.12 (dev ortamı) vardı; her gerçek koşu 3.13.15'te oluyordu. ubuntu/3.13 bacağı eklendi.
+
+### [B] `caustica.validation` — GPU kapı süiti (M11'in ilk parçası)
+
+M7 ve M8 aynı yerde takılıydı: kalan ölçütleri ancak gerçek bir GPU cevaplayabilir ve **tek
+koşu yetmez** (M8 "≥2 grid boyutu" ve "≥2 senaryo" diyor, M7 tam boy + parite + baseline
+istiyor). Bu bir koşu değil PROTOKOL; o yüzden protokol olarak yazıldı:
+
+    python -m caustica.validation gpu-gates
+
+Sırayla: `env_report()` → GPU yoksa eyleme geçirilebilir mesajla çıkış 2 → hedef cihazda
+`planner.calibrate()` (M8 "kalibrasyon SONRASI" diyor: süit o durumu VARSAYMIYOR, ÜRETİYOR) →
+VRAM merdiveni (A100'de ~2/8/14/28 GiB; 14 GiB basamağı tam olarak M7'nin 512³ @ dx=0.30
+sınıfı; büyükler `--preview-only`) → cihaza SIĞMAYAN EN KÜÇÜK şekil (çıkış 3 + öneri metni
+kanıt olarak) → numpy/cupy paritesi → `benchmarks/reports/gpu_gates/<gpu>-<tarih>/` altına
+damgalı MD+JSON + her basamağın KENDİ çıktı klasörü.
+
+**Yanlış PASS'a karşı üç kural** (incelemenin merceği buydu):
+1. İki tarafı da olmayan bir kontrol `SKIP` — asla PASS. (`predicted is None`, `actual == 0`,
+   ölçülmemiş alan… hepsi.)
+2. Kapı, milestone'un istediği SAYIDA geçen kontrol ister; bir tane bile FAIL varsa FAIL;
+   hiç kontrolü yoksa `INCOMPLETE`, PASS değil. `required=0` bile PASS kaçıramıyor.
+3. Adım sayısı planla uyuşmayan bir koşunun süre karşılaştırması SKIP — o karşılaştırma
+   zamanlama modelini değil yakınsama sezgiselini ölçerdi. (Süit `min_settle == max_settle`
+   sabitleyerek bunu zaten deterministik yapıyor; kontrol yine de var.)
+
+**Parite kapısının ölçüm noktası operatör ölçümüyle DÜZELTİLDİ.** İlk oturumun `result.h5`i
+yerel CPU koşusuyla relL2 3.6e-5 / relL∞ 4.883e-4 farkla uyuşuyordu — ve 4.883e-4 tam olarak
+2^-11, yani **bir float16 ULP'u** (p_max'ta %99.17 voxel bit-özdeş, 517 voxel 1 ULP, >1 ULP
+sıfır; büyük bağıl sapmaların hepsi sıfır civarı gürültü tabanında işaret biti). Alanlar
+dosyanın çözünürlüğünün ALTINDA uyuşuyor. Kapıyı `result.h5` round-trip'i üzerine kurmak
+kusursuz bir çözücüye 3.6e-5 okutup 1e-5 ölçütünde YANLIŞ FAIL verirdi. Kapı artık aynı süreçte
+numpy ve cupy koşup **bellekteki fp32 `SolverResult` dizilerini** karşılaştırıyor; depolama
+tabanı raporda `stored_float16_reference` başlığı altında ayrıca gösteriliyor ki okuyan kişi
+~5e-4'ü regresyon sanmasın. Sentetik testi bu sayıyı yeniden üretiyor
+(`test_the_parity_gate_is_measured_on_fp32_fields_not_on_a_stored_file`).
+
+**CPU'da ne testlendi:** `Harness` dikişi — süitin dünyaya dokunduğu her yer tek bir
+değiştirilebilir nesnede. Sahte bir cihaz, işleri planner'ın KENDİ envanteriyle fiyatlıyor
+(yani model kendi kendini kayıramıyor), sonra `vram_error`/`time_error` kadar sapmış bir "ölçüm"
+döndürüyor. Böylece merdiven, VERDICT cebri, OOM dalı, adım-sayısı uyuşmazlığı, rapor şeması,
+M19 baseline'ı ve ısınmanın kapılardan SONRA geri yazılması (yoksa döngüsel olurdu) CPU'da
+koşuyor. **GPU sayısı üretilmedi; M7/M8'in cihaza bağlı kutuları `[ ]` kaldı.**
+
+Bir gerçek hata bu testlerden çıktı: OOM basamağı "boş VRAM'in 1.15 katının altındaki en büyük
+şekil" olarak boyutlanıyordu ve 80 GiB'lık bir cihazda bu 75 GiB seçiyor — yani SIĞIYOR. Kapı,
+reddedilmesi hiç istenmemiş bir koşuyla notlanacaktı. Şimdi "cihazı AŞAN en küçük şekil"
+(`side_above`), testi de 15/39/79/140 GiB için parametrik. İkinci hata: `gpu_key_for` token'ları
+küçültmeden noktalama siliyordu, `"A100"` → `"100"` ve `"SXM"` → `""` oluyordu; boş token her
+şeyin alt dizesi olduğu için her cihaz eşleşiyordu (A100-80GB yerine H100-SXM dönüyordu).
+
+Notebook: `notebooks/gpu_gates.ipynb` (4 hücre) — bakım notebook'u, kullanıcı akışı değil;
+`colab_run.ipynb`in bayt-donuk sözleşmesine DOKUNULMADI. Kendi sözleşmesi daha sıkı: kod
+hücrelerinde Python satırı OLAMAZ, sadece `!` ve `#`.
+
+### Kanıt
+- Tam süit: **465 → 514 test** yeşil, ruff temiz (`ruff check` + `format --check`).
+- Yeni testler: `tests/test_validation_gpu_gates.py` (36), `tests/test_packaging.py` (+5),
+  `tests/test_planner.py` (+4), `tests/test_runner.py` (+4).
+- Açık kalan: M7'nin üç kutusu ve M8'in üç kutusu — **ikinci Colab oturumunda** ölçülecek.
