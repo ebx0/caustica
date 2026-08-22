@@ -7,6 +7,8 @@ tests encode the other M10h rule: packaged jobs are *copied out* before
 running, so nothing ever tries to write into the install directory.
 """
 
+import json
+import os
 import shutil
 import subprocess
 import sys
@@ -14,11 +16,31 @@ import time
 import zipfile
 from pathlib import Path
 
+import build_stamp
 import pytest
 
+import caustica
 from caustica import examples
 
 REPO = Path(__file__).resolve().parents[1]
+
+
+def _git_commit_all(root: Path) -> list[str]:
+    """``git commit`` that works on a throwaway repo with no user config."""
+    return [
+        "git",
+        "-c",
+        "user.email=t@example.invalid",
+        "-c",
+        "user.name=t",
+        "-C",
+        str(root),
+        "commit",
+        "-q",
+        "--allow-empty",
+        "-am",
+        "stamp test",
+    ]
 
 
 def _dir_snapshot(d: Path) -> set[tuple[str, int, int]]:
@@ -104,13 +126,174 @@ def test_wheel_ships_no_repo_side_packages(wheel):
 
 def test_wheel_ships_no_file_absent_from_src(wheel):
     """Every packaged file must exist in ``src/`` — a stale build artifact
-    must not resurrect deleted modules (matters for the M10k removals)."""
+    must not resurrect deleted modules (matters for the M10k removals).
+
+    ``_build_info.py`` is the one exemption: the build GENERATES it (fix A1),
+    it is git-ignored, and a checkout that has never been built does not have
+    it. Its own presence in the wheel is asserted separately, below.
+    """
+    generated = {"caustica/_build_info.py"}
     ghosts = [
         n
         for n in wheel.namelist()
-        if n.startswith("caustica/") and not (REPO / "src" / n).is_file()
+        if n.startswith("caustica/") and n not in generated and not (REPO / "src" / n).is_file()
     ]
     assert ghosts == []
+
+
+# ------------------------------------------------------- build provenance (A1)
+
+
+def test_wheel_carries_a_build_info_module(wheel):
+    """The wheel ships the generated stamp, whatever the build tree knew.
+
+    This fixture builds from a copy with no ``.git``, so the commit here is
+    honestly ``"unknown"`` — what is pinned is that the MODULE exists and has
+    the three names ``caustica.env.build_info`` reads. The commit-carrying
+    path is proven end to end in ``test_wheel_built_from_a_checkout_...``.
+    """
+    text = wheel.read("caustica/_build_info.py").decode()
+    ns: dict = {}
+    exec(compile(text, "_build_info.py", "exec"), ns)  # noqa: S102 - our own generated file
+    assert set(("VERSION", "COMMIT", "BUILT_AT")) <= set(ns)
+    assert ns["VERSION"] == caustica.__version__
+
+
+def test_build_stamp_keeps_an_existing_stamp_when_git_is_absent(tmp_path):
+    """The sdist rule: no git + a stamp already there -> do not clobber it.
+
+    A wheel built FROM an sdist has no repository, and overwriting the
+    sdist's stamp with ``"unknown"`` would discard the only provenance that
+    distribution will ever have.
+    """
+    root = tmp_path / "tree"  # a plain directory: git rev-parse fails here
+    pkg = root / "src" / "caustica"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").write_text('__version__ = "9.9.9"\n', encoding="utf-8")
+
+    assert build_stamp.head_commit(root) is None
+    first = build_stamp.stamp(root)
+    assert first is not None and 'COMMIT = "unknown"' in first.read_text(encoding="utf-8")
+
+    first.write_text(build_stamp.render("9.9.9", "d" * 40, "then"), encoding="utf-8")
+    assert build_stamp.stamp(root) is None  # kept, not rewritten
+    assert "d" * 40 in first.read_text(encoding="utf-8")
+
+
+def test_build_stamp_refuses_a_commit_from_a_surrounding_repository(tmp_path):
+    """``git rev-parse`` walks UP. A source tree unpacked inside somebody
+    else's repository must not be stamped with that repository's commit."""
+    outer = tmp_path / "outer"
+    (outer / "inner").mkdir(parents=True)
+    subprocess.run(["git", "init", "-q", str(outer)], check=True, capture_output=True)
+    (outer / "f.txt").write_text("x", encoding="utf-8")
+    subprocess.run(_git_commit_all(outer), check=True, capture_output=True, cwd=outer)
+
+    assert build_stamp.head_commit(outer) is not None  # the repo itself: fine
+    assert build_stamp.head_commit(outer / "inner") is None  # a subdirectory: refused
+
+
+def test_env_and_build_stamp_agree_on_this_checkouts_head():
+    """The two copies of the "is this really our repository" rule (build time
+    cannot import caustica — numpy is not installed yet) must not drift."""
+    from caustica import env
+
+    assert env._checkout_head() == build_stamp.head_commit(REPO)
+
+
+@pytest.mark.slow
+def test_wheel_built_from_a_checkout_stamps_run_meta_outside_the_repo(tmp_path):
+    """Fix A1, end to end: Colab installs a WHEEL, and a wheel has no git.
+
+    Before this, every ``run_meta.json`` written on Colab carried
+    ``"git_commit": "unknown"`` — the traceability hole the first real GPU
+    session exposed. Here a wheel is built from a real (temporary) checkout,
+    installed into an empty directory, and a job is run from a working
+    directory that is not inside any repository. The stamp must carry the
+    commit the wheel was built from.
+    """
+    src = tmp_path / "checkout"
+    src.mkdir()
+    for f in ("pyproject.toml", "README.md", "LICENSE", "setup.py", "build_stamp.py"):
+        shutil.copyfile(REPO / f, src / f)
+    shutil.copytree(
+        REPO / "src",
+        src / "src",
+        ignore=shutil.ignore_patterns("__pycache__", "*.egg-info", "*.pyc", "_build_info.py"),
+    )
+    subprocess.run(["git", "init", "-q", str(src)], check=True, capture_output=True)
+    subprocess.run(_git_commit_all(src), check=True, capture_output=True, cwd=src)
+    head = subprocess.run(
+        ["git", "-C", str(src), "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+    ).stdout.strip()
+    assert len(head) == 40
+
+    wheels = tmp_path / "wheels"
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "wheel",
+            "--no-deps",
+            "--no-build-isolation",
+            "-w",
+            str(wheels),
+            str(src),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(f"wheel build failed:\n{proc.stdout}\n{proc.stderr}")
+    (whl,) = wheels.glob("caustica-*.whl")
+    with zipfile.ZipFile(whl) as z:
+        assert f'COMMIT = "{head}"' in z.read("caustica/_build_info.py").decode()
+
+    # A CLEAN install target: only caustica lands here, dependencies come from
+    # the test interpreter. PYTHONPATH precedes site-packages, so this install
+    # — not the editable checkout — is the one that gets imported.
+    site = tmp_path / "site"
+    subprocess.run(
+        [sys.executable, "-m", "pip", "install", "--no-deps", "--target", str(site), str(whl)],
+        check=True,
+        capture_output=True,
+    )
+    cwd = tmp_path / "elsewhere"  # not inside any git work tree
+    cwd.mkdir()
+    env = {**os.environ, "PYTHONPATH": str(site)}
+
+    where = subprocess.run(
+        [sys.executable, "-c", "import caustica; print(caustica.__file__)"],
+        capture_output=True,
+        text=True,
+        cwd=cwd,
+        env=env,
+        check=True,
+    ).stdout.strip()
+    assert Path(where).is_relative_to(site), f"the editable checkout leaked in: {where}"
+
+    job = examples.copy("water_bowl_mini", cwd)
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "caustica",
+            "run",
+            str(job),
+            "--no-measure",
+            "--out",
+            str(cwd / "out"),
+            "--no-progress",
+        ],
+        capture_output=True,
+        text=True,
+        cwd=cwd,
+        env=env,
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    meta = json.loads((cwd / "out" / "run_meta.json").read_text(encoding="utf-8"))
+    assert meta["git_commit"] == head != "unknown"
 
 
 # ----------------------------------------------------------------- examples

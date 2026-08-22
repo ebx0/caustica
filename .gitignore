@@ -42,3 +42,6 @@ hifu_pred_dx300_t128.ipynb
 data/
 runs/
 janitor/
+
+# Generated at build time by build_stamp.py (fix A1) — never committed.
+src/caustica/_build_info.py

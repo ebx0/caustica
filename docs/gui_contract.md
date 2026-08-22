@@ -438,7 +438,10 @@ carries on.
 - `solver` — the solver that ran
 - `backend` — the backend that was resolved
 - `generated` — UTC ISO-8601 timestamp
-- `git_commit` — the caustica checkout's commit, or `unknown`
+- `git_commit` — which caustica ran: the checkout's commit when the package
+  is imported from a git work tree, otherwise the commit frozen into the
+  package at build time (so a wheel install — Colab — is traceable too),
+  and `unknown` only when neither exists
 - `environment` — `env_report()` output
 - `ppw_warnings` — low-resolution warnings
 - `planner` — the `plan.json` payload, or null for a non-native solver
