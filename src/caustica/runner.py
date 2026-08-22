@@ -43,6 +43,7 @@ import warnings
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -58,6 +59,9 @@ from caustica.io.store import (
     save_result,
     validate_result_file,
 )
+from caustica.progress import chain as progress_chain
+from caustica.progress import close as progress_close
+from caustica.progress import resolve as progress_resolve
 
 log = logging.getLogger("caustica")
 
@@ -116,15 +120,18 @@ def _vram_pool_peak_gib(backend_name: str) -> float | None:
 class _Heartbeat:
     """status.json writer: one tick per acoustic period, throttled to disk.
 
-    The engine polls ``stop_when`` once per period boundary (M10); the
-    heartbeat counts those polls, so step counts are DERIVED (periods * spp),
-    not instrumented — no engine changes, no per-step overhead. ETA uses the
-    measured cadence of THIS run, not the planner's guess.
+    Since M10j the heartbeat is a CONSUMER of the engine's progress payload
+    (``__call__``), not a second instrumentation of the same boundary: the
+    engine emits one dict per period, this writes the subset ``status.json``
+    has always carried. Step counts stay DERIVED (periods * spp) and the ETA
+    stays measured from THIS run's cadence, not the planner's guess.
 
-    Known (accepted) imprecision: the engine polls once more just before the
-    record window, so a run that reaches recording reports periods_done one
-    higher than the settle count. Status numbers are progress telemetry, not
-    provenance — the checkpoint meta and run_meta carry the exact counters.
+    Known (accepted) imprecision, unchanged on purpose: the boundary fires
+    once more just before the record window, so a run that reaches recording
+    reports periods_done one higher than the settle count. Status numbers are
+    progress telemetry, not provenance — the checkpoint meta and run_meta
+    carry the exact counters, and M8's Colab gates measure themselves from
+    this file, so its numbers do not move for cosmetics.
     """
 
     def __init__(
@@ -152,7 +159,14 @@ class _Heartbeat:
     def session_periods(self) -> int:
         return self._session_periods
 
-    def tick(self) -> None:
+    def __call__(self, ev: dict) -> None:
+        """Consume one progress payload (the engine's period boundary).
+
+        Counts events rather than reading ``ev["period"]``: the engine knows
+        the true period number, but status.json has always reported the
+        boundary count (see the class docstring), and that is the number the
+        Colab gates were calibrated against.
+        """
         self.periods += 1
         self._session_periods += 1
         now = time.monotonic()
@@ -202,6 +216,11 @@ class RunnerOptions:
     stop_after_periods: int | None = None  # deterministic stop (tests/ops)
     allow_slow_cpu: bool = False  # M10i/D20: override the CPU time gate
     preview_only: bool = False  # M10i/D34: skip result.h5, keep the preview
+    #: M10j progress display: None (silent — the library default, so a test
+    #: or an embedding app gets no surprise output), "auto"/"plain", or any
+    #: callable taking the payload dict. status.json is written either way:
+    #: the heartbeat is always a consumer, this only adds a second one.
+    progress: Any = None
 
 
 def _cpu_limit_min() -> float:
@@ -325,6 +344,130 @@ def _plan(built: BuiltJob, backend_name: str, opts: RunnerOptions):
     return est_here, payload, text
 
 
+@dataclass(frozen=True)
+class Refusal:
+    """A pre-run gate said no: the exit code, the message, and why.
+
+    One object, two presentations: ``run_job_file`` prints ``lines`` to stderr
+    and returns ``exit_code``; :func:`caustica.simulate` raises
+    :class:`~caustica.facade.SimulationRefused` carrying the same text and the
+    same code. The gates themselves exist exactly ONCE — an in-memory run that
+    skipped them would be the "works on my laptop, dies on Colab" bug the
+    plan-first discipline exists to prevent.
+    """
+
+    kind: str  # "vram" | "cpu"
+    exit_code: int
+    lines: tuple[str, ...]
+    note: str = ""  # what --dry-run prints instead of refusing
+
+    @property
+    def message(self) -> str:
+        return "\n".join(self.lines)
+
+
+def check_gates(
+    built: BuiltJob,
+    est,
+    backend_name: str,
+    opts: RunnerOptions,
+    gpu_env: dict,
+    ck_exists: bool = False,
+) -> Refusal | None:
+    """The two pre-run gates (M10i): device memory, then CPU wall time.
+
+    Returns ``None`` to proceed. Warnings that do NOT block (an accepted slow
+    CPU run, an unjudgeable one, a plain numpy notice) are raised here so both
+    callers emit them identically.
+    """
+    limit_gib = opts.vram_limit_gib
+    limit_label = "requested limit (--vram-limit-gib)"
+    if limit_gib is None and backend_name == "cupy":
+        gpu_name = gpu_env.get("gpu_name", "unknown GPU")
+        # FREE VRAM, not total (M10i): the CUDA context alone eats
+        # 0.8-1.5 GB on Colab — gating on the total says "fits" and then
+        # dies OOM mid-run. The message names which limit was used.
+        # (gpu_env is the PRE-probe snapshot — see the caller.)
+        limit_gib = gpu_env.get("vram_free_gib")
+        limit_label = f"free device VRAM ({gpu_name})"
+        if limit_gib is None:
+            limit_gib = gpu_env.get("vram_total_gib")
+            limit_label = f"total device VRAM ({gpu_name}; free VRAM unavailable)"
+    if limit_gib is not None and est.vram_gib > limit_gib:
+        lines = [
+            f"REFUSED before solving: this run needs {est.vram_gib:.2f} GiB but "
+            f"{limit_label} is {limit_gib:.2f} GiB."
+        ]
+        for a in est.advice or (
+            "coarsen dx, shrink the record region, or switch to the linear solver",
+        ):
+            lines.append(f"  -> {a}")
+        return Refusal(kind="vram", exit_code=EXIT_OOM, lines=tuple(lines))
+
+    # ---- CPU gate (M10i/D20): refuse an hours-long numpy run BEFORE
+    # paying for it; the message names its own escapes. Reuses
+    # EXIT_CONFIG — the exit-code set is the queue's API (no sixth code).
+    if backend_name == "numpy" and opts.resume and ck_exists:
+        # An explicit --resume of an existing checkpoint is its own
+        # acceptance: the sunk periods are already paid for, and a
+        # refusal here would strand pre-gate checkpoints forever
+        # (review finding, 2026-08-22 — reproduced).
+        warnings.warn(
+            "resuming an interrupted CPU run: the slow-CPU gate is bypassed for "
+            "an explicit --resume of an existing checkpoint.",
+            CausticaWarning,
+            stacklevel=2,
+        )
+    elif backend_name == "numpy":
+        limit_min = _cpu_limit_min()
+        cpu_est = _cpu_time_estimate(est, built.grid.shape, opts)
+        if cpu_est is None:
+            warnings.warn(
+                "running on the numpy (CPU) backend with NO wall-time estimate "
+                "(--no-measure and no cpu calibration): the slow-CPU gate cannot "
+                "judge this run. Drop --no-measure or run planner.calibrate() once.",
+                CausticaWarning,
+                stacklevel=2,
+            )
+        else:
+            t_cpu, cpu_src = cpu_est
+            if t_cpu > limit_min * 60.0 and not opts.allow_slow_cpu:
+                return Refusal(
+                    kind="cpu",
+                    exit_code=EXIT_CONFIG,
+                    lines=(
+                        f"REFUSED before solving: estimated wall time on the numpy (CPU) "
+                        f"backend is ~{t_cpu:.0f} s (~{t_cpu / 3600:.1f} h, estimate "
+                        f"source: {cpu_src}), over the {limit_min:g} min CPU limit.",
+                        "  -> run on a GPU backend (--backend cupy / backend='cupy'), or",
+                        "  -> accept the wait: --allow-slow-cpu (CLI) / "
+                        "allow_slow_cpu=True; the threshold itself is "
+                        "CAUSTICA_CPU_LIMIT_MIN (minutes).",
+                    ),
+                    note=(
+                        f"NOTE: a REAL run would be refused here — estimated "
+                        f"~{t_cpu:.0f} s (~{t_cpu / 3600:.1f} h, source: {cpu_src}) on "
+                        f"the numpy backend, over the {limit_min:g} min CPU limit "
+                        f"(escapes: --backend cupy, --allow-slow-cpu)."
+                    ),
+                )
+            if t_cpu > limit_min * 60.0:
+                warnings.warn(
+                    f"slow CPU run ACCEPTED via allow_slow_cpu: estimated ~{t_cpu:.1f} s "
+                    f"(~{t_cpu / 3600:.1f} h, source: {cpu_src}) on the numpy backend.",
+                    CausticaWarning,
+                    stacklevel=2,
+                )
+            else:
+                warnings.warn(
+                    f"running on the numpy (CPU) backend: estimated ~{t_cpu:.1f} s "
+                    f"(source: {cpu_src}). A GPU backend would be faster for real runs.",
+                    CausticaWarning,
+                    stacklevel=2,
+                )
+    return None
+
+
 def _write_preview_package(built: BuiltJob, result, outdir: Path, apex_vox: tuple) -> None:
     """The M10d preview next to the result: metrics.json + preview.npz.
 
@@ -441,102 +584,17 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
         )
 
     if native:
-        limit_gib = opts.vram_limit_gib
-        limit_label = "requested limit (--vram-limit-gib)"
-        if limit_gib is None and backend_name == "cupy":
-            gpu_name = gpu_env.get("gpu_name", "unknown GPU")
-            # FREE VRAM, not total (M10i): the CUDA context alone eats
-            # 0.8-1.5 GB on Colab — gating on the total says "fits" and then
-            # dies OOM mid-run. The message names which limit was used.
-            # (gpu_env is the PRE-probe snapshot — see above.)
-            limit_gib = gpu_env.get("vram_free_gib")
-            limit_label = f"free device VRAM ({gpu_name})"
-            if limit_gib is None:
-                limit_gib = gpu_env.get("vram_total_gib")
-                limit_label = f"total device VRAM ({gpu_name}; free VRAM unavailable)"
-        if limit_gib is not None and est.vram_gib > limit_gib:
-            print(
-                f"REFUSED before solving: this run needs {est.vram_gib:.2f} GiB but "
-                f"{limit_label} is {limit_gib:.2f} GiB.",
-                file=sys.stderr,
-            )
-            for a in est.advice or (
-                "coarsen dx, shrink the record region, or switch to the linear solver",
-            ):
-                print(f"  -> {a}", file=sys.stderr)
-            return EXIT_OOM
-
-        # ---- CPU gate (M10i/D20): refuse an hours-long numpy run BEFORE
-        # paying for it; the message names its own escapes. Reuses
-        # EXIT_CONFIG — the exit-code set is the queue's API (no sixth code).
-        if backend_name == "numpy" and opts.resume and ck_path.exists():
-            # An explicit --resume of an existing checkpoint is its own
-            # acceptance: the sunk periods are already paid for, and a
-            # refusal here would strand pre-gate checkpoints forever
-            # (review finding, 2026-08-22 — reproduced).
-            warnings.warn(
-                "resuming an interrupted CPU run: the slow-CPU gate is bypassed for "
-                "an explicit --resume of an existing checkpoint.",
-                CausticaWarning,
-                stacklevel=2,
-            )
-        elif backend_name == "numpy":
-            limit_min = _cpu_limit_min()
-            cpu_est = _cpu_time_estimate(est, built.grid.shape, opts)
-            if cpu_est is None:
-                warnings.warn(
-                    "running on the numpy (CPU) backend with NO wall-time estimate "
-                    "(--no-measure and no cpu calibration): the slow-CPU gate cannot "
-                    "judge this run. Drop --no-measure or run planner.calibrate() once.",
-                    CausticaWarning,
-                    stacklevel=2,
-                )
+        refusal = check_gates(built, est, backend_name, opts, gpu_env, ck_exists=ck_path.exists())
+        if refusal is not None:
+            if refusal.kind == "cpu" and opts.dry_run:
+                # A dry run pays nothing, and planning a Colab-bound job on a
+                # CPU box is a legitimate flow — preview the verdict without
+                # breaking the dry-run exit-0 contract (review, 2026-08-22).
+                print(refusal.note)
             else:
-                t_cpu, cpu_src = cpu_est
-                if t_cpu > limit_min * 60.0 and not opts.allow_slow_cpu:
-                    if opts.dry_run:
-                        # A dry run pays nothing, and planning a Colab-bound
-                        # job on a CPU box is a legitimate flow — preview the
-                        # verdict without breaking the dry-run exit-0
-                        # contract (review finding, 2026-08-22).
-                        print(
-                            f"NOTE: a REAL run would be refused here — estimated "
-                            f"~{t_cpu:.0f} s (~{t_cpu / 3600:.1f} h, source: {cpu_src}) on "
-                            f"the numpy backend, over the {limit_min:g} min CPU limit "
-                            f"(escapes: --backend cupy, --allow-slow-cpu)."
-                        )
-                    else:
-                        print(
-                            f"REFUSED before solving: estimated wall time on the numpy (CPU) "
-                            f"backend is ~{t_cpu:.0f} s (~{t_cpu / 3600:.1f} h, estimate "
-                            f"source: {cpu_src}), over the {limit_min:g} min CPU limit.",
-                            file=sys.stderr,
-                        )
-                        print(
-                            "  -> run on a GPU backend (--backend cupy / backend='cupy'), or",
-                            file=sys.stderr,
-                        )
-                        print(
-                            "  -> accept the wait: --allow-slow-cpu (CLI) / "
-                            "allow_slow_cpu=True; the threshold itself is "
-                            "CAUSTICA_CPU_LIMIT_MIN (minutes).",
-                            file=sys.stderr,
-                        )
-                        return EXIT_CONFIG
-                elif t_cpu > limit_min * 60.0:
-                    warnings.warn(
-                        f"slow CPU run ACCEPTED via allow_slow_cpu: estimated ~{t_cpu:.1f} s "
-                        f"(~{t_cpu / 3600:.1f} h, source: {cpu_src}) on the numpy backend.",
-                        CausticaWarning,
-                        stacklevel=2,
-                    )
-                else:
-                    warnings.warn(
-                        f"running on the numpy (CPU) backend: estimated ~{t_cpu:.1f} s "
-                        f"(source: {cpu_src}). A GPU backend would be faster for real runs.",
-                        CausticaWarning,
-                        stacklevel=2,
-                    )
+                for line in refusal.lines:
+                    print(line, file=sys.stderr)
+                return refusal.exit_code
     else:
         print(f"(planner models the native engine only; '{built.solver}' runs unplanned)")
 
@@ -589,7 +647,10 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
     deadline = time.monotonic() + opts.max_hours * 3600.0 if opts.max_hours is not None else None
 
     def stop_when() -> bool:
-        hb.tick()
+        # The heartbeat is no longer ticked HERE (M10j): it consumes the
+        # engine's progress payload, which the boundary emits just before
+        # this poll — same call site, same order, same counters, one
+        # instrumentation instead of two.
         if opts.stop_after_periods is not None and hb.session_periods >= opts.stop_after_periods:
             return True
         return deadline is not None and time.monotonic() >= deadline
@@ -600,10 +661,12 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
         reference_point=built.focus_vox,
         harmonics=built.harmonics,
     )
+    display = None
     if native:
-        # backend= and checkpoint= are NATIVE-engine options; the kwave
-        # adapter rejects unknown kwargs by contract, so passing them would
-        # crash every kwave job (adversarial review, 2026-08-19).
+        # backend=, checkpoint= and progress= are NATIVE-engine options; the
+        # kwave adapter rejects unknown kwargs by contract, so passing them
+        # would crash every kwave job (adversarial review, 2026-08-19; the
+        # same trap catches progress= — T3).
         run_kwargs["backend"] = backend_name
         # keep_on_success: the checkpoint outlives the solve until the result
         # is SAFELY stored — a Drive failure during save stays resumable from
@@ -614,6 +677,8 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
             stop_when=stop_when,
             keep_on_success=True,
         )
+        display = progress_resolve(opts.progress, label=built.name)
+        run_kwargs["progress"] = progress_chain(hb, display)
 
     import caustica.solvers as solvers  # noqa: PLC0415
 
@@ -632,6 +697,8 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
         hb.write("failed", error=f"{type(exc).__name__}: {exc}")
         traceback.print_exc()
         return EXIT_SOLVER
+    finally:
+        progress_close(display)  # a live tqdm bar must not outlive the solve
     elapsed_solve = time.perf_counter() - t_solve
 
     # ---- store (M10 contract) + the stamp ----

@@ -9,7 +9,9 @@ M10h adds the ``caustica`` console entry point and ``example`` — packaged,
 zero-data jobs copied *out* of the install before running (running them in
 place would write into site-packages, see ``caustica.examples``). M10m adds
 ``schema`` — the job format's JSON Schema, generated from the pydantic
-models and reflecting every registered medium/array kind.
+models and reflecting every registered medium/array kind. M10j turns the
+runner's progress payload into visible output here — per-period lines and a
+periodic focal preview on stderr, silenced with ``--no-progress``.
 """
 
 from __future__ import annotations
@@ -92,6 +94,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="write only the <=10 MB preview package + metrics, no result.h5 "
         "(disk-pressure opt-in; the full field is unrecoverable and a rerun solves again)",
+    )
+    r.add_argument(
+        "--no-progress",
+        action="store_true",
+        help="silence the per-period progress lines and the mid-run focal preview "
+        "(they go to stderr; status.json is written either way)",
     )
     r.add_argument("--stop-after-periods", type=int, default=None, help=argparse.SUPPRESS)
 
@@ -185,6 +193,11 @@ def main(argv: list[str] | None = None) -> int:
                 stop_after_periods=args.stop_after_periods,
                 allow_slow_cpu=args.allow_slow_cpu,
                 preview_only=args.preview_only,
+                # Same payload the notebook facade renders (M10j) — the CLI
+                # is an application, so it opts in; the library default stays
+                # silent. stderr keeps stdout's contract (plan, result path)
+                # parseable.
+                progress=None if args.no_progress else "auto",
             ),
         )
     if args.command == "example":
