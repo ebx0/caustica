@@ -1723,3 +1723,80 @@ CI zamanlama kapısı BİLEREK yok (paylaşılan koşucuda yanlış kırmızı �
 Süit 339 → **379 toplanan (377 passed / 2 skipped / 0 failed, 84.9 s)** — operatör ölçümü.
 Ajan devlog yazarken API hatasıyla düştü; MILESTONES işaretleri çalışma ağacında doğruydu,
 operatör doğrulayıp commit'ledi.
+
+## 2026-08-22 — M10l kapandı: GUI sözleşmesi donduruldu (GUI kodu YOK)
+
+Beş commit (`8a73464..02069c2`). Milestone'un tamamı "GUI ne zaman gelirse gelsin bunun üstüne
+otursun" işiydi: yeni bağımlılık yok, `gui` extra'sı yok, ikinci repo yok, `src/caustica` içinde
+GUI'yi bilen tek satır yok.
+
+### Kapanan iki gerçek boşluk
+**İptal sinyali.** `grep -rn "cancel" src/caustica` bugüne kadar boştu: GUI'nin "Durdur" düğmesinin
+yazacağı hiçbir yer yoktu, süreci öldürmek TEK yoldu ve o da koşuyu kaybediyordu. Kanca zaten
+duruyordu — `CheckpointSpec.stop_when`, periyot sınırında çağrılıyor. Eksik olan tek şey dosya
+yoklamasıydı. Eklendi: çıktı klasöründe `cancel` görülünce checkpoint yazılır, çıkış 5.
+
+Asıl karar dosyanın SONRASIYDI. İlk yazımda dosya bırakılıyordu; bu haliyle `--resume` ilk periyot
+sınırında kendini iptal ederdi ve "resume kesintisizle bit-aynı" ölçütü hiç kapanamazdı. Şimdi
+dosya TÜKETİLİYOR. İkinci sıra sorun: cancel görülüp henüz onurlandırılmadan öldürülen bir süreç
+dosyayı bırakır ve o klasördeki HER resume'u sonsuza kadar iptal eder — bu yüzden bayat `cancel`
+bir sonraki denemenin başında temizleniyor. Bunun kabul edilen bedeli sayfada da yazılı: `cancel`
+KOŞAN bir işe sinyaldir, ön-iptal aracı değildir.
+
+**Yapılandırılmış hata.** Koşu başlamadan olan hatalar (`hb` daha yaratılmamış) `return EXIT_CONFIG`
+ile çıkıyordu: `status.json` HİÇ oluşmuyordu ve GUI'ye stderr ayrıştırmak kalıyordu. Artık çıktı
+klasörüne `error.json` düşüyor — `{format, stage, exit_code, error_class, message, advice[],
+written_at}`, altı `stage`. Planner'ın `est.advice`'i bugüne kadar yalnız ekrana basılıyordu; artık
+dosyaya da giriyor. Tek kopya olması için `Refusal` yeniden kuruldu: `lines` alanı gitti, yerine
+`headline` + `advice` listesi geldi ve `lines` bir property oldu.
+
+Sözleşme EKLENTİ olarak tasarlandı, ikame olarak değil: çıkış kodları, stderr metinleri,
+`status.json` alanları, `run_meta` ve checkpoint parmak izi DEĞİŞMEDİ. Bunu göz kararıyla değil
+ölçerek doğruladım — ana ağaçtaki `runner.py` geçici olarak ebeveyn commit'inkiyle (`96e6330`)
+değiştirilip yedi hata yolu (vram reddi · cpu kapısı · bozuk job · bilinmeyen gpu · bilinmeyen
+backend · kesinti · checkpoint çakışması) iki kez koşturuldu: stdout ve stderr, geçici klasör
+adları ve `warnings.warn`'un satır numarası dışında BAYT-AYNI. `error.json` yazılamazsa da hiçbir
+şey değişmiyor: aynı kod, aynı mesaj, bir uyarı logu (`test_a_write_failure_for_error_json_changes_nothing`).
+
+### Sözleşme sayfası ve çürüme testi
+`docs/gui_contract.md` yüzeyin tamamını yazıya döküyor ve başında onu SONLU kılan cümle duruyor:
+listelenmeyen hiçbir şey sözleşme değildir. Sonunda da tersi var — modül düzeni, stdout nesri,
+`checkpoint.npz` içi, log metinleri ve herhangi bir IPC bilinçli olarak sözleşme DEĞİL.
+
+Alan listeleri elle kopyalanmadı. `tests/test_gui_contract.py` dört gerçek koşu üretiyor (başarılı ·
+kesilmiş · VRAM-reddi · store-çökmesi) ve her listeyi tarif ettiği şeyle karşılaştırıyor: klasör
+listesi gerçek klasörle, `status.json` alanları ÜÇ gerçek status'un kesişimiyle (durum-bağımlı
+ekler farkla türetiliyor — elle sayılmıyor), ilerleme anahtarları gerçek payload'la, çıkış kodları
+ve format etiketleri koddaki sabitlerle. Sayfadaki CLI satırları gerçek argparse'tan geçiyor.
+
+### Review turu — bir gerçek bulgu, üç abartı
+1. **GERÇEK:** sayfa GUI'ye ön-koşu reddi için `caustica.SimulationRefused` yakalamasını söylüyordu.
+   Böyle bir sınıf YOK — facade hem kapılar hem çöken çözüm için `SimulationError(mesaj, exit_code)`
+   atıyor, sınıflandırma `.exit_code`'da. `runner.py`'deki `Refusal` docstring'i de aynı yanlış adı
+   taşıyordu (M10i'den beri duruyordu, ama M10l'in dokunduğu kod). İkisi de düzeltildi ve delik
+   kapatıldı: `test_every_caustica_name_on_the_page_actually_exists` sayfadaki her `caustica.AD`'ı
+   gerçek pakette çözüyor. Mutasyonla doğrulandı — yanlış ad geri konunca test kırmızı.
+2. **ABARTI:** "`--dry-run` job.json + plan.json + plan.txt yazar" NATIVE hal; native olmayan
+   çözücünün planlayacak şeyi yok, yalnız `job.json` yazıyor. Daraltıldı.
+3. **ABARTI:** "`preview.npz` + `metrics.json` birlikte ≤10 MB" — 10 MB bütçesi preview'un ve
+   yalnız onun sıkıştırılmış baytları üzerinde ÖLÇÜLÜYOR. Daraltıldı.
+4. **ÇÜRÜTÜLEN şüpheler** (araştırıldı, bulgu ÇIKMADI): (a) cancel yoklamasının adım maliyetine
+   sızması — `stop_when` yalnız `_period_boundary`'den (settle döngüsü + `t_end` doldurma döngüsü)
+   ve kayıt penceresi öncesi TEK yoklamadan çağrılıyor; `step()` içinde hiçbir çağrı yok, testi de
+   ölçüyor (`polls <= boundaries+1`, `polls*spp <= steps+spp`). (b) `Refusal` yeniden kurulumunun
+   stderr'i kaydırması — yukarıdaki bayt-aynı ölçümü çürüttü. (c) sayfadaki `caustica-result/1`
+   attr listesinin uydurma olması — gerçek `result.h5`'e karşı denetlendi, sayfanın adlandırdığı
+   her attr gerçekten var. (d) `_clear_stale`'in bir hata kodunu değiştirebilmesi — `OSError`
+   yakalanıp loglanıyor, akışa dokunmuyor.
+
+### Bilerek yapılmayanlar
+- **Kesinti (çıkış 5) `error.json` YAZMAZ.** Durmak başarısızlık değildir; `status.json` "interrupted"
+  diyor ve kod 5. GUI için iptal ile çökme aynı dosyaya düşseydi ikisi karışırdı.
+- **kwave iptal edilemez** ve bunu stdout'ta SÖYLÜYOR. Checkpoint almıyor, yani durulacak sınır yok;
+  onu "iptal etmek" öldürmek olurdu, ki dosyanın var oluş sebebinin tam tersi.
+- **`--dry-run` de klasörü sahipleniyor** (bayat `error.json`/`cancel` siliniyor). Aynı klasörde eşzamanlı
+  iki süreç zaten desteklenmiyor (checkpoint çakışması), bu yüzden kabul edildi.
+- Altıncı çıkış kodu EKLENMEDİ: iptal, mevcut 5'i kullanıyor. Kod kümesi kuyruğun API'si.
+
+Süit 379 → **412 (410 passed / 2 skipped / 0 failed)**; `ruff check .` + `format --check` temiz;
+`git status --porcelain data/setups/` boş — dokuz kurulum dosyası + manifest bayt-aynı.
