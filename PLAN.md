@@ -4,6 +4,10 @@
 > Yol haritası ve başarı kriterleri: **MILESTONES.md** · oturum kayıtları: **docs/devlog.md** ·
 > kütüphane-önce dönüşümünün iş planı: **docs/library_first_plan.md** (İngilizce, uygulama detayı).
 >
+> **v3.1 (2026-08-22).** M10h/M10i/M10k kapandı: kütüphane UWCEM'siz, ortam kapıları içeride.
+> Yeni kararlar K15–K17 (tam plugin mimarisi, UWCEM tek dosyada EN SON — `docs/uwcem.md`,
+> operatör modeli). Yalınlaştırma turu #1: kök veri/notebook dosyaları silindi.
+>
 > **v2 → v3 (2026-08-21).** Kütüphane-önce dönüşüm kararlarıyla yeniden yazıldı. Değişenler:
 > notebook-native GUI kararı **iptal**; UWCEM fantom katmanı kütüphaneden **çıkarıldı**; public
 > API **üç katmana** ayrıldı; Colab'da Drive kullanımı **kaldırıldı**; M0–M9 yol haritası tablosu
@@ -50,6 +54,9 @@ Bunlar yeniden tartışılmaz. Değişmesi gerekiyorsa önce burası güncelleni
 | K12 | **Colab çıktısı `/content`** — kütüphane Drive mount ETMEZ | Kalıcılık isteyen kullanıcı Drive'ı kendi mount edip `--out` verir |
 | K13 | **GUI ayrı repo** (`caustica-gui`), teknoloji seçilmedi | Şimdi yalnızca sözleşmeler dondurulur (§11) |
 | K14 | v1.0'a kadar **API stabilite garantisi yok** | Kırıcı değişiklik serbest; ama `__all__` dürüst kalır ve kırılma devlog'a yazılır |
+| K15 | **Tam plugin mimarisi** (2026-08-22) — beş eksen entry-point'li: solver ✅, medium kind, array kind, backend, report renderer | Erken-soyutlama riski söylendi, kullanıcı teyit etti. Panzehir: çekirdek kendi plugin API'sinin birinci müşterisidir (özel yol yok). M10m + M10n |
+| K16 | **UWCEM kalanları EN SON; her şey TEK dosyada** (2026-08-22) | Ayrışım (M10k) zaten kapandı; kalan push/bakım işleri `docs/uwcem.md`'de, yol haritasının sonunda |
+| K17 | **Yönetim modeli** (2026-08-22): operatör = Fable 5, kod = Opus 5 alt-ajanları; PM sistemi = MILESTONES.md | Önemli kararlar kullanıcıya sorulur; gerisi operatörde. Milestone kanıt disiplini değişmez |
 
 ### 0.3 Vazgeçilenler (kayıt — yeniden gündeme gelirse buraya bakılır)
 
@@ -107,8 +114,7 @@ L0  çekirdek                      Backend, spectral, PML, materials, io, medium
 **Kurallar (öncelik sırasıyla):**
 
 1. **Oklar yalnızca aşağı bakar.** `caustica.*` asla `apps`, `uwcem_phantoms` veya bir GUI paketini
-   import etmez. AST testiyle zorlanır. *(Bugün İHLAL ediliyor — `config/job.py` dört yerden
-   `uwcem_phantoms` import ediyor; K7 bunu kapatır.)*
+   import etmez. AST testiyle zorlanır. *(İhlal M10k/W0c ile kapandı — `tests/test_import_direction.py` yeşil, 2026-08-22.)*
 2. **L2 ikinci bir kod yolu değildir.** Facade girdisini job'a çevirip AYNI `build_job`'dan geçer.
    Facade'ın ifade edebildiği her şey job dosyasıyla da ifade edilebilmeli, tersi de.
 3. **L4 fikirli olabilir, L0–L3 olamaz.** Colab varsayımları (`/content`, runtime restart) yalnızca
@@ -116,6 +122,9 @@ L0  çekirdek                      Backend, spectral, PML, materials, io, medium
 4. **L5'e özel API yoktur.** GUI bir şeye ihtiyaç duyuyorsa önce belgelenmiş bir L3 sözleşmesi olur.
 5. **Hacim ortamları için tek kapı.** Her fantom kaynağı `medium_volume`'den girer. Bir kaynak
    kütüphanede özel durum gerektiriyorsa, özel durum yanlıştır.
+6. **Her eksen genişletilebilir (K15).** Solver, medium kind, array kind, backend ve report
+   renderer registry + entry-point seam'i taşır; üçüncü taraf paket çekirdeğe dokunmadan uzanır.
+   Çekirdek implementasyonlar da AYNI kapıdan kaydolur — seam'in çalıştığının sürekli kanıtı budur.
 
 ---
 
@@ -138,22 +147,22 @@ caustica/                        (repo kökü)
 │  ├─ solvers/       ✅ base (yetenek deklarasyonu), registry (entry-point plugin),
 │  │                    kspace/{engine,linear,westervelt,operators}, kwave_adapter
 │  ├─ planner/       ✅ VRAM envanteri + süre modeli + gpu_db.json + cihaz kalibrasyonu
-│  ├─ io/            ✅ atomic, quantize (float16 kontratı), store (caustica-result/1), checkpoint
-│  │                 🔄 medium_volume: genel hacim-ortam formatı (K8)
+│  ├─ io/            ✅ atomic, quantize (float16 kontratı), store (caustica-result/1), checkpoint,
+│  │                    medium_volume (K8 — okuyucu+yazıcı, bit-aynılık kanıtlı; M10k/W0a)
 │  ├─ report/        ✅ metrics (tek kaynak), preview (≤10 MB), figures, html, run_report
 │  ├─ runner.py      ✅ tek job koşumu: plan-önce, ayrık çıkış kodları, kalp atışı, damga
-│  ├─ __main__.py    ✅ validate / run / report      🔄 `caustica` konsol komutu
+│  ├─ __main__.py    ✅ validate / run / report / example + `caustica` konsol komutu (M10h)
 │  ├─ facade.py      🔄 simulate(...) — L2 (K4)
-│  ├─ env.py         🔄 env_report(), require_gpu() — ortam politikası (K5/K6)
+│  ├─ env.py         ✅ env_report(), require_gpu(), CausticaWarning, CPU kapısı (M10i)
 │  ├─ progress.py    🔄 ilerleme payload'u + tqdm/metin sunumu (K11)
-│  ├─ examples/      🔄 dış veri gerektirmeyen sentetik örnek job'lar
+│  ├─ examples/      ✅ water_bowl_mini — dış veri gerektirmeyen paketli örnek (M10h)
 │  ├─ colab.py       ⬜ M10f — ortam kontrolü + /content altında koşu (K12)
 │  ├─ analytic/      ✅ rayleigh, oneill, planewave (Fubini)
 │  ├─ study/         ⬜ M11 — Study + sweep + damgalı rapor
 │  ├─ validation/    ⬜ M11 — analitik süit tek komutla rapor
 │  ├─ pipelines/     ⬜ M13 — DatasetGenerator (LHS, resume, ETA)
 │  └─ thermal/       ⬜ M18 — Pennes + CEM43
-├─ tests/            ✅ 402 test (K7 sonrası ~265; 137'si uwcem-phantom repo'suna taşınır)
+├─ tests/            ✅ 279 test (M10k sonrası; taşınan süit ../uwcem-phantom'da 165+ yeşil)
 ├─ benchmarks/       ✅ damgalı doğrulama raporları
 ├─ notebooks/        ⬜ M10f — colab_run.ipynb (değişmeyen dosya)
 ├─ apps/             ✅ focus_study (kütüphane tüketicisi; wheel'e girmez)
@@ -341,10 +350,10 @@ sınıfından ve bir kütüphanenin en pahalı hata türü budur.
   (shape + dx dosyanındır, explicit `grid` bölümü reddedilir — bu kural bir job'ın dataset'in
   yeniden örneklenmiş bir hayaletini sessizce koşmasını engeller). Mevcut 4.5 GB dosyaları
   **olduğu gibi** okur; format değişikliği yeniden üretim gerektiriyorsa yanlıştır.
-- **`uwcem-phantom` (K9)** — ayrı repo. UWCEM kataloğu/indirmesi, ASCII decoder'ları, build
-  pipeline'ı, dokuz-fantom hizalı dataseti, dokuz depolanmış kurulum, `phantom_launcher`.
-  caustica'ya **bağımlıdır**; ürettiği şey `medium_volume` dosyaları ve **explicit job JSON**'dur.
-  Lisans/atıf yükümlülüğü orada yaşar; caustica'nın MIT lisansı temiz kalır.
+- **`uwcem-phantom` (K9/K16)** — ayrı repo, **taşındı ve çalışıyor** (2026-08-22; yerel git,
+  push yok). caustica'ya **bağımlıdır**; ürettiği şey `medium_volume` dosyaları ve **explicit
+  job JSON**'dur (`setup_to_job`). Lisans/atıf yükümlülüğü orada; caustica'nın MIT lisansı temiz.
+  Güncel durum + kalan işler: **docs/uwcem.md** (tek dosya, EN SON).
 - **Veri yerelde kalır (K3)**: üretilmiş 4.5 GB ve dokuz setup JSON'u senin diskinde, git'in
   dışında. caustica repo'sundaki `data/` boşalır. Dışarıdan gelen kullanıcı UWCEM dosyalarını
   **kendi** indirir (repo'nun katalog + checksum yolu) ve kendi fantomunu üretir.
@@ -354,8 +363,8 @@ sınıfından ve bir kütüphanenin en pahalı hata türü budur.
   kullanıcıda olmayan bir repoda kalırdı.
 - **Genel geometri yolu kütüphanede kalır**: `geometry/` (CSG, sahne, hacim import, dx yeniden
   örnekleme) hiçbir kaynağa özgü değildir ve `volume_import` medium kind'ı olarak zaten public.
-  `load_labels_txt` genel kalır (kaynağa özgü kısım `mapping` callable'ında); `load_breast_phantom`
-  UWCEM üretim fantomunun şeklini sabit kodladığı için taşınır.
+  `load_labels_txt` genel kaldı (kaynağa özgü kısım `mapping` callable'ında); `load_breast_phantom`
+  UWCEM'e özgü olduğu için yeni repoya taşındı (`legacy_import.py`).
 - **Kendi kurulumunu getir**: job şeması keyfi eleman geometrisini (`elements` kind'ı) tanır,
   `caustica schema` şemayı JSON Schema olarak basar, `docs/job_reference.md` ve
   `docs/conventions.md` dışarıdan gelenin kaynak koda inmeden job yazmasını sağlar. Bu bir
@@ -494,9 +503,9 @@ Yeniden tartışmaya gerek yok; ama fizik yorumu yapılırken bilinmeli.
 
 ## 16. Açık sorular
 
-1. **`uwcem-phantom` ne zaman public olur** — repo **private** açılıyor (kullanıcı açar, ajan
-   doldurur); public'e geçmeden önce UWCEM lisans/şart okuması yapılmalı (plan: hiçbir şey yeniden
-   dağıtılmaz, kullanıcı upstream'den kendi indirir). Ad da public'e kadar değişebilir.
+1. **`uwcem-phantom` ne zaman GitHub'a çıkar** — repo yerelde var ve çalışıyor
+   (2026-08-22; şart okuması yapıldı, kod-only). Kullanıcı kararı: şimdilik yerel. Tek kopya
+   riski kabul edildi; kalanlar `docs/uwcem.md`.
 2. **Genel hacim araçlarının (crop/resample/simplify, sentetik heterojenlik) ileride caustica'ya
    dönüp dönmeyeceği.** Bilinçli olarak ertelendi: önce ayır, ikinci bir fantom kaynağı çıkarsa
    genelleştir. Şimdiden inşa edilmez.

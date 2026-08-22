@@ -1401,3 +1401,21 @@ eksik 2 boyut (motor-checkpoint, job-config/steering) elle tarandı.
   extent/histogram metadata'sı), baytların düzenini `caustica.io.write_medium_volume` yazıyor.
   Yeni exportlar `caustica-medium-volume/1` etiketi taşıyor; okuyucular eski etiketleri kabul
   etmeye devam ediyor (rebuild yok). Yeni repo süiti 166 passed.
+
+## 2026-08-22 — Operatör yeniden-planı: UWCEM tek dosyada + yalınlaştırma + K15–K17
+
+Kullanıcı yönetim modelini değiştirdi (K17): operatör = Fable 5, kod = Opus 5 alt-ajanları;
+PM sistemi MILESTONES.md. Bu tur kod değil, plan/temizlik turuydu:
+
+- **UWCEM tek dosyaya indi**: `docs/uwcem.md` — ayrışım M10k olarak zaten kapanmıştı (W0a–W0f,
+  bugün başlık `[x]`'e çekildi ve bayat `load_breast_phantom` kutusu kapatıldı); kalan işler
+  (push kararı, bakım) EN SON'a alındı (K16). `library_first_plan.md` W0 gövdesi stub'a indi.
+- **Yalınlaştırma #1** (kullanıcı onayı): kök `mtype.txt` (123 MB) + `mtype.txt.labels.npz` +
+  `_code_cells.py` + `hifu_pred_dx300_t128.ipynb` silindi (M14 hedefi artık devlog'daki v12
+  sayıları — MILESTONES notu düşüldü); bayat `build/` silindi (M10h'deki CRITICAL maskesinin
+  nüksü). Hepsi git dışıydı.
+- **K15 tam plugin mimarisi** (kullanıcı, erken-soyutlama uyarısına rağmen teyit): beş eksen
+  entry-point — solver ✅ / medium kind + array kind (M10m) / backend + report renderer (yeni
+  **M10n**). Panzehir kuralı: çekirdek kendi plugin API'sinin birinci müşterisi.
+- **uwcem-phantom push kararı**: şimdilik YEREL (tek kopya riski kullanıcıya söylendi, kabul).
+- Sıra onaylandı: M10m → M10n → M10j → M10l → M10f → ilk Colab oturumu → M10g → UWCEM kalanları.
