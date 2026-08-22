@@ -185,11 +185,12 @@ class PluginRegistry(Generic[T]):
         if self._loaded:
             return
         self._loaded = True  # set first: a broken scan must not retry forever
-        # Imported here, not at module scope. Not for the import cost —
-        # pydantic already puts `importlib.metadata` in sys.modules at its own
-        # import time, so there is nothing to save (measured, M10n review) —
-        # but so that `caustica.core.backend`, which owns a registry and IS on
-        # the `import caustica` path, states its dependency where it uses it.
+        # Imported here, not at module scope. Not for the import cost:
+        # pydantic pulls `importlib.metadata` in (via pydantic.plugin._loader)
+        # as soon as a model class is built, which `import caustica` does, so
+        # there is nothing to save (measured, M10n review). It is here so that
+        # `caustica.core.backend` — which owns a registry and IS on the
+        # `import caustica` path — states this dependency where it uses it.
         from importlib import metadata  # noqa: PLC0415
 
         try:

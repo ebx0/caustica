@@ -71,6 +71,14 @@ from caustica.medium import Medium
 from caustica.solvers.kspace.linear import LinearKSpacePSTD
 
 
+#: Proof-of-execution logs: the plugin's own code saying it ran. A stamp in
+#: result.h5 can be produced by a look-alike; these cannot.
+MEDIUM_BUILDS = []
+SOLVER_RUNS = []
+BACKEND_CALLS = []
+RENDER_CALLS = []
+
+
 class GelMediumConfig(MediumKindConfig):
     """Uniform coupling gel, defined entirely outside caustica."""
 
@@ -81,6 +89,7 @@ class GelMediumConfig(MediumKindConfig):
         return self.c
 
     def build(self, grid):
+        MEDIUM_BUILDS.append(self.c)
         mat = Material(name="test_gel", c=self.c, rho=1020.0, alpha_np_m=1.0, beta=0.0)
         return Medium.homogeneous(grid.shape, mat)
 
@@ -121,13 +130,6 @@ class RingArrayConfig(ArrayKindConfig):
         extra = dict(self.derived())
         extra["source_voxels"] = int(asrc.source.n_points)
         return asrc.source, extra
-
-
-#: Proof-of-execution logs. A stamp in result.h5 only echoes the job file;
-#: these say the plugin's own code ran.
-SOLVER_RUNS = []
-BACKEND_CALLS = []
-RENDER_CALLS = []
 
 
 class RelabelledLinearSolver(LinearKSpacePSTD):
@@ -171,7 +173,7 @@ def render_text_report(outdir, *, preview_only=False):
         metrics = json.loads(mp.read_text(encoding="utf-8"))
     RENDER_CALLS.append(str(outdir))
     out = outdir / "REPORT.txt"
-    peak = (metrics.get("peak") or {}).get("p_max_pa")
+    peak = (metrics.get("peak") or {}).get("p_pa")  # the real caustica-metrics/1 key
     lines = [
         "third-party report",
         f"job: {metrics.get('job', outdir.name)}",
@@ -241,6 +243,14 @@ def plugin_on_path(root: Path, modules: tuple[str, ...]):
     importlib.invalidate_caches()
     for registry, _ in PLUGIN_NAMES:
         registry._loaded = False
+    # Discover NOW rather than at the first question a test happens to ask:
+    # re-arming `_loaded` alone leaves `_JOB_ADAPTER` built from the old kind
+    # set, so a test that ran a job before touching `available()` died with
+    # `union_tag_invalid` (M10n verification). A real install is discovered at
+    # job.py import time; the fixture has to match that, not the test order.
+    for registry, _ in PLUGIN_NAMES:
+        registry.discover()
+    jobmod._rebuild_kind_unions()
     try:
         yield
     finally:
@@ -549,9 +559,8 @@ def test_entry_point_plugin_extends_all_five_axes(tmp_path):
         # The plugin's own bookkeeping: a stamp in result.h5 only echoes the
         # job file, so each axis also has to show that its code executed.
         plug = importlib.import_module(PLUGIN_MODULE)
-        plug.SOLVER_RUNS.clear()
-        plug.BACKEND_CALLS.clear()
-        plug.RENDER_CALLS.clear()
+        for log in (plug.MEDIUM_BUILDS, plug.SOLVER_RUNS, plug.BACKEND_CALLS, plug.RENDER_CALLS):
+            log.clear()
 
         # ---- run A: the plugin's solver, on the plugin's medium + array ----
         out_a = tmp_path / "out_a"
@@ -559,6 +568,8 @@ def test_entry_point_plugin_extends_all_five_axes(tmp_path):
         with h5py.File(out_a / "result.h5", "r") as hf:
             assert hf.attrs["solver"] == "test_linear"
         assert plug.SOLVER_RUNS == ["test_linear"]  # the plugin CLASS solved it
+        # ...on the plugin's gel, not water (built twice: validate, then run)
+        assert plug.MEDIUM_BUILDS and set(plug.MEDIUM_BUILDS) == {1520.0}
         meta_a = json.loads((out_a / "run_meta.json").read_text(encoding="utf-8"))
         assert meta_a["backend"] in ("numpy", "cupy")  # run A says nothing about backends
         # the plugin's medium and array really built the setup
@@ -579,6 +590,9 @@ def test_entry_point_plugin_extends_all_five_axes(tmp_path):
         assert plug.RENDER_CALLS == [str(out_b)]
         text = rendered.read_text(encoding="utf-8")
         assert "third-party report" in text and "plugin-backend" in text
+        # ...and it read a real number out of metrics.json, not a missing key
+        peak = json.loads((out_b / "metrics.json").read_text(encoding="utf-8"))["peak"]["p_pa"]
+        assert f"peak_pa: {peak}" in text
         # ...and caustica's own renderer is still the default
         assert report_renderers.get("matplotlib").__module__ == "caustica.report.renderers"
 
@@ -822,6 +836,38 @@ def test_a_misspelled_backend_is_refused_before_the_medium_is_built(tmp_path, mo
     assert not built, "the medium was built before the backend name was refused"
 
 
+def test_the_kind_registries_answer_from_a_cold_import():
+    """`from caustica.config.kinds import medium_kinds` is the documented seam.
+
+    The core kinds are registered by caustica.config.job as it is imported,
+    which nothing else forces — so a plugin author who imported only the seam
+    used to be told "Available: (none)", or shown their own kind and nothing
+    else. The registry imports job.py itself now, and only when asked
+    (`import caustica` still does not).
+    """
+    code = textwrap.dedent(
+        """
+        import sys
+        from caustica.config.kinds import array_kinds, medium_kinds
+        assert "caustica.config.job" not in sys.modules, "the seam imported job.py eagerly"
+        assert medium_kinds.available() == (
+            "homogeneous", "medium_volume", "scene", "volume_import"
+        ), medium_kinds.available()
+        assert array_kinds.available() == ("archimedean_spiral", "bowl", "elements")
+        try:
+            medium_kinds.get("nope")
+        except KeyError as exc:
+            assert "homogeneous" in str(exc), str(exc)
+        else:
+            raise AssertionError("unknown kind did not raise")
+        print("clean")
+        """
+    )
+    proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=180)
+    assert proc.returncode == 0, proc.stderr
+    assert "clean" in proc.stdout
+
+
 # --------------------------------------------------------------------- docs
 
 
@@ -872,9 +918,10 @@ def test_import_caustica_does_not_scan_entry_points():
     path) must not have scanned.
 
     ``"importlib.metadata" not in sys.modules`` would be the sharper probe
-    and is NOT usable: pydantic imports it from ``pydantic.plugin._loader``
-    at its own import time (verified 2026-08-22), so it is already there
-    whatever caustica does.
+    and is NOT usable: pydantic pulls it in from ``pydantic.plugin._loader``
+    as soon as a model class is built — which ``import caustica`` does — so
+    it is already there whatever caustica's registries do. (Bare
+    ``import pydantic`` alone does not; measured 2026-08-22.)
     """
     code = textwrap.dedent(
         """

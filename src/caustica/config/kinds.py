@@ -36,7 +36,9 @@ never fatal — the same contract the solver registry keeps.)
 
 from __future__ import annotations
 
+import importlib
 import logging
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -249,6 +251,33 @@ class KindRegistry(PluginRegistry[type[CausticaModel]]):
                 ep_name,
                 self.base.__name__,
             )
+
+    # ---- lookup ----
+
+    def _ensure_core_kinds(self) -> None:
+        """Register caustica's OWN kinds before answering a question.
+
+        They are registered by :mod:`caustica.config.job` as it is imported,
+        which nothing else forces. A plugin author who imports only the seam
+        — the import ``docs/extending.md`` tells them to write — was told
+        ``Available: (none)``, or worse was shown their own kind and nothing
+        else (found by the M10n verification round).
+
+        Re-entrancy is free: while job.py is executing it is ALREADY in
+        ``sys.modules``, so this is a no-op exactly when it has to be. Core
+        first, plugins second, so the union order (and therefore pydantic's
+        "expected tags" wording) is the same as on the normal path.
+        """
+        if "caustica.config.job" not in sys.modules:
+            importlib.import_module("caustica.config.job")
+
+    def get(self, name: str) -> type[CausticaModel]:
+        self._ensure_core_kinds()
+        return super().get(name)
+
+    def available(self) -> tuple[str, ...]:
+        self._ensure_core_kinds()
+        return super().available()
 
     # ---- unions ----
 
