@@ -146,3 +146,148 @@ def test_both_native_solvers_accept_progress():
 def test_unknown_kwarg_is_still_refused():
     with pytest.raises(TypeError, match="unknown run.. options"):
         run_mini(progresss=lambda ev: None)  # typo must not pass silently
+
+
+# ------------------------------------------------ the runner as a consumer
+
+
+def test_runner_status_json_matches_the_pre_m10j_contract(tmp_path):
+    """The heartbeat became a consumer; its numbers must not have moved."""
+    import json
+
+    from tests.test_runner import mini_job, opts
+
+    from caustica.runner import EXIT_OK, run_job_file
+
+    out = tmp_path / "out"
+    assert run_job_file(mini_job(tmp_path), opts(out=out, progress="plain")) == EXIT_OK
+    status = json.loads((out / "status.json").read_text(encoding="utf-8"))
+    plan = json.loads((out / "plan.json").read_text(encoding="utf-8"))
+    meta = json.loads((out / "run_meta.json").read_text(encoding="utf-8"))
+    assert set(status) == {
+        "job",
+        "solver",
+        "backend",
+        "pid",
+        "ppw_warnings",
+        "state",
+        "periods_done",
+        "steps_done",
+        "steps_expected",
+        "steps_worst",
+        "eta_s",
+        "elapsed_s",
+        "written_at",
+        "result",
+    }
+    assert status["steps_done"] == status["periods_done"] * plan["spp"]
+    # The documented off-by-one survives: settle periods + the record flip.
+    assert status["periods_done"] == meta["actual"]["converged_period"] + 1
+
+
+def test_progress_does_not_change_the_runners_result(tmp_path):
+    from tests.test_runner import mini_job, opts
+
+    from caustica.io.store import load_result
+    from caustica.runner import EXIT_OK, run_job_file
+
+    job = mini_job(tmp_path)
+    quiet, loud = tmp_path / "quiet", tmp_path / "loud"
+    assert run_job_file(job, opts(out=quiet)) == EXIT_OK
+    assert run_job_file(job, opts(out=loud, progress="plain")) == EXIT_OK
+    a, b = load_result(quiet / "result.h5"), load_result(loud / "result.h5")
+    assert np.array_equal(a.phasor, b.phasor)
+    assert np.array_equal(a.p_max, b.p_max)
+
+
+def test_kwave_job_with_progress_set_does_not_crash(tmp_path, monkeypatch):
+    """T3: the adapter rejects unknown kwargs, so progress= must not reach it."""
+    from tests.test_runner import mini_job, opts
+
+    import caustica.solvers as solvers
+    from caustica.io.store import validate_result_file
+    from caustica.runner import EXIT_OK, run_job_file
+
+    captured = {}
+    orig_get = solvers.get
+
+    class FakeExternal:
+        name = "kwave"
+
+        def run(self, grid, medium, source, spec=None, **kwargs):
+            captured.update(kwargs)
+            if {"backend", "checkpoint", "progress"} & set(kwargs):
+                raise TypeError(f"unknown run() options: {sorted(kwargs)}")
+            return orig_get("linear")().run(grid, medium, source, spec, backend="numpy", **kwargs)
+
+    monkeypatch.setattr(solvers, "get", lambda n: FakeExternal if n == "kwave" else orig_get(n))
+    out = tmp_path / "out"
+    code = run_job_file(mini_job(tmp_path, solver="kwave"), opts(out=out, progress="plain"))
+    assert code == EXIT_OK
+    assert "progress" not in captured
+    assert validate_result_file(out / "result.h5")
+
+
+def test_progress_lines_go_to_stderr_never_to_stdout(tmp_path, capsys):
+    """stdout stays the parseable contract (plan text, result path)."""
+    from tests.test_runner import mini_job, opts
+
+    from caustica.runner import EXIT_OK, run_job_file
+
+    code = run_job_file(mini_job(tmp_path), opts(out=tmp_path / "a", progress="plain"))
+    assert code == EXIT_OK
+    cap = capsys.readouterr()
+    assert "[settle" in cap.err and "preview @ period" in cap.err
+    assert "[settle" not in cap.out and "preview @ period" not in cap.out
+    assert "result:" in cap.out
+
+
+def test_cli_shows_progress_by_default_and_no_progress_silences_it(tmp_path, capsys):
+    from tests.test_runner import mini_job
+
+    from caustica.__main__ import main
+
+    job = mini_job(tmp_path)
+    assert main(["run", str(job), "--out", str(tmp_path / "a"), "--no-measure"]) == 0
+    loud = capsys.readouterr()
+    # Which line renderer runs depends on whether tqdm happens to be
+    # installed; the mid-run preview is the part that is always there.
+    assert "preview @ period" in loud.err
+    assert "preview @ period" not in loud.out
+
+    assert (
+        main(["run", str(job), "--out", str(tmp_path / "b"), "--no-measure", "--no-progress"]) == 0
+    )
+    quiet = capsys.readouterr()
+    assert "preview @ period" not in quiet.err
+
+
+# ------------------------------------------------------------ presentation
+
+
+def test_resolve_refuses_an_unknown_spelling():
+    from caustica.progress import resolve
+
+    with pytest.raises(ValueError, match="not one of"):
+        resolve("yes")
+    assert resolve(None) is None
+
+    def cb(ev):
+        return None
+
+    assert resolve(cb) is cb
+
+
+def test_a_failing_display_does_not_mute_the_heartbeat():
+    """One consumer per payload, isolated: chain() reports but keeps going."""
+    from caustica.progress import chain
+
+    seen = []
+
+    def broken(ev):
+        raise RuntimeError("no terminal")
+
+    fan = chain(seen.append, broken)
+    with pytest.raises(RuntimeError):
+        fan({"period": 1})
+    assert seen == [{"period": 1}], "the healthy consumer still saw the payload"
