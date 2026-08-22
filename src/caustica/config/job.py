@@ -37,7 +37,7 @@ from pathlib import Path
 from typing import Any, ClassVar, Literal
 
 import numpy as np
-from pydantic import Field, TypeAdapter, model_validator
+from pydantic import Field, TypeAdapter, field_validator, model_validator
 
 from caustica.arrays.elements import element_table_digest, elements_array, read_element_file
 from caustica.arrays.transducer import TransducerArray, archimedean_spiral
@@ -707,8 +707,22 @@ class ExplicitJobConfig(CausticaModel):
     drive: DriveConfig
     run: RunConfig = Field(default_factory=RunConfig)
     solver: str = "westervelt"
-    backend: Literal["auto", "numpy", "cupy"] = "auto"
+    backend: str = "auto"
     output: OutputConfig = Field(default_factory=OutputConfig)
+
+    @field_validator("backend")
+    @classmethod
+    def _known_backend(cls, v: str) -> str:
+        """Refuse a backend nobody registered, at validate time.
+
+        Open on purpose (M10n): the field used to be a closed Literal, which
+        made a third-party backend unreachable from a job file — the same
+        dead end `elements` fixed for arrays. The refusal is kept, it just
+        asks the registry instead of a hard-coded list.
+        """
+        from caustica.core.backend import check_backend_name  # noqa: PLC0415
+
+        return check_backend_name(v)
 
     @model_validator(mode="after")
     def _grid_rule(self) -> ExplicitJobConfig:

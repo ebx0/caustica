@@ -13,6 +13,11 @@ Design notes
   (logged once at INFO level).
 * A backend is intentionally a thin, frozen value object. Anything stateful
   (FFT plans, memory pools, streams) belongs to the solver that owns the run.
+* Backends are a **registry** (M10n/K15): ``numpy`` and ``cupy`` are two
+  registered factories, not two branches of an ``if``. A third party adds one
+  through the ``caustica.backends`` entry-point group and names it in a job.
+  ``"auto"`` is not a backend but a *policy* over them (cupy if usable, else
+  numpy) and stays deliberately built-in.
 """
 
 from __future__ import annotations
@@ -27,9 +32,16 @@ from typing import Any, Literal
 
 import numpy as np
 
+from caustica.registry import BACKEND_GROUP, FactoryRegistry, UnknownPluginError
+
 log = logging.getLogger("caustica")
 
+#: The names caustica itself ships. Any string a registered factory answers
+#: to is valid too — the alias is kept for the common case and for typing.
 BackendName = Literal["auto", "numpy", "cupy"]
+
+#: name -> zero-argument factory returning a :class:`Backend`.
+backends: FactoryRegistry = FactoryRegistry("backend", BACKEND_GROUP)
 
 _CUPY_STATE: dict[str, Any] = {"checked": False, "available": False, "module": None}
 
@@ -178,26 +190,64 @@ class Backend:
             self.xp.cuda.get_current_stream().synchronize()
 
 
-def get_backend(name: BackendName = "auto") -> Backend:
+@backends.register("numpy")
+def _numpy_backend() -> Backend:
+    """The always-available CPU backend."""
+    return Backend("numpy", np)
+
+
+@backends.register("cupy")
+def _cupy_backend() -> Backend:
+    """CUDA via CuPy; raises with a fix-it message when no GPU answers.
+
+    The probe (and therefore the cupy import) happens HERE, when the backend
+    is actually asked for — registering the factory touches nothing.
+    """
+    if not cupy_available():
+        raise RuntimeError(
+            "Backend 'cupy' requested but no usable CUDA GPU was found. "
+            "Install the extra (pip install caustica[gpu]) on a CUDA machine, "
+            "or use backend='auto' to fall back to numpy."
+        )
+    return Backend("cupy", _CUPY_STATE["module"])
+
+
+def _unknown_backend(name: str) -> ValueError:
+    """The actionable refusal: what IS registered, and how to add one."""
+    return ValueError(
+        f"Unknown backend name {name!r}. Available: {', '.join(backends.available())} "
+        f"(plus 'auto', which picks cupy when a usable GPU is present and numpy "
+        f"otherwise). Third-party backends are added through the "
+        f"'{BACKEND_GROUP}' entry-point group."
+    )
+
+
+def check_backend_name(name: str) -> str:
+    """Refuse an unregistered backend name early; returns it unchanged.
+
+    Used by the job schema so a typo is a *config* error at validate time,
+    not a crash minutes into a run. Costs one entry-point scan per process.
+    """
+    if name == "auto" or name in backends.available():
+        return name
+    raise _unknown_backend(name)
+
+
+def get_backend(name: str = "auto") -> Backend:
     """Resolve a backend by name.
 
     - ``"numpy"``: always works.
     - ``"cupy"``: raises ``RuntimeError`` with a fix-it message if no GPU.
-    - ``"auto"``: cupy when available, else numpy (logged once).
+    - ``"auto"``: cupy when available, else numpy (warned once per process).
+    - anything else: whatever a registered factory (yours, or a plugin's)
+      answers to; an unregistered name is refused with the list of names.
+
+    ``"auto"`` deliberately chooses only between the two built-ins: a
+    third-party backend is opted into by name, never guessed at.
     """
-    if name == "numpy":
-        return Backend("numpy", np)
-    if name == "cupy":
-        if not cupy_available():
-            raise RuntimeError(
-                "Backend 'cupy' requested but no usable CUDA GPU was found. "
-                "Install the extra (pip install caustica[gpu]) on a CUDA machine, "
-                "or use backend='auto' to fall back to numpy."
-            )
-        return Backend("cupy", _CUPY_STATE["module"])
     if name == "auto":
         if cupy_available():
-            return Backend("cupy", _CUPY_STATE["module"])
+            return backends.get("cupy")()
         global _AUTO_FALLBACK_WARNED
         if not _AUTO_FALLBACK_WARNED:
             # ONCE per process (D33): the old INFO log had no handler and was
@@ -212,5 +262,9 @@ def get_backend(name: BackendName = "auto") -> Backend:
                 stacklevel=2,
             )
         log.info("backend auto-select: no CUDA GPU found, using numpy (CPU).")
-        return Backend("numpy", np)
-    raise ValueError(f"Unknown backend name {name!r}; expected 'auto', 'numpy' or 'cupy'.")
+        return backends.get("numpy")()
+    try:
+        factory = backends.get(name)
+    except UnknownPluginError:
+        raise _unknown_backend(name) from None
+    return factory()
