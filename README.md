@@ -38,6 +38,35 @@ CPU-validated (see [MILESTONES.md](MILESTONES.md), M7).
 Runs identically in a Colab cell (prefix each line with `!`); the same four
 commands are the whole workflow.
 
+## Run on Colab
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ebx0/caustica/blob/master/notebooks/colab_run.ipynb)
+
+[`notebooks/colab_run.ipynb`](notebooks/colab_run.ipynb) is five cells, and **you edit exactly
+one line**: `CONFIG`, the job to run. Every bit of behaviour lives in `caustica.colab`, so
+improvements arrive with `pip install -U` and the notebook's own diff stays zero — pinned by
+`tests/test_colab.py::test_notebook_cells_match_the_frozen_template`.
+
+```python
+from caustica.colab import run_job, show
+
+outdir = run_job("my_job.json")   # a path, or an https URL to a caustica-job/1 file
+show(outdir)                      # the run's metrics + its report figures, inline
+```
+
+`run_job` prints `env_report()` and then **requires a GPU before it prepares anything** — no
+download, no folder, no medium build on a runtime that cannot run the job. The refusal names the
+fix for the machine you are on, and keeps the two causes apart, because they have two different
+fixes: a missing `cupy` is not a CPU runtime, and caustica pip-installs neither for you. After
+that it is the ordinary runner — plan first, the VRAM and CPU-time gates, the same output folder,
+the same exit codes (carried on `SimulationError.exit_code`).
+
+Output defaults to `/content/runs/<job>`, Colab's session disk. **caustica never mounts Google
+Drive**, knows no Drive path and carries no Drive-specific retry logic: if you want a run to
+outlive the session, mount your own storage in a cell and pass that folder as `out=`. `/content`
+survives a runtime restart — so `resume=True` finishes an interrupted run — but not a VM
+teardown.
+
 ## One call, from Python
 
 The same job, the same planner, the same gates — without leaving a notebook:
@@ -265,6 +294,8 @@ src/caustica/
               # figures + HTML report rendering
   runner.py   # plan-first job execution: disjoint exit codes, heartbeat, resume
   facade.py   # caustica.simulate(...): one call over the SAME build_job/plan/gates
+  colab.py    # caustica.colab: the Colab bridge — environment verdict BEFORE anything
+              # is prepared, output under /content, no Drive anywhere (M10f)
   progress.py # progress payload presentation (tqdm or plain lines, focal preview)
   __main__.py # the CLI: python -m caustica {validate | run | report | schema | example}
 apps/            # focus study (library consumer; not in the wheel)

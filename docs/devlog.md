@@ -1844,3 +1844,106 @@ varlığı) artık kendi testlerini taşıyor.
 
 Süit 379 → **417 (415 passed / 2 skipped / 0 failed)**; `ruff check .` + `format --check` temiz;
 `git status --porcelain data/setups/` boş — dokuz kurulum dosyası + manifest bayt-aynı.
+
+---
+
+## 2026-08-22 — M10f: Colab köprüsü (`caustica.colab`) + bayt-donuk notebook — Colab kapıları AÇIK
+
+Kod tarafı bitti, milestone `[~]`: iki ölçüt CANLI Colab oturumu istiyor ve CPU kanıtıyla
+işaretlenmedi (aşağıda "Kapanmayanlar"). Süit 417 → **449 (447 passed / 2 skipped)**;
+`ruff check src tests` + `format --check src tests` temiz; `git status --porcelain data/setups/`
+boş (dokuz kurulum bayt-aynı).
+
+### Köprünün NE OLMADIĞI (asıl tasarım kararı)
+`caustica.colab` L4: nerede koştuğuna dair fikri olabilen TEK katman. Ama alt katmanların hiçbirini
+değiştirmiyor ve hiçbirini yeniden yazmıyor. Üç şey ekliyor:
+
+1. **Ortam hükmü, HİÇBİR ŞEY hazırlanmadan önce.** `env_report()` basılır, sonra GPU ZORUNLU
+   kılınır. Sıra kasıtlı: uygunsuz runtime bir mesaja mal olur — indirme yok, klasör yok,
+   multi-GB medium build yok. (`test_a_gpu_less_runtime_is_refused_before_anything_is_prepared`
+   `_fetch` ve `run_job_file`'ı patlayıcıyla değiştirip klasörün yaratılmadığını da ölçüyor.)
+2. **`/content` altında varsayılan çıktı klasörü.**
+3. **Bitmeyen koşu için okunur hüküm**, runner'ın KENDİ `error.json`'ından toplanmış — GUI'nin
+   yönlendireceği mesaj ve advice satırlarının aynısı, burada uydurulmuş ikinci bir teşhis değil.
+
+**VRAM kapısı köprüde TEKRARLANMADI.** Tek kopya `runner.check_gates`'te duruyor: plan-first ve
+BOŞ VRAM'e karşı. Köprüde bir kopyası olsaydı yapabileceği tek şey ondan sapmaktı. Köprünün
+eklediği şey runner'ın bilerek yapMAdığı kontrol: `backend="auto"` GPU'suz makinede sessizce
+numpy'a düşer, ki Colab'da bu "kimsenin istemediği saatlerce CPU koşusu" demek.
+
+### İki ret, iki mesaj (K6)
+`caustica.env.require_gpu` "cupy kurulu değil" ile "cihaz yok"u AYIRMIYOR — makineye göre ayırıyor.
+Colab'da cupy gerçekten yoksa mevcut mesaj "bu Colab runtime'ında CUDA cihazı yok (GPU runtime'ları
+zaten cupy ile gelir)" diyor ki yanıltıcı. Köprü env.py'yi DEĞİŞTİRMEDEN eksik ayrımı ekliyor:
+`importlib.util.find_spec("cupy")` ile "kurulu mu" sorulur (import edilmez), kurulu DEĞİLSE köprü
+kendi mesajını atar; kuruluysa `require_gpu()` ÇAĞRILIR — yani "cihaz yok" cümlesi hâlâ tek yerde,
+env.py'de yaşıyor. Test: `test_missing_cupy_and_a_cpu_runtime_are_two_different_messages`
+(a'da "no CUDA device" GEÇMEZ, b'de "pip install cupy" GEÇMEZ).
+
+Bilinen ve kabul edilen: BOZUK bir cupy kurulumu (metadata var, import patlıyor) ikinci mesaja
+düşer, çünkü önce cihaz probu başarısız olur. Kurulum komutu zaten bir satır yukarıda.
+
+### Notebook: 5 hücre, tek düzenlenen satır
+`notebooks/colab_run.ipynb` — markdown + `pip install` + `CONFIG` + `run_job(CONFIG)` +
+`show(outdir)`. Kilit `tests/test_colab.py`'de: hücre sayısı, hücre tipleri ve hücre içerikleri
+BAYT BAYT sabit şablonla karşılaştırılıyor. Şablon test dosyasında DURUYOR (paylaşılan bir
+sabitten okunsaydı test totoloji olurdu) — yani notebook'u düzenlemek testi kırar, ve düzeltmek
+şablonu bilerek değiştirmeyi gerektirir. Yanında üç kilit daha: saklı çıktı/execution_count yok,
+tek literal atama `CONFIG`, ve notebook'ta `run_job`/`show` dışında çağrı, `def`, döngü, ikinci
+import yok (AST ile).
+
+### Drive: sıfır satır, ve ölçüt cümlesi düzeltildi
+**Ölçüt düzeltmesi (operatör, 2026-08-22):** MILESTONES'ta yazan "`grep -ri drive src/caustica`
+boş" LAFZEN yanlıştı — job şemasındaki `drive` bölümü AKUSTİK sürüştür (`f0`, `amplitude`) ve her
+yerde geçer. Niyet Google Drive; kontrol şu hale getirildi:
+
+```
+grep -rniE "drive\.mount|/content/drive|google\.colab" src/caustica --include=*.py
+src/caustica/colab.py:38   ``google.colab`` is never imported either. ...   (docstring nesri)
+src/caustica/colab.py:116  ``google.colab`` itself is never imported —      (docstring nesri)
+src/caustica/env.py:102    "google.colab" in sys.modules or ...             (M10i, _on_colab)
+src/caustica/progress.py:189  "ipykernel" in sys.modules or "google.colab" in sys.modules  (M10j)
+```
+
+Yani: Drive deseni SIFIR; `import google` SIFIR; `google.colab` yalnız `sys.modules` YOKLAMASI ve
+iki nesir cümlesi. Operatörün "yalnız colab.py'de eşleşir" beklentisi tam olarak KARŞILANAMADI ve
+karşılanmamalıydı da: `env.py:102` ile `progress.py:189` M10i/M10j'den beri duruyor, ikisi de
+sözleşmesi dondurulmuş dosya, ve köprü onları DEĞİŞTİRMEDEN yeniden kullanıyor. `colab.on_colab()`
+kendi probunu tanımlamıyor, `env._on_colab`'i çağırıyor — ikinci bir tanım `require_gpu`'nun aynı
+makine için seçtiği mesajla çelişebilirdi (`test_the_bridge_reuses_the_one_colab_probe`).
+
+### Runner sözleşmesine dokunulmadığının kanıtı
+Köprüden geçen koşular gerçek runner yolunu koşuyor (GPU kapısı test içinde `cupy_available`
+yamalanarak geçiliyor; koşunun kendisi numpy'da GERÇEKTEN çalışıyor, mock değil):
+`test_run_job_produces_the_ordinary_run_folder_and_returns_it` (job/plan/status/result/metrics
+yerinde, `error.json` YOK) · `test_a_failed_run_raises_with_the_runners_own_exit_code` (çıkış 2,
+`error.json` `caustica-error/1`, mesaj birebir alıntı) · `test_a_cancelled_run_reports_exit_5_and_how_to_continue`
+(cancel → 5 → checkpoint var, `error.json` YOK, sonra `resume=True` koşuyu bitiriyor) ·
+`test_an_oom_refusal_adds_the_colab_lever` (3 + runner'ın kendi başlığı + Colab'a özgü kol) ·
+`test_run_job_passes_dry_run_through_untouched`.
+
+### Bilerek yapılanlar / yapılmayanlar
+- **CPU kaçış deliği YOK.** `run_job` "GPU koşusu" demektir; CPU'da denemek isteyen `caustica run`
+  veya `caustica.simulate` kullanır. Bir `require_gpu=False` bayrağı, kapının var oluş sebebini
+  sessizce iptal ederdi.
+- **`progress` varsayılanı `"auto"`** (kütüphane varsayılanı sessiz kalıyor): köprü bir giriş
+  noktası ve karşısında hücreye bakan bir insan var — facade'ın D21/K11 kararının aynısı.
+- **Varsayılan klasör adı job DOSYASININ stem'inden**, job'un `name` alanından DEĞİL: alanı okumak
+  job'u burada ayrıştırmak demekti, ve ayrıştırılamayan bir job runner'dan (çıkış 2 + `error.json`)
+  düşmeli, köprüden traceback olarak değil. Bu yüzden `run_job` her zaman açık bir `out` geçiyor;
+  runner'ın kendi varsayılanı buradan hiç devreye girmiyor (tek çağrıda tek kural).
+- **URL desteği** stdlib `urllib` ile eklendi (yeni bağımlılık yok, notebook CONFIG satırı "yol
+  VEYA URL" sözleşmesi bunu istiyor). Bayt kaydeder, içine BAKMAZ — job olmayan bir dosya yine
+  runner'ın çıkış koduyla düşer. Sınır belgelendi: URL'den gelen job SELF-CONTAINED olmalı, çünkü
+  göreli yollar job dosyasına göre çözülür (T4) ve o artık indirme klasörü.
+- **`show()`** raporu `caustica.report.render_report` ile çiziyor — `caustica report <folder>`'ın
+  TA KENDİSİ. Hücredeki figürlerle klasördeki figürler tek eser; matplotlib yoksa sayılar yine
+  basılıyor, figürler atlanıyor.
+
+### Kapanmayanlar (CANLI Colab oturumu ister — CPU kanıtıyla işaretlenmez)
+- Uçtan uca Colab kapısı: repodan açılan notebook → `/content` altında koşu → sonucu indirip
+  lokalde `caustica report`.
+- Üç kapının birlikte kapanması: M7 parite + tam boy OOM'suz koşu · M8 VRAM ±%10 ve kalibre süre
+  ±%25 · bu E2E. Ölçüm altyapısı hazır: `run_meta.json` `planner` ve `actual`'ı yan yana taşıyor,
+  `caustica.colab.summary()` ikisini tek satırda basıyor.
+- README'deki "Open in Colab" rozeti push'tan SONRA canlı olur (M10e ön koşulu).

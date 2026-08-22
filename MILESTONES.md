@@ -887,29 +887,52 @@ GUI ayrı repoda olacak ve teknolojisi seçilmedi (PLAN.md K13). Bu milestone ya
   - [x] Süit 379 → 417 (415 passed / 2 skipped / 0 failed); `ruff check .` + `ruff format --check`
         temiz; `git status --porcelain data/setups/` boş — dokuz kurulum dosyası + manifest bayt-aynı
 
-### M10f — Colab köprüsü: `caustica.colab` + değişmeyen notebook `[ ]` — Colab kapısı içerir
-"Değişmeyen dosya" şartı mantığın notebook'ta DEĞİL repoda yaşamasıyla sağlanır: notebook 4–5
+### M10f — Colab köprüsü: `caustica.colab` + değişmeyen notebook `[~]` (kod 2026-08-22; Colab kapıları canlı oturum bekliyor)
+"Değişmeyen dosya" şartı mantığın notebook'ta DEĞİL repoda yaşamasıyla sağlanır: notebook 5
 hücre, tek düzenlenen satır CONFIG yolu; gerisi `from caustica.colab import run_job`. Güncelleme
-`git pull` ile gelir, .ipynb'ye dokunulmaz.
-- [ ] `caustica.colab`: ortam kontrolü (GPU adı, cupy, boş VRAM planner tahminine yetiyor mu —
-      uygunsuzsa HİÇBİR ŞEY hazırlamadan, aksiyon önerisiyle dur), koşu, çıktı `/content` altında
-- [ ] Dataset staging KALDIRILDI (PLAN.md K3/K7/K9): kütüphanede anatomik veri yolu yok. Colab
+`pip install -U` ile gelir, .ipynb'ye dokunulmaz.
+- [x] `caustica.colab`: ortam kontrolü (`env_report()` basılır + GPU ZORUNLU — uygunsuzsa
+      HİÇBİR ŞEY hazırlanmadan, aksiyon önerisiyle durur: indirme yok, klasör yok, medium
+      yok), koşu, çıktı `/content` altında. İki ayrı ret mesajı (K6): "cupy kurulu değil" ile
+      "runtime'da CUDA cihazı yok" AYRI cümleler, çünkü çözümleri ayrı — ikincisi
+      `caustica.env.require_gpu`'nun kendi mesajı, burada tekrar YAZILMIYOR
+- [x] VRAM kapısı köprüde TEKRARLANMADI: tek kopya `runner.check_gates`'te, plan-first ve BOŞ
+      VRAM'e karşı. Köprünün eklediği şey runner'ın bilerek yapmadığı kontrol — `auto`
+      backend'in GPU'suz makinede sessizce numpy'a düşmesi Colab'da saatlerce CPU koşusu demek
+- [x] Dataset staging KALDIRILDI (PLAN.md K3/K7/K9): kütüphanede anatomik veri yolu yok. Colab
       kullanıcısı ya paketli sentetik örneği ya kendi `medium_volume` dosyasını getirir; UWCEM
       fantomu isteyen `uwcem-phantom` repo'sunu kullanır
-- [ ] Drive KALDIRILDI (PLAN.md K12): `caustica.colab` Drive mount ETMEZ, Drive yollarını bilmez,
+- [x] Drive KALDIRILDI (PLAN.md K12): `caustica.colab` Drive mount ETMEZ, Drive yollarını bilmez,
       Drive'a özgü yeniden deneme mantığı taşımaz. Kalıcılık isteyen kullanıcı Drive'ı KENDİ mount
-      edip `--out` ile oraya yazdırır (runner bunu zaten destekler). Kabul edilen risk: oturum
-      çökerse `/content` gider — checkpoint oturum-içi restart'ı kurtarır, VM teardown'ı kurtarmaz
-- [ ] `notebooks/colab_run.ipynb` repoda; Colab'ın open-in-GitHub linkiyle açılır (M10e ön koşul)
+      edip `out=` ile oraya yazdırır (runner bunu zaten destekler; testli). Kabul edilen risk:
+      oturum çökerse `/content` gider — checkpoint oturum-içi restart'ı kurtarır, VM teardown'ı
+      kurtarmaz
+- [x] `notebooks/colab_run.ipynb` repoda; Colab'ın open-in-GitHub linkiyle açılır (README'de
+      "Run on Colab" rozeti). Link push'tan sonra canlı olur (M10e ön koşulu)
 - Başarı kriterleri:
-  - Notebook sözleşmesi: CONFIG satırı dışında düzenleme gerektirmez; mantık değişikliği notebook
-    diff'i SIFIR olacak şekilde repodan gelir (kontrat testi: hücre içerikleri sabit şablonla karşılaştırılır)
-  - `caustica.colab` içinde `google.colab`/Drive dışı hiçbir ortam varsayımı yok; `grep -ri drive
-    src/caustica` boş
-  - Colab kapısı: repodan açılan notebook → `/content` altında koşu → sonuç indirilip lokalde
-    `caustica report` ile açılır (uçtan uca)
-  - İlk Colab oturumu üç kapıyı birden kapatır: M7 parite + tam boy OOM'suz koşu, M8 VRAM ±%10 ve
-    kalibre süre ±%25, bu E2E — runner damgası ölçümleri zaten topluyor
+  - [x] Notebook sözleşmesi: CONFIG satırı dışında düzenleme gerektirmez; mantık değişikliği
+        notebook diff'i SIFIR olacak şekilde repodan gelir. Kontrat testi hücre içeriklerini
+        sabit şablonla BAYT BAYT karşılaştırıyor:
+        `tests/test_colab.py::test_notebook_cells_match_the_frozen_template` (+ çıktı/execution
+        count yok, tek literal atama CONFIG, notebook'ta `run_job`/`show` dışında çağrı yok)
+  - [x] `caustica.colab` içinde `google.colab`/Drive dışı hiçbir ortam varsayımı yok.
+        **Ölçüt düzeltmesi (operatör, 2026-08-22):** eski cümle "`grep -ri drive src/caustica`
+        boş" idi; bu LAFZEN yanlış — job şemasındaki `drive` bölümü AKUSTİK sürüştür (f0,
+        amplitude) ve her yerde geçer. Niyet Google Drive'dır, kontrol şudur:
+        `grep -rniE "drive\.mount|/content/drive|google\.colab" src/caustica --include=*.py`
+        → Drive deseni SIFIR eşleşme; `google.colab` yalnız `sys.modules` YOKLAMASI olarak,
+        asla `import` edilmeden. Ölçülen (2026-08-22): Drive 0 eşleşme, `import google` 0
+        eşleşme, `google.colab` 4 satır — `colab.py` (2 satır, yalnız docstring nesri),
+        `env.py:102` (`_on_colab`, M10i'den beri), `progress.py:189` (notebook renderer
+        seçimi, M10j'den beri). Köprü bu TEK yoklamayı yeniden kullanıyor, ikincisini
+        tanımlamıyor. Testle çivili: `test_the_library_has_no_drive_code_and_never_imports_google_colab`
+  - [ ] **Colab kapısı (ilk Colab oturumunda):** repodan açılan notebook → `/content` altında
+        koşu → sonuç indirilip lokalde `caustica report` ile açılır (uçtan uca). CPU kanıtıyla
+        işaretlenmez
+  - [ ] **İlk Colab oturumu üç kapıyı birden kapatır (ilk Colab oturumunda):** M7 parite + tam
+        boy OOM'suz koşu, M8 VRAM ±%10 ve kalibre süre ±%25, bu E2E — runner damgası
+        ölçümleri zaten topluyor (`run_meta.json` → `planner` vs `actual`;
+        `caustica.colab.summary()` ikisini yan yana basıyor)
 
 ### M10g — Kuyruk: paylaşılan klasör `jobs/` protokolü `[ ]` — GUI'nin "Run in Colab" altyapısı
 Notebook tek job yerine klasör izler: lokalde job at → oturum açıkken kendiliğinden koşar.
