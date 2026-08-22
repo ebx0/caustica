@@ -348,6 +348,24 @@ array = elements_array(                       # NOTE: the Python API is SI
 )
 ```
 
+Going the other way — export an array the library built, to edit or reuse as a
+table — reads the same four attributes off any `TransducerArray`
+(`positions` and `normals`, both `(n, 3)` in metres, plus `elem_radius` and
+`focal_length` in metres):
+
+```python
+import numpy as np
+from caustica.arrays import archimedean_spiral
+
+arr = archimedean_spiral(n_elements=24, d_outer=0.012, d_inner=0.004, roc=0.016)
+np.savez("spiral_table.npz", positions=arr.positions * 1e3, normals=arr.normals)
+print(arr.elem_radius * 1e3)                  # -> elem_radius_mm for the job
+```
+
+The `elements` job kind reading that file produces a **bit-identical** source to
+the `archimedean_spiral` kind it came from — the two kinds share one
+voxelization path.
+
 ---
 
 ## Grid
