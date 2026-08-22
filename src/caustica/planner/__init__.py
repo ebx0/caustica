@@ -33,7 +33,8 @@ device).
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, replace
 from importlib import resources
 from math import ceil
 from pathlib import Path
@@ -42,8 +43,12 @@ from caustica.core.grid import Grid
 from caustica.medium import Medium
 from caustica.planner import model
 from caustica.planner.calibration import (
+    EXTRAPOLATION_WARN_FACTOR,
+    FIT_RESIDUAL_LIMIT,
     calibrate,
+    calibrated_warmup,
     default_calibration_path,
+    default_probe_shapes,
     find_calibration_for,
     measure_step_time,
     record_warmup,
@@ -61,12 +66,16 @@ __all__ = [
     "Estimate",
     "GPUSpec",
     "calibrate",
+    "calibrated_warmup",
     "compare",
     "default_calibration_path",
     "estimate",
+    "gpu_key_for_device",
     "list_gpus",
     "load_gpu_db",
+    "default_probe_shapes",
     "measure_step_time",
+    "spec_for_device",
     "record_warmup",
 ]
 
@@ -75,13 +84,21 @@ _GIB = 2**30
 
 @dataclass(frozen=True)
 class GPUSpec:
-    """Datasheet-nominal device description from ``gpu_db.json``."""
+    """Device description: a ``gpu_db.json`` row, or a live device.
+
+    ``device_name`` is the CUDA product string when this spec describes a
+    real device rather than a datasheet row; it is what the calibration
+    store is keyed by, so carrying it is what lets a card the database has
+    never heard of still be planned from its own measurements.
+    """
 
     key: str
     vram_gib: float
     mem_bw_gbs: float
     fp32_tflops: float
     notes: str = ""
+    device_name: str | None = None
+    source: str = "db"  # "db" (a datasheet row) | "device" (read from the card)
 
     @property
     def vram_bytes(self) -> int:
@@ -108,7 +125,68 @@ def list_gpus() -> list[str]:
     return sorted(devices) + sorted(aliases)
 
 
-def _resolve_gpu(name: str) -> GPUSpec:
+def _norm_device(text: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", text.lower())
+
+
+def gpu_key_for_device(device_name: str, total_gib: float | None = None) -> str | None:
+    """Best ``gpu_db.json`` key for a CUDA product string, or None.
+
+    None -- not a guess -- is the point. Falling back to a fixed key made an
+    RTX PRO 6000 Blackwell plan itself as an A100: the 95 GiB card was judged
+    against 38.88 GiB of usable VRAM, and the calibration it had just
+    measured became unreachable because the lookup searched for "a100" in a
+    name that does not contain it (measured, 2026-08-22). On a card SMALLER
+    than the guessed one the same fallback accepts a run that cannot fit.
+    """
+    devices, _ = load_gpu_db()
+    norm = _norm_device(device_name)
+    best: tuple[int, float, str] | None = None
+    for key, spec in devices.items():
+        # .lower() BEFORE stripping punctuation, or "A100" becomes "100" and
+        # "SXM" becomes "" -- and an empty token is a substring of anything.
+        tokens = [tok for tok in (_norm_device(part) for part in key.split("-")) if tok]
+        if not tokens or tokens[0] not in norm:
+            continue
+        score = sum(1 for t in tokens if t in norm)
+        gap = -abs(spec.vram_gib - total_gib) if total_gib is not None else 0.0
+        cand = (score, gap, key)
+        if best is None or cand > best:
+            best = cand
+    return best[2] if best is not None else None
+
+
+def spec_for_device(device_name: str, total_bytes: int | None = None) -> GPUSpec:
+    """A :class:`GPUSpec` for a real device, database row or not.
+
+    A card the database knows comes back as its datasheet row with the live
+    name attached, so the calibration lookup can be exact. A card it does
+    not know is described by what the device itself reports -- real VRAM,
+    key ``unknown:<name>`` -- with throughput taken from the median known
+    device, which is a guess the ``db`` label already warns about and which
+    one calibration run replaces outright.
+    """
+    total_gib = (total_bytes / _GIB) if total_bytes else None
+    devices, _ = load_gpu_db()
+    key = gpu_key_for_device(device_name, total_gib)
+    if key is not None:
+        return replace(devices[key], device_name=device_name, source="db")
+    known = sorted(devices.values(), key=lambda s: s.mem_bw_gbs)
+    mid = known[len(known) // 2]
+    return GPUSpec(
+        key=f"unknown:{device_name}",
+        vram_gib=total_gib if total_gib else mid.vram_gib,
+        mem_bw_gbs=mid.mem_bw_gbs,
+        fp32_tflops=mid.fp32_tflops,
+        notes=f"not in gpu_db.json; VRAM read from the device ({device_name})",
+        device_name=device_name,
+        source="device",
+    )
+
+
+def _resolve_gpu(name: str | GPUSpec) -> GPUSpec:
+    if isinstance(name, GPUSpec):
+        return name
     devices, aliases = load_gpu_db()
     key = aliases.get(name, name)
     if key not in devices:
@@ -230,14 +308,32 @@ def estimate(
                 f"measured on the CPU backend — wall time reflects THIS machine, not {gpu_spec.key}"
             )
     else:
-        entry = find_calibration_for(gpu_spec.key, calibration_path)
+        entry = find_calibration_for(
+            gpu_spec.key, calibration_path, device_name=gpu_spec.device_name
+        )
         if entry is not None:
             t_step = model.step_time(entry["a"], entry["b"], p_elems)
             # Entries written before fix A2 carry no warmup at all; a GPU
             # entry without one gets the constant rather than a silent zero,
             # which is the term the whole fix exists to stop dropping.
-            warmup_s = float(entry.get("warmup_s", model.GPU_WARMUP_S))
+            warmup_s = calibrated_warmup(entry, p_elems, default=model.GPU_WARMUP_S)
             src_label = "calibrated"
+            # A "calibrated" label is a promise about accuracy; these two
+            # warnings are where the label stops being able to keep it.
+            p_probe = entry.get("p_max_probe")
+            if p_probe and p_elems > EXTRAPOLATION_WARN_FACTOR * float(p_probe):
+                warnings.append(
+                    f"this plan is {p_elems / float(p_probe):.0f}x larger than the biggest "
+                    f"grid the calibration measured ({int(p_probe):,} elements) — the step "
+                    f"cost is extrapolated, not measured; recalibrate nearer this size"
+                )
+            residual = entry.get("fit_max_rel_residual")
+            if residual is not None and float(residual) > FIT_RESIDUAL_LIMIT:
+                warnings.append(
+                    f"the calibration's time model misses its own samples by up to "
+                    f"{100 * float(residual):.0f}% — recalibrate (the probe grids were "
+                    f"probably too small to saturate this device)"
+                )
         else:
             a, b = model.db_time_coeffs(
                 gpu_spec.fp32_tflops, gpu_spec.mem_bw_gbs, grid.ndim, nonlinear
