@@ -7,7 +7,13 @@ run needs is either IN the file or derived from it — nothing is baked.
 
 One job kind: ``explicit`` — the full tree: medium (medium_volume file |
 CSG scene | volume import | homogeneous) + grid + array source (spiral |
-bowl, natural or steered focus) + drive + run policy.
+bowl | explicit element table, natural or steered focus) + drive + run
+policy.
+
+The medium and array kinds are NOT a closed union: both are built from the
+registries in :mod:`caustica.config.kinds`, which the kinds below register
+through — the same door a third-party package uses (M10m/K15). ``caustica
+schema`` prints the JSON Schema of whatever is registered right now.
 
 Contract rules (same as every caustica config): pydantic, ``extra="forbid"``
 (a typo'd key is an error, never a silent no-op), user units are mm / MHz /
@@ -28,12 +34,20 @@ import json
 import math
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Any, ClassVar, Literal
 
 import numpy as np
 from pydantic import Field, TypeAdapter, model_validator
 
+from caustica.arrays.elements import elements_array, read_element_file
 from caustica.arrays.transducer import TransducerArray, archimedean_spiral
+from caustica.config.kinds import (
+    ArrayKindConfig,
+    MediumKindConfig,
+    MediumPrep,
+    array_kinds,
+    medium_kinds,
+)
 from caustica.config.models import CausticaModel, GridConfig
 from caustica.core.grid import Grid
 from caustica.core.pml import PMLSpec
@@ -109,10 +123,11 @@ class OutputConfig(CausticaModel):
     max_norm_err: float = Field(1e-3, gt=0.0)
 
 
-# --------------------------------------------------------------- medium union
+# --------------------------------------------------------------- medium kinds
 
 
-class HomogeneousMediumConfig(CausticaModel):
+@medium_kinds.register
+class HomogeneousMediumConfig(MediumKindConfig):
     """Uniform medium (validation runs, water tanks)."""
 
     kind: Literal["homogeneous"] = "homogeneous"
@@ -125,7 +140,8 @@ class HomogeneousMediumConfig(CausticaModel):
         return self.material.c
 
 
-class SceneMediumConfig(CausticaModel):
+@medium_kinds.register
+class SceneMediumConfig(MediumKindConfig):
     """CSG scene rasterized onto the job grid; labels -> materials here."""
 
     kind: Literal["scene"] = "scene"
@@ -144,6 +160,15 @@ class SceneMediumConfig(CausticaModel):
             )
         return self
 
+    def resolve_paths(self, base_dir: Path | None) -> SceneMediumConfig:
+        if base_dir is None or not self.scene.imports:
+            return self
+        imports = [
+            imp.model_copy(update={"path": _resolve(imp.path, base_dir)})
+            for imp in self.scene.imports
+        ]
+        return self.model_copy(update={"scene": self.scene.model_copy(update={"imports": imports})})
+
     def build(self, grid: Grid) -> Medium:
         db = MaterialDB(materials=self.materials)
         return self.scene.build().to_medium(grid, db, supersample=self.supersample)
@@ -152,7 +177,8 @@ class SceneMediumConfig(CausticaModel):
         return min(m.c for m in self.materials.values())
 
 
-class VolumeImportMediumConfig(CausticaModel):
+@medium_kinds.register
+class VolumeImportMediumConfig(MediumKindConfig):
     """An imported label volume placed on the job grid (mtype-style phantoms)."""
 
     kind: Literal["volume_import"] = "volume_import"
@@ -165,6 +191,12 @@ class VolumeImportMediumConfig(CausticaModel):
             return breast_default()
         return MaterialDB(materials=self.materials)
 
+    def resolve_paths(self, base_dir: Path | None) -> VolumeImportMediumConfig:
+        if base_dir is None:
+            return self
+        vol = self.volume.model_copy(update={"path": _resolve(self.volume.path, base_dir)})
+        return self.model_copy(update={"volume": vol})
+
     def build(self, grid: Grid) -> Medium:
         # A volume import IS a one-import scene; sharing that path keeps
         # placement/resampling semantics single-sourced.
@@ -175,7 +207,8 @@ class VolumeImportMediumConfig(CausticaModel):
         return min(m.c for m in self._db().materials.values())
 
 
-class MediumVolumeConfig(CausticaModel):
+@medium_kinds.register
+class MediumVolumeConfig(MediumKindConfig):
     """A caustica ``medium_volume`` file — the ONE door for volume media.
 
     The grid comes FROM the file (shape + dx are the file's); only the PML
@@ -183,6 +216,8 @@ class MediumVolumeConfig(CausticaModel):
     resampled ghost of the data. (Same rule as the dataset kind it
     generalizes — M10k/D16.)
     """
+
+    provides_grid: ClassVar[bool] = True
 
     kind: Literal["medium_volume"] = "medium_volume"
     file: str = Field(..., description="Path to the medium-volume npz (absolute or job-relative)")
@@ -198,7 +233,12 @@ class MediumVolumeConfig(CausticaModel):
         "null disables the check (label 0 means water in caustica's own exports)",
     )
 
-    def load_volume(self, base_dir: Path | None):
+    def resolve_paths(self, base_dir: Path | None) -> MediumVolumeConfig:
+        if base_dir is None:
+            return self
+        return self.model_copy(update={"file": _resolve(self.file, base_dir)})
+
+    def load_volume(self, base_dir: Path | None = None):
         from caustica.io.medium_volume import (  # noqa: PLC0415 (keep import light)
             MediumVolume,
             load_medium_volume,
@@ -221,17 +261,91 @@ class MediumVolumeConfig(CausticaModel):
             )
         return vol
 
+    def prepare(self, drive: DriveConfig) -> MediumPrep:
+        """Grid + labels now; the (multi-GB) property volumes behind a callable."""
+        vol = self.load_volume()
+        # The M6f protection generalizes: a file whose alpha was baked at a
+        # frequency refuses to run at another one.
+        _check_dataset_f0(
+            drive.f0_hz,
+            vol.meta.get("f0_mhz", vol.meta.get("dataset", {}).get("f0_mhz")),
+            "explicit medium_volume job",
+        )
+        linear = self.linear
+        return MediumPrep(
+            grid=vol.grid(PMLSpec(thickness=self.pml_mm * _MM) if self.pml_mm > 0 else None),
+            c_min=vol.c_min(),
+            labels=vol.labels,
+            water_label=self.water_label,
+            make_medium=lambda: vol.to_medium(linear=linear),
+        )
 
-MediumConfig = Annotated[
-    HomogeneousMediumConfig | SceneMediumConfig | VolumeImportMediumConfig | MediumVolumeConfig,
-    Field(discriminator="kind"),
-]
+
+#: Discriminated union of every REGISTERED medium kind (see config.kinds).
+MediumConfig = medium_kinds.union()
 
 
-# --------------------------------------------------------------- source union
+# ---------------------------------------------------------------- array kinds
 
 
-class SpiralArrayConfig(CausticaModel):
+class _ElementArrayConfig(ArrayKindConfig):
+    """Shared behaviour of every kind that resolves to a multi-element array.
+
+    The spiral recipe and an explicit element table differ only in where the
+    positions come from; phasing, voxelization and the derived-geometry
+    record are identical, so they live here once.
+    """
+
+    def build(self) -> TransducerArray:
+        """The transducer this recipe describes (always re-derived, never baked)."""
+        raise NotImplementedError(f"{type(self).__name__} must implement build()")
+
+    def _shape_derived(self, arr: TransducerArray) -> dict[str, float]:
+        """Aperture numbers every element array can report."""
+        r = np.linalg.norm(arr.positions[:, :2], axis=1)
+        return {
+            "elem_radius_mm": float(arr.elem_radius) * 1e3,
+            "shell_depth_mm": float(arr.positions[:, 2].max()) * 1e3,
+            "r_max_mm": float(r.max()) * 1e3,
+        }
+
+    def build_source(
+        self,
+        grid: Grid,
+        drive: DriveConfig,
+        apex_vox: tuple[int, int, int],
+        focus: FocusConfig,
+        phases_rad: tuple[float, ...] | None,
+    ) -> tuple[CWSource, dict[str, Any]]:
+        arr = self.build()
+        extra: dict[str, Any] = {}
+        phases: np.ndarray | None
+        if phases_rad is not None:
+            if len(phases_rad) != arr.n_elements:
+                raise JobError(
+                    f"phases_rad has {len(phases_rad)} entries for {arr.n_elements} elements"
+                )
+            phases = np.asarray(phases_rad, np.float32)
+            extra["phases"] = "explicit"
+        elif focus.mode == "steered":
+            target_m = np.asarray(focus.target_mm, np.float64) * _MM
+            apex_m = np.asarray(apex_vox, np.float64) * grid.dx
+            phases = arr.das_phases(target_m - apex_m, drive.f0_hz, c0=STEER_C0)
+            extra["phases"] = f"das(c0={STEER_C0:g})"
+        else:
+            phases = None
+            extra["phases"] = "zeros"
+        asrc = arr.voxelize(
+            grid, apex_vox, f0=drive.f0_hz, amplitude=drive.amplitude_pa, phases=phases
+        )
+        extra.update(self.derived(arr))
+        extra["source_voxels"] = int(asrc.source.n_points)
+        extra["elements_represented"] = asrc.n_elements_represented
+        return asrc.source, extra
+
+
+@array_kinds.register
+class SpiralArrayConfig(_ElementArrayConfig):
     """Archimedean-spiral multi-element array recipe (the production S1 layout)."""
 
     kind: Literal["archimedean_spiral"] = "archimedean_spiral"
@@ -250,6 +364,9 @@ class SpiralArrayConfig(CausticaModel):
             active_fraction=self.active_fraction,
         )
 
+    def focal_length_mm(self) -> float:
+        return self.roc_mm
+
     def derived(self, arr: TransducerArray | None = None) -> dict[str, float]:
         """The numbers a stored job output records so a reload can falsify them.
 
@@ -258,11 +375,8 @@ class SpiralArrayConfig(CausticaModel):
         library change silently producing a different transducer.
         """
         arr = arr if arr is not None else self.build()
-        r = np.linalg.norm(arr.positions[:, :2], axis=1)
         return {
-            "elem_radius_mm": float(arr.elem_radius) * 1e3,
-            "shell_depth_mm": float(arr.positions[:, 2].max()) * 1e3,
-            "r_max_mm": float(r.max()) * 1e3,
+            **self._shape_derived(arr),
             "f_number": self.roc_mm / self.d_outer_mm,
             "half_angle_deg": float(
                 np.degrees(np.arcsin(min(1.0, (self.d_outer_mm / 2) / self.roc_mm)))
@@ -270,7 +384,8 @@ class SpiralArrayConfig(CausticaModel):
         }
 
 
-class BowlArrayConfig(CausticaModel):
+@array_kinds.register
+class BowlArrayConfig(ArrayKindConfig):
     """Single focused spherical-cap (bowl) source recipe."""
 
     kind: Literal["bowl"] = "bowl"
@@ -286,6 +401,9 @@ class BowlArrayConfig(CausticaModel):
             )
         return self
 
+    def focal_length_mm(self) -> float:
+        return self.roc_mm
+
     def derived(self) -> dict[str, float]:
         return {
             "aperture_radius_mm": self.d_outer_mm / 2.0,
@@ -296,8 +414,132 @@ class BowlArrayConfig(CausticaModel):
             ),
         }
 
+    def build_source(
+        self,
+        grid: Grid,
+        drive: DriveConfig,
+        apex_vox: tuple[int, int, int],
+        focus: FocusConfig,
+        phases_rad: tuple[float, ...] | None,
+    ) -> tuple[CWSource, dict[str, Any]]:
+        if focus.mode == "steered" or phases_rad is not None:
+            raise JobError(
+                "a bowl is a single focused element: it cannot be steered or phased. "
+                "Use an archimedean_spiral array, or move the bowl's apex."
+            )
+        src = bowl_cw_source(
+            grid,
+            f0=drive.f0_hz,
+            amplitude=drive.amplitude_pa,
+            aperture_radius=self.d_outer_mm / 2.0 * _MM,
+            roc=self.roc_mm * _MM,
+            apex_vox=apex_vox,
+        )
+        extra: dict[str, Any] = dict(self.derived())
+        extra["source_voxels"] = int(src.n_points)
+        return src, extra
 
-ArrayConfig = Annotated[SpiralArrayConfig | BowlArrayConfig, Field(discriminator="kind")]
+
+@array_kinds.register
+class ElementsArrayConfig(_ElementArrayConfig):
+    """Bring your own element table: explicit centers (+ optional normals).
+
+    Positions are ``inline`` in the job or read from ``file`` (``.npz`` with
+    a ``positions`` array, or a 3/6-column ``.csv``) — exactly one of the
+    two. Everything is in MILLIMETRES, in the array's own apex frame: apex
+    at the origin, beam axis +z, geometric focus at ``(0, 0, roc_mm)``. Omit
+    the normals and every element is aimed at that focus.
+    """
+
+    kind: Literal["elements"] = "elements"
+    elem_radius_mm: float = Field(..., gt=0.0, description="Circular element radius [mm]")
+    roc_mm: float = Field(
+        ..., gt=0.0, description="Geometric focal distance from the apex along +z [mm]"
+    )
+    file: str | None = Field(
+        None,
+        description="Element table (.npz with 'positions'/optional 'normals', or 3/6-column "
+        ".csv); millimetres, apex frame. Absolute, or relative to the job file.",
+    )
+    positions_mm: tuple[tuple[float, float, float], ...] | None = Field(
+        None, description="Inline element centers [mm], apex frame"
+    )
+    normals_mm: tuple[tuple[float, float, float], ...] | None = Field(
+        None,
+        description="Inline element normals (direction only, normalized here); "
+        "omit to aim every element at (0, 0, roc_mm)",
+    )
+
+    @model_validator(mode="after")
+    def _check(self) -> ElementsArrayConfig:
+        if (self.file is None) == (self.positions_mm is None):
+            raise ValueError(
+                "an 'elements' array needs exactly one of 'file' or 'positions_mm' "
+                "(give the table inline, or point at a .npz/.csv)"
+            )
+        if self.normals_mm is not None:
+            if self.file is not None:
+                raise ValueError(
+                    "'normals_mm' belongs with inline 'positions_mm'; a file's normals "
+                    "come from the file itself"
+                )
+            if len(self.normals_mm) != len(self.positions_mm or ()):
+                raise ValueError(
+                    f"normals_mm has {len(self.normals_mm)} entries for "
+                    f"{len(self.positions_mm or ())} positions_mm"
+                )
+        if self.elem_radius_mm >= self.roc_mm:
+            raise ValueError(
+                f"elem_radius_mm {self.elem_radius_mm:g} is not smaller than roc_mm "
+                f"{self.roc_mm:g}: that is a single element the size of the whole bowl"
+            )
+        return self
+
+    def resolve_paths(self, base_dir: Path | None) -> ElementsArrayConfig:
+        if base_dir is None or self.file is None:
+            return self
+        return self.model_copy(update={"file": _resolve(self.file, base_dir)})
+
+    def _table(self) -> tuple[np.ndarray, np.ndarray | None]:
+        if self.file is not None:
+            try:
+                return read_element_file(self.file)
+            except (OSError, ValueError) as exc:
+                raise JobError(f"elements array: {exc}") from None
+        pos = np.asarray(self.positions_mm, np.float64)
+        nrm = None if self.normals_mm is None else np.asarray(self.normals_mm, np.float64)
+        return pos, nrm
+
+    def build(self) -> TransducerArray:
+        pos_mm, nrm = self._table()
+        try:
+            return elements_array(
+                positions=np.asarray(pos_mm, np.float64) * _MM,
+                normals=nrm,
+                elem_radius=self.elem_radius_mm * _MM,
+                focal_length=self.roc_mm * _MM,
+            )
+        except ValueError as exc:
+            raise JobError(f"elements array: {exc}") from None
+
+    def focal_length_mm(self) -> float:
+        return self.roc_mm
+
+    def derived(self, arr: TransducerArray | None = None) -> dict[str, float]:
+        """Re-derivable aperture numbers (the table itself stays in its file)."""
+        arr = arr if arr is not None else self.build()
+        shape = self._shape_derived(arr)
+        r_max_mm = shape["r_max_mm"]
+        return {
+            **shape,
+            "n_elements": float(arr.n_elements),
+            "f_number": self.roc_mm / (2.0 * r_max_mm) if r_max_mm > 0 else float("inf"),
+            "half_angle_deg": float(np.degrees(np.arcsin(min(1.0, r_max_mm / self.roc_mm)))),
+        }
+
+
+#: Discriminated union of every REGISTERED array kind (see config.kinds).
+ArrayConfig = array_kinds.union()
 
 
 class FocusConfig(CausticaModel):
@@ -331,8 +573,14 @@ class ArraySourceConfig(CausticaModel):
     )
     focus: FocusConfig = Field(default_factory=FocusConfig)
     phases_rad: tuple[float, ...] | None = Field(
-        None, description="Explicit per-element phases (spiral only; overrides focus mode)"
+        None,
+        description="Explicit per-element phases (multi-element arrays only; overrides focus mode)",
     )
+
+    def resolve_paths(self, base_dir: Path | None) -> ArraySourceConfig:
+        """Resolve the array kind's file references against ``base_dir`` (T4)."""
+        arr = self.array.resolve_paths(base_dir)
+        return self if arr is self.array else self.model_copy(update={"array": arr})
 
     def _apex_vox(self, grid: Grid) -> tuple[int, int, int]:
         vox = tuple(int(round(a * _MM / grid.dx)) for a in self.apex_mm)
@@ -348,7 +596,7 @@ class ArraySourceConfig(CausticaModel):
             assert self.focus.target_mm is not None
             vox = tuple(int(round(t * _MM / grid.dx)) for t in self.focus.target_mm)
         else:
-            roc_mm = self.array.roc_mm
+            roc_mm = self.array.focal_length_mm()
             vox = (apex_vox[0], apex_vox[1], apex_vox[2] + int(round(roc_mm * _MM / grid.dx)))
         for v, ax_n in zip(vox, grid.shape, strict=True):
             if not 0 <= v < ax_n:
@@ -372,48 +620,10 @@ class ArraySourceConfig(CausticaModel):
             "focus_mode": self.focus.mode,
         }
 
-        if isinstance(self.array, SpiralArrayConfig):
-            arr = self.array.build()
-            phases: np.ndarray | None
-            if self.phases_rad is not None:
-                if len(self.phases_rad) != arr.n_elements:
-                    raise JobError(
-                        f"phases_rad has {len(self.phases_rad)} entries for "
-                        f"{arr.n_elements} elements"
-                    )
-                phases = np.asarray(self.phases_rad, np.float32)
-                derived["phases"] = "explicit"
-            elif self.focus.mode == "steered":
-                target_m = np.asarray(self.focus.target_mm, np.float64) * _MM
-                apex_m = np.asarray(apex_vox, np.float64) * grid.dx
-                phases = arr.das_phases(target_m - apex_m, drive.f0_hz, c0=STEER_C0)
-                derived["phases"] = f"das(c0={STEER_C0:g})"
-            else:
-                phases = None
-                derived["phases"] = "zeros"
-            asrc = arr.voxelize(
-                grid, apex_vox, f0=drive.f0_hz, amplitude=drive.amplitude_pa, phases=phases
-            )
-            src = asrc.source
-            derived.update(self.array.derived(arr))
-            derived["source_voxels"] = int(src.n_points)
-            derived["elements_represented"] = asrc.n_elements_represented
-        else:  # bowl
-            if self.focus.mode == "steered" or self.phases_rad is not None:
-                raise JobError(
-                    "a bowl is a single focused element: it cannot be steered or phased. "
-                    "Use an archimedean_spiral array, or move the bowl's apex."
-                )
-            src = bowl_cw_source(
-                grid,
-                f0=drive.f0_hz,
-                amplitude=drive.amplitude_pa,
-                aperture_radius=self.array.d_outer_mm / 2.0 * _MM,
-                roc=self.array.roc_mm * _MM,
-                apex_vox=apex_vox,
-            )
-            derived.update(self.array.derived())
-            derived["source_voxels"] = int(src.n_points)
+        # Each array kind voxelizes itself (config.kinds seam): the extra
+        # derived entries land in registration order after focus_mode.
+        src, extra = self.array.build_source(grid, drive, apex_vox, self.focus, self.phases_rad)
+        derived.update(extra)
 
         if abs(src.ramp_periods - drive.ramp_periods) > 1e-12:
             src = CWSource(
@@ -426,18 +636,15 @@ class ArraySourceConfig(CausticaModel):
             )
         return src, focus_vox, derived
 
-    def check_derived(self, derived: dict[str, Any]) -> None:
+    def check_derived(self, derived: dict[str, Any], base_dir: Path | None = None) -> None:
         """Falsify recorded derived geometry against a fresh re-derivation.
 
         The M6f rule generalized: a stored job output that records these
         values can prove the library still builds the SAME transducer. Raises
-        :class:`JobError` naming the drifted quantity.
+        :class:`JobError` naming the drifted quantity. Pass ``base_dir`` (the
+        job file's directory) when the array kind reads a relative file.
         """
-        fresh = (
-            self.array.derived()
-            if isinstance(self.array, BowlArrayConfig)
-            else self.array.derived(self.array.build())
-        )
+        fresh = self.array.resolve_paths(base_dir).derived()
         for key, want in derived.items():
             if key not in fresh:
                 continue
@@ -471,7 +678,7 @@ class ExplicitJobConfig(CausticaModel):
 
     @model_validator(mode="after")
     def _grid_rule(self) -> ExplicitJobConfig:
-        grid_from_file = isinstance(self.medium, MediumVolumeConfig)
+        grid_from_file = type(self.medium).provides_grid
         if grid_from_file and self.grid is not None:
             raise ValueError(
                 f"medium '{self.medium.kind}' fixes the grid (shape + dx come from the "
@@ -488,6 +695,46 @@ class ExplicitJobConfig(CausticaModel):
 JobConfig = ExplicitJobConfig
 
 _JOB_ADAPTER: TypeAdapter = TypeAdapter(JobConfig)
+
+
+def _rebuild_kind_unions() -> None:
+    """Re-derive the medium/array unions after the registries changed.
+
+    Entry-point plugins are discovered while this module is still importing
+    (the unions ask for them), so the common case needs no rebuild at all.
+    This exists for the other case: a package that calls ``register`` later,
+    e.g. from a notebook cell. Both unions are module globals, so a forced
+    ``model_rebuild`` re-resolves the annotations that name them.
+    """
+    global MediumConfig, ArrayConfig, _JOB_ADAPTER
+    MediumConfig = medium_kinds.union()
+    ArrayConfig = array_kinds.union()
+    ArraySourceConfig.model_rebuild(force=True)
+    ExplicitJobConfig.model_rebuild(force=True)
+    _JOB_ADAPTER = TypeAdapter(JobConfig)
+
+
+medium_kinds.on_change(_rebuild_kind_unions)
+array_kinds.on_change(_rebuild_kind_unions)
+
+
+def job_schema() -> dict[str, Any]:
+    """The ``caustica-job/1`` JSON Schema, generated from the pydantic models.
+
+    There is no second, hand-written definition of the job format anywhere —
+    this IS the schema, and it grows a branch the moment a kind registers.
+    """
+    return {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        **_JOB_ADAPTER.json_schema(ref_template="#/$defs/{model}"),
+        "$id": f"urn:caustica:{JOB_FORMAT}",
+        "title": JOB_FORMAT,
+        "description": (
+            "One JSON file = one complete caustica solve. Generated from the "
+            "pydantic models; medium and source.array kinds reflect what is "
+            "registered right now (see docs/job_reference.md)."
+        ),
+    }
 
 
 def load_job(path: str | Path) -> tuple[ExplicitJobConfig, Path]:
@@ -541,24 +788,6 @@ def _resolve(path_str: str, base_dir: Path | None) -> str:
     return path_str
 
 
-def _resolve_medium_paths(medium, base_dir: Path | None):
-    """Return a medium config whose file references resolve against base_dir."""
-    if base_dir is None:
-        return medium
-    if isinstance(medium, SceneMediumConfig) and medium.scene.imports:
-        imports = [
-            imp.model_copy(update={"path": _resolve(imp.path, base_dir)})
-            for imp in medium.scene.imports
-        ]
-        return medium.model_copy(
-            update={"scene": medium.scene.model_copy(update={"imports": imports})}
-        )
-    if isinstance(medium, VolumeImportMediumConfig):
-        vol = medium.volume.model_copy(update={"path": _resolve(medium.volume.path, base_dir)})
-        return medium.model_copy(update={"volume": vol})
-    return medium
-
-
 def _check_dataset_f0(job_f0_hz: float, baked_f0_mhz: float | None, what: str) -> None:
     """The M6f alpha guarantee, on EVERY path that can pair a file with a drive.
 
@@ -579,34 +808,24 @@ def _check_dataset_f0(job_f0_hz: float, baked_f0_mhz: float | None, what: str) -
 
 
 def _build_explicit(job: ExplicitJobConfig, base_dir: Path | None, with_medium: bool) -> BuiltJob:
-    medium_cfg = _resolve_medium_paths(job.medium, base_dir)
+    medium_cfg = job.medium.resolve_paths(base_dir)
+    source_cfg = job.source.resolve_paths(base_dir)
 
     # The medium build is the EXPENSIVE part (GBs for a full-size volume), so
     # every refusal that only needs geometry/labels runs first.
     labels = None
     water_label: int | None = None
-    volume = None
-    if isinstance(medium_cfg, MediumVolumeConfig):
-        volume = medium_cfg.load_volume(base_dir)
-        # The M6f protection generalizes: a file whose alpha was baked at a
-        # frequency refuses to run at another one.
-        _check_dataset_f0(
-            job.drive.f0_hz,
-            volume.meta.get("f0_mhz", volume.meta.get("dataset", {}).get("f0_mhz")),
-            "explicit medium_volume job",
-        )
-        grid = volume.grid(
-            PMLSpec(thickness=medium_cfg.pml_mm * _MM) if medium_cfg.pml_mm > 0 else None
-        )
-        labels = volume.labels
-        water_label = medium_cfg.water_label
-        c_min = volume.c_min()
+    prep: MediumPrep | None = None
+    if type(medium_cfg).provides_grid:
+        prep = medium_cfg.prepare(job.drive)
+        grid, c_min = prep.grid, prep.c_min
+        labels, water_label = prep.labels, prep.water_label
     else:
         assert job.grid is not None  # enforced by the model validator
         grid = job.grid.to_grid()
         c_min = medium_cfg.c_min()
 
-    src, focus_vox, derived = job.source.build(grid, job.drive)
+    src, focus_vox, derived = source_cfg.build(grid, job.drive)
     check_source_clears_pml(grid, src)
 
     if labels is not None and water_label is not None and labels[focus_vox] == water_label:
@@ -617,9 +836,12 @@ def _build_explicit(job: ExplicitJobConfig, base_dir: Path | None, with_medium: 
             f"medium_volume) set water_label to null if label {water_label} is not water."
         )
 
-    if volume is not None:
-        medium = volume.to_medium(linear=medium_cfg.linear) if with_medium else None
-        del volume
+    if prep is not None:
+        # build_medium() drops the kind's own reference to the loaded volume;
+        # `labels` is a view into it, so release that too before returning.
+        medium = prep.build_medium() if with_medium else None
+        labels = None
+        del prep
     else:
         medium = medium_cfg.build(grid) if with_medium else None
 

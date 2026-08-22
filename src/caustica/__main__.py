@@ -7,7 +7,9 @@ Colab session has been booked and a dataset staged. The M10c runner adds
 figures from a run's output folder (or from its preview package alone).
 M10h adds the ``caustica`` console entry point and ``example`` — packaged,
 zero-data jobs copied *out* of the install before running (running them in
-place would write into site-packages, see ``caustica.examples``).
+place would write into site-packages, see ``caustica.examples``). M10m adds
+``schema`` — the job format's JSON Schema, generated from the pydantic
+models and reflecting every registered medium/array kind.
 """
 
 from __future__ import annotations
@@ -105,6 +107,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="destination directory (default: current directory)",
     )
 
+    sc = sub.add_parser(
+        "schema",
+        help="print the caustica-job/1 JSON Schema (generated from the models; "
+        "reflects every registered medium/array kind)",
+    )
+    sc.add_argument("--compact", action="store_true", help="one line instead of indented JSON")
+    sc.add_argument(
+        "--kinds",
+        action="store_true",
+        help="list the registered medium and array kind names instead of the schema",
+    )
+
     rep = sub.add_parser(
         "report",
         help="render REPORT.md + index.html (+ figures) for a run output folder, "
@@ -184,6 +198,19 @@ def main(argv: list[str] | None = None) -> int:
         print(f"copied: {target}")
         print(f"next:   caustica validate {target}")
         print(f"        caustica run {target}")
+        return 0
+    if args.command == "schema":
+        import json
+
+        from caustica.config.job import job_schema
+        from caustica.config.kinds import array_kinds, medium_kinds
+
+        if args.kinds:
+            for label, reg in (("medium", medium_kinds), ("array", array_kinds)):
+                for name in reg.available():
+                    print(f"{label}	{name}")
+            return 0
+        print(json.dumps(job_schema(), indent=None if args.compact else 2, sort_keys=False))
         return 0
     if args.command == "report":
         from caustica.report.run_report import report_out_dir
