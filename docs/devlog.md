@@ -2119,3 +2119,22 @@ ana ağaçta mutasyon yasak. Uygulaması ucuz: `git worktree add <scratch>/mut H
 `PYTHONPATH=<scratch>/mut/src ./.venv/Scripts/python.exe -m pytest` — editable kurulum düz bir
 `.pth` olduğu için PYTHONPATH onu geçersiz kılıyor, yani ana ağaç hiç dokunulmadan mutasyon
 koşuyor. Bu turdaki altı mutasyonun hepsi orada koştu.
+
+## 2026-08-22 — Büyük yeniden planlama: "piyasanın en iyisi" hedefi, K18–K21
+
+Kullanıcıyla 24 soruluk karar turu + üç araştırma raporu (research/landscape_2026.md + ITRUSST/ML
+ve differentiable/GPU alt-raporları). Kritik landscape bulguları: k-wave-python v0.6 saf-CuPy
+çözücü çıkardı ("saf Python" farkımız kapandı); j-Wave 23 aydır bayat (differentiable NONLİNEER
+niş BOŞ); ITRUSST self-serve ve donmuş (giriş = 18 permütasyon + kendi karşılaştırma makalen);
+Stride/Openwater AGPL (ticari gömülemez — MIT/LGPL tarafı bize açık); "en doğru" iddiası
+kazanılamaz, ayrışma kafatası haritalamada.
+
+Kararlar: kimlik = sözleşmeli çok-motor çatı + native aile (K18) · HIFU-önce, doğruluk-önce
+(K20) · v0.1 = ITRUSST dokuzunun tümü akustik-yalnız + JOSS + PyPI (K19) · görüntü köprüsü
+entegrasyon-önce [imaging] extra (K21) · KZK ertelendi (AS öne) · M12→M11, M13+M14+M10g→M29
+birleşti · adjoint/ML fizibilitesi M28 olarak ikinci fazda (kullanıcı, boş-niş bulgusuna rağmen
+v0.1 odağını korudu) · dataset vitrini en sona.
+
+Yeni sıra: CANLI COLAB OTURUMU (ilk iş) → M11 → M18 → M15 → M16 → M25/M26 → M27 → M19 →
+M21→v0.1 → ikinci faz → vitrin. M9 KZK ertelendi-damgalı; eski M21 "−6dB 0.2–0.6 mm" kriteri
+kaynaktan doğrulanamadığı için gerçek 2022 koridorlarıyla değiştirildi.

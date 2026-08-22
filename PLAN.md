@@ -57,6 +57,10 @@ Bunlar yeniden tartışılmaz. Değişmesi gerekiyorsa önce burası güncelleni
 | K15 | **Tam plugin mimarisi** (2026-08-22) — beş eksen entry-point'li: solver ✅, medium kind, array kind, backend, report renderer | Erken-soyutlama riski söylendi, kullanıcı teyit etti. Panzehir: çekirdek kendi plugin API'sinin birinci müşterisidir (özel yol yok). M10m + M10n |
 | K16 | **UWCEM kalanları EN SON; her şey TEK dosyada** (2026-08-22) | Ayrışım (M10k) zaten kapandı; kalan push/bakım işleri `docs/uwcem.md`'de, yol haritasının sonunda |
 | K17 | **Yönetim modeli** (2026-08-22): operatör = Fable 5, kod = Opus 5 alt-ajanları; PM sistemi = MILESTONES.md | Önemli kararlar kullanıcıya sorulur; gerisi operatörde. Milestone kanıt disiplini değişmez |
+| K18 | **Çok-motor çatı kimliği** (2026-08-22): "bir API, N motor" — native aile (westervelt/linear/AS, ileride KZK) + sarılmış motorlar (kwave ✅, jwave M25, stride M26) aynı harness'te çapraz doğrulanır | Landscape: k-wave-python v0.6 saf-CuPy çözücü çıkardı, "saf Python" farkı kapandı; savunulabilir konum SÖZLEŞME (job→planner→damgalı koşu) + çok-motor. Rakiple fizik yarışı değil, rakibi motor olarak sarma |
+| K19 | **v0.1 kapısı = ITRUSST PH1 dokuzunun TÜMÜ, akustik-yalnız** + JOSS + PyPI (2026-08-22) | Self-serve ekosistem (Zenodo/GitHub donmuş, bekçisiz); 500 kHz LİNEER olduğundan CW motoru yeter, elastik gerekmez (katılımcı normu). Koridorlar: fokal basınç <%10, konum <1 mm |
+| K20 | **HIFU-önce, doğruluk-önce** (2026-08-22): termal öne (M18), AS KZK'nın önüne (M15), kafatası/elastik v0.2 (M22), broadband ikinci faz (M17) | "En doğru çözücü" iddiası kazanılamaz (hidrofon karşısında alan %20-31 hatada) — iddia: doğrulanabilirlik + tekrarlanabilirlik + çok-motor mutabakat |
+| K21 | **Görüntü köprüsü entegrasyon-önce** (2026-08-22): `caustica[imaging]` extra'sı hazır segmentasyon/pseudo-CT çıktılarını alır + adlandırılmış literatür haritalamaları; kendi AR-GE'si yok | Üretim araçları (k-Plan vs BabelBrain) tam bu haritalamada güvenlik-kritik ayrışıyor — çoğul-strateji KARŞILAŞTIRMASI ucuz fark alanı |
 
 ### 0.3 Vazgeçilenler (kayıt — yeniden gündeme gelirse buraya bakılır)
 
@@ -70,12 +74,17 @@ Bunlar yeniden tartışılmaz. Değişmesi gerekiyorsa önce burası güncelleni
 | **PLAN.md'deki M0–M9 yol haritası tablosu** | MILESTONES.md M0–M24 ile çakışıyordu; tek kaynak MILESTONES.md |
 | **Gemini Deep Research sorgusu eki** | Sorgu koşuldu; sonuçlar `research/` altında, milestone'lara "VERIFY" notlarıyla işlendi |
 | **C/C++ backend** | §12 — kazanç %10–30, bakım maliyeti yüksek; backend arayüzü açık bırakıldı |
+| **Ayrı M12/M13/M14/M10g milestone'ları** | 2026-08-22 yeniden plan: M12→M11'e, M13+M14+M10g→M29'a birleşti |
+| **"Saf Python, binary'siz" ana farkı** | k-wave-python v0.6 (2026-03) aynısını yaptı; kimlik K18'e taşındı (sözleşmeli çok-motor çatı). Teknik özellik duruyor, PAZARLAMA iddiası olmaktan çıktı |
 
 ---
 
 ## 1. Vizyon
 
-"Colab'da çalışan gerçek bir k-Wave rakibi, COMSOL gibi duran" bir sistem — ama **önce kütüphane**.
+"Bir API, N motor" (K18): planner-kapılı, damgalı, tekrarlanabilir koşu sözleşmesi altında
+native çözücü ailesi + sarılmış motorlar (kwave, jwave, stride) — fokuslu ultrason için
+**doğrulanabilirliği kanıtlanmış** çok-motor çatı. COMSOL hissi korunur; rakiple fizik
+yarışı değil, rakibi de motor olarak sarma. Ve **önce kütüphane**.
 Üç katman:
 
 - **Katman A — Simülasyon çekirdeği**: çok-formülasyonlu (Westervelt / lineer / KZK, ileride AS +
