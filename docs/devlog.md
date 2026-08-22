@@ -1584,3 +1584,124 @@ göre/iç içe/mutlak/eksik dosya/`base_dir=None` hepsi aynı, ve `resolve_paths
 serileştirme/eşitlik/`model_copy`/pickle/deepcopy/strict mod/`extra=forbid`/alan sırası/JSON Schema
 farkı YOK (tek fark: alanın *bildirilen* anotasyonu `Any` — kodda belgelendi, repoda kimse okumuyor);
 import döngüsü yok; dokuz `data/setups/s1-*.json` iki sürümde bayt-aynı çıktı veriyor.
+
+---
+
+## 2026-08-22 — Oturum M10n (Opus 5 alt-ajanı): plugin mimarisi, beş eksen entry-point
+
+### Yapılanlar
+Beş eksenin de aynı seam'i taşıması (K15, PLAN §2 kural 6). Dal `library-first`, yedi yerel commit.
+
+- **`src/caustica/registry.py` (YENİ)** — ortak şekil TEK yerde: `PluginRegistry` (lazy entry-point
+  taraması, reload'a dayanıklı çakışma kontrolü, ya-hep-ya-hiç kayıt + geri alma, `on_change`
+  kancaları, kayıtlı adları listeleyen `UnknownPluginError`) ve `FactoryRegistry` (implementasyonu
+  düz bir callable olan eksenler). T9'un talimatı buydu: **yeniden türetme, genelle.** M10m'in
+  `KindRegistry`'si artık bunun alt sınıfı (pydantic union'ı ve `kind` alanından anahtar okuma
+  onda kaldı — yalnız pydantic ekseninin ihtiyacı), solver registry'si de öyle.
+- **Backend ekseni** — `get_backend` isim→fabrika kaydına dönüyor; `numpy` ve `cupy` iki KAYITLI
+  fabrika, bir `if`'in iki dalı değil. `"auto"` bir backend DEĞİL, onların üstünde bir politika
+  (kullanılabilirse cupy, değilse numpy) ve bilinçli olarak çekirdekte kaldı: üçüncü taraf bir
+  backend adıyla seçilir, tahmin edilmez. cupy importu fabrikanın İÇİNDE — kayıt hiçbir şeye
+  dokunmuyor.
+- **Report renderer ekseni (YENİ `src/caustica/report/renderers.py`)** — `caustica report` bir
+  renderer'ı isimle çözüyor; caustica'nın matplotlib implementasyonu `"matplotlib"` adıyla kayıtlı
+  ve AYNI kapıdan geçiyor. Modül stdlib-only, yani T6 korundu: renderer'ları listelemek matplotlib
+  import ETMİYOR (testli).
+- **Job şeması açıldı** — `backend` alanı kapalı `Literal`'dan registry'nin doğruladığı `str`'e.
+  Üçüncü taraf bir backend job dosyasından erişilemiyordu; `elements`'in array'ler için kapattığı
+  çıkmazın aynısı. `run --backend` argparse `choices`'ı da kalktı.
+- **Entry-point grup adları donduruldu** (`ENTRY_POINT_GROUPS`, testle çivilendi):
+  `caustica.solvers` · `caustica.medium_kinds` · `caustica.array_kinds` · `caustica.backends` ·
+  `caustica.report_renderers`.
+- **`docs/extending.md`** — beş eksenin her biri için tarif + kopyala-yapıştır kurulabilir iskelet
+  paket (pyproject + tek modül, beşini birden kuruyor). İki test dokümanı çürümekten koruyor:
+  ilan ettiği gruplar donmuş beşle AYNI olmalı, ve iskeleti `ast.parse`'tan geçip beş parçayı da
+  hâlâ tanımlamalı.
+- **`tests/test_kind_registry.py` → `tests/test_plugins.py`** — M10m'in fixture'ı BÜYÜTÜLDÜ (ikinci
+  fixture kurulmadı): aynı sahte dağıtım artık beş grubu da ilan ediyor.
+
+### Kanıt
+- Süit **325 → 339** (337 passed + 2 skipped; +14 test). `ruff check/format src tests` temiz.
+- `test_entry_point_plugin_extends_all_five_axes`: iki mini koşu + bir render, hepsi plugin'in
+  ortamında. Her eksen ÇALIŞTIĞINI **kendi sayacıyla** kanıtlıyor — job dosyasından yankılanan bir
+  damga yeterli sayılmadı. Doğrulayıcı bunu üç "impostor" sabotajıyla sınadı (isimler doğru kalıp
+  seam kırılıyor): üçü de test'i kırmızıya düşürdü, yani sayaçlar taşıyıcı.
+- Koşu A (plugin çözücü) ile koşu B (plugin backend + native çözücü) BİLEREK ayrı: runner
+  `backend=`'i yalnız `_NATIVE_SOLVERS`'a geçiriyor (T3), yani üçüncü taraf bir çözücü varsayılan
+  backend'de çözer. Test bunu yazıyor, üretilmemiş bir damgayı iddia etmiyor.
+- `import caustica`: medyan **257.5 → 258.8 ms** (+%0.8). Bağımsız ölçüm (worktree ile M10n öncesi
+  commit'e karşı, serpiştirilmiş): **−%2.2**. `entry_points()` casuslandı: `import caustica`
+  sırasında **sıfır** çağrı.
+- `caustica report` çıktısı M10n ÖNCESİ CLI ile karşılaştırıldı: REPORT.md + index.html + üç PNG
+  **sha256 aynı**. M10n öncesi yazılan bir checkpoint HEAD ile resume ediliyor.
+- Dokuz `data/setups/*.json` bayt-aynı.
+
+### Review turu — beş gerçek bulgu (mercek: "sessizce bozdu mu?")
+1. **CLI açılışı iki katına çıkmıştı** (216 → 465 ms) — HER komut için, `--help` dahil.
+   `build_parser()` tek bir varsayılan ismi okumak için `caustica.report.renderers`'ı import
+   ediyordu; o da `caustica/report/__init__.py`'yi, o da numpy metrics + preview'ı. Üstündeki
+   yorum tam tersini iddia ediyordu. Artık `--renderer` varsayılanı `None`, çözüm `report`
+   dalında; parser kurulumu `import caustica` maliyetine döndü (263 vs 259 ms).
+2. **Backend fabrikası registry anahtarına bağlanmıyordu.** `"x"` adına kayıtlı bir fabrika
+   `Backend("numpy", ...)` döndürebiliyordu; aşağısı hep `Backend.name` okuyor — `run_meta`
+   damgası, `result.h5` attr'ı ve **resume'un aynı koşu olup olmadığına karar veren checkpoint
+   parmak izi**. Yani sahte bir numpy koşusu ayırt edilemezdi. Kapalı `Literal` bunu erişilemez
+   kılıyordu, registry kılmıyor. `get_backend` artık hem isim uyuşmazlığını hem de `Backend`
+   olmayan bir dönüşü reddediyor.
+3. **Lambda'lar çakışma kontrolünü deliyordu:** modül düzeyindeki her lambda `<lambda>` qualname'ini
+   taşıyor, `same_definition` ikisini "aynı tanım" sayıp ikincisinin birincisini sessizce
+   değiştirmesine izin veriyordu. Anonim qualname artık yeniden-tanım iddia edemiyor.
+4. **Solver çakışma metni bir kelime kaybetmişti** ("solver 'linear'" vs "solver name 'linear'").
+   Kind metinleri korunmuştu, solver yolu korunmamıştı. Geri kondu ve artık substring yerine
+   baştan-eşleşmeyle test ediliyor.
+5. **`--backend` yazım hatası artık medium kurulduktan SONRA reddediliyordu** (argparse `choices`
+   kalkınca). Önce kontrol ediliyor; test `build_job`'a ulaşılırsa kırmızı.
+
+### Doğrulayıcının beş boşluğu (hepsi kapatıldı)
+1. **Belgelenen seam soğuk import'ta yanlış cevap veriyordu.** `from caustica.config.kinds import
+   medium_kinds; medium_kinds.available()` — dokümanın yazdırdığı import — `()` döndürüyordu,
+   çünkü çekirdek kind'ları `config/job.py` import edilirken kaydediyor ve bunu kimse zorlamıyordu.
+   Plugin kuruluysa daha kötüsü: yalnız kendi kind'ları görünüyordu. Kind registry'leri artık
+   SORULDUĞUNDA job.py'yi kendisi import ediyor (import anında değil). Yeniden-giriş bedava:
+   job.py çalışırken zaten `sys.modules`'te, yani çağrı tam olması gereken anda no-op.
+2. Beş-eksen testi plugin MEDIUM'unun koştuğunu iddia etmiyordu — su döndüren bir `build()` de
+   geçerdi. Plugin artık build'ini de kaydediyor, test jel olduğunu iddia ediyor.
+3. Sahte renderer `metrics["peak"]["p_max_pa"]` okuyordu — böyle bir anahtar YOK, hep
+   `peak_pa: None` yazıyordu. Gerçek anahtar (`p_pa`) ve testte iddia.
+4. `plugin_on_path` `_loaded`'ı sıfırlıyor ama `_JOB_ADAPTER`'ı yeniden kurmuyordu: plugin ancak
+   test önce `available()` yokladığı için keşfediliyordu. Fixture artık girişte keşfediyor.
+5. İki docstring "pydantic `importlib.metadata`'yı kendi import anında yükler" diyordu; yüklemiyor
+   — `pydantic.plugin._loader` üzerinden, bir model sınıfı kurulduğunda geliyor.
+
+### Ayrıca (M10n'in kendi kusuru değil, ama rename onu mayına çevirirdi)
+`test_reloading_the_job_module_still_works` teardown'ında `importlib.reload(jobmod)` **reload'u geri
+almıyordu** — ÜÇÜNCÜ bir sınıf kümesi üretiyor, oysa başka test modülleri collection anında aldıkları
+İLK kümeyi tutuyor. Sonrası `isinstance`'ta düşüyor, hem de alakasız bir dosyada. Tam süit bunu hiç
+görmedi: `test_job.py` hem eski hem yeni dosya adından ÖNCE sıralanıyor — süit alfabe sayesinde
+yeşildi. Dosya adını değiştirmek bunu mayına çevireceği için (adı `test_job`'dan önce gelen bir
+seçim beş testi sebepsiz kırmızıya düşürürdü) devralınmadı, onarıldı: teardown modül ad alanını
+birebir geri koyuyor ve İLK sınıfları yeniden kaydediyor — çakışma kontrolünün zaten
+"yeniden tanım" saydığı şey, yani `%autoreload 2`'yi hayatta tutan kuralın ta kendisi.
+
+### Bilerek YAPILMAYANLAR (belgelendi, MILESTONES'ta "BİLİNEN SINIR")
+- **Runner'ın `_NATIVE_SOLVERS` beyaz listesi.** `backend=` ve `checkpoint=` yalnız `linear` ve
+  `westervelt`'e geçiyor (kwave adaptörü bilinmeyen kwarg reddediyor — T3). Üçüncü taraf bir çözücü
+  varsayılan backend'de çözer ve checkpoint almaz. `SolverCaps.backends` alanı bunu zaten ilan
+  ediyor ama `src/` içinde onu OKUYAN kimse yok — M10n bu ölü alanı ilk kez anlamlı kılan şey.
+  Yetenek sorusuna çevirmek ayrı bir iş: aynı bayrak planner'ı da kapılıyor ve iki farklı konu.
+- **`Backend.is_gpu` hâlâ `name == "cupy"`.** Üçüncü taraf bir GPU backend'i `cupyx.scipy.fft`
+  yerine `scipy.fft` alır, `synchronize` no-op olur, slow-CPU kapısı ve VRAM kapısı atlanır — hiçbiri
+  patlamaz, hiçbiri çalışmaz. Yani backend ekseni bugün yalnız CPU benzerleri için gerçekten
+  kullanılabilir. `is_gpu`'yu backend'in İLAN ettiği bir alan yapmak `Backend` değer nesnesini
+  değiştirir; M10n kapsamı dışı, `docs/extending.md` açıkça yazıyor.
+- `status.json`'daki `error` alanı artık `KeyError:` yerine `UnknownPluginError:` diyebiliyor
+  (mesaj tırnaksız ve okunur oldu). M10l sözleşmeyi dondururken bakılacak.
+- `caustica validate`'in bilinmeyen backend hatasında pydantic `type`'ı `literal_error` →
+  `value_error` oldu (Literal'ın açılmasının kaçınılmaz sonucu). Şema alanı artık `description` +
+  `examples` taşıyor, yani editör ipucu enum yerine oradan geliyor.
+
+### Açık uçlar / sonraki adım
+- Sıradaki: **M10j** (facade + ilerleme). `progress=` T1/T2/T3 tuzaklarına dokunuyor.
+- Bir kez görülen kırılganlık: `tests/test_io.py::test_killed_writer_leaves_no_visible_file` (gerçek
+  SIGKILL yarışı) iki review ajanı süiti aynı anda koştururken bir kez düştü; tek başına ve tam
+  süitte tekrar tekrar yeşil. Yük altında zamanlamaya duyarlı, kayda geçsin.
