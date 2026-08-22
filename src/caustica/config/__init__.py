@@ -5,6 +5,14 @@ arrays and sources, and eager-importing it here would create an import cycle
 (geometry.configs itself imports ``caustica.config.models``).
 """
 
+from caustica.config.kinds import (
+    ArrayKindConfig,
+    KindRegistry,
+    MediumKindConfig,
+    MediumPrep,
+    array_kinds,
+    medium_kinds,
+)
 from caustica.config.models import CausticaModel, GridConfig, PMLConfig
 
 _JOB_NAMES = frozenset(
@@ -14,6 +22,7 @@ _JOB_NAMES = frozenset(
         "BowlArrayConfig",
         "BuiltJob",
         "DriveConfig",
+        "ElementsArrayConfig",
         "ExplicitJobConfig",
         "FocusConfig",
         "HomogeneousMediumConfig",
@@ -26,13 +35,25 @@ _JOB_NAMES = frozenset(
         "SpiralArrayConfig",
         "VolumeImportMediumConfig",
         "build_job",
+        "job_schema",
         "dump_job",
         "load_job",
         "validate_job",
     }
 )
 
-__all__ = ["GridConfig", "CausticaModel", "PMLConfig", *sorted(_JOB_NAMES)]
+__all__ = [
+    "ArrayKindConfig",
+    "CausticaModel",
+    "GridConfig",
+    "KindRegistry",
+    "MediumKindConfig",
+    "MediumPrep",
+    "PMLConfig",
+    "array_kinds",
+    "medium_kinds",
+    *sorted(_JOB_NAMES),
+]
 
 
 def __getattr__(name: str):  # PEP 562: break the geometry <-> config cycle
