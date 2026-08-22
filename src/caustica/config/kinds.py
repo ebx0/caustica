@@ -320,6 +320,33 @@ class KindRegistry:
             union = union | cls
         return Annotated[union, Field(discriminator="kind")]
 
+    def annotation(self) -> Any:
+        """The field annotation a job model uses for this axis.
+
+        Not the union itself: a *deferred* annotation that asks the registry
+        for the union every time a schema is generated. A model whose field
+        is annotated this way picks up a kind registered after the model was
+        defined as soon as it is rebuilt — pydantic only re-resolves a field
+        annotation that failed to resolve, so a plain module global would go
+        stale (found while writing the plugin test, M10m).
+        """
+        return Annotated[Any, _LazyKindUnion(self)]
+
+
+class _LazyKindUnion:
+    """``Annotated`` metadata that expands to a registry's union on demand."""
+
+    __slots__ = ("registry",)
+
+    def __init__(self, registry: KindRegistry) -> None:
+        self.registry = registry
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return f"<{self.registry.label} kinds: {', '.join(self.registry.available())}>"
+
+    def __get_pydantic_core_schema__(self, source: Any, handler: Any) -> Any:
+        return handler.generate_schema(self.registry.union())
+
 
 #: The two registries the job schema builds its unions from.
 medium_kinds = KindRegistry("medium", MEDIUM_GROUP, MediumKindConfig)
