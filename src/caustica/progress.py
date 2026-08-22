@@ -7,10 +7,12 @@ never grows a display dependency and a GUI can ignore this module entirely.
 
 Two consumers ship:
 
-* a progress line — a ``tqdm`` bar when tqdm happens to be importable, plain
+* a progress line — a ``tqdm`` bar when tqdm happens to be importable AND
+  something interactive is watching (a tty, or a notebook kernel), plain
   periodic lines otherwise. **tqdm is never a requirement**: Colab and a bare
   ``pip install caustica`` must both work, so the import is attempted once and
-  its absence is not an error.
+  its absence is not an error. Piped into a log, a rewriting bar is noise, so
+  the plain renderer takes over.
 * a mid-run preview — ON by default (decision D21): every
   :data:`DEFAULT_PREVIEW_EVERY` periods the payload's lazy ``snapshot`` is
   called ONCE and rendered as a coarse ASCII map of the field through the
@@ -108,7 +110,7 @@ class ConsoleProgress:
         self.preview_every = max(1, int(preview_every))
         self.label = label
         self._bar: Any = None
-        self._tqdm = _load_tqdm() if use_tqdm else None
+        self._tqdm = _load_tqdm() if use_tqdm and _interactive(self.stream) else None
         self._last_preview: int | None = None
 
     # -- output ----------------------------------------------------------
@@ -174,6 +176,22 @@ class ConsoleProgress:
         if self._bar is not None:
             self._bar.close()
             self._bar = None
+
+
+def _interactive(stream: TextIO) -> bool:
+    """Is there a human watching this stream redraw itself?
+
+    A tqdm bar rewrites one line; piped into a log file or a CI transcript
+    that turns into thousands of carriage returns and the periodic preview
+    becomes unreadable. A notebook is interactive even though its stream is
+    not a tty, so both are asked.
+    """
+    if "ipykernel" in sys.modules or "google.colab" in sys.modules:
+        return True
+    try:
+        return bool(stream.isatty())
+    except Exception:
+        return False
 
 
 def _load_tqdm():

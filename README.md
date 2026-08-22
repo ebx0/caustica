@@ -38,6 +38,38 @@ CPU-validated (see [MILESTONES.md](MILESTONES.md), M7).
 Runs identically in a Colab cell (prefix each line with `!`); the same four
 commands are the whole workflow.
 
+## One call, from Python
+
+The same job, the same planner, the same gates — without leaving a notebook:
+
+```python
+import caustica
+
+res = caustica.simulate(
+    "water_bowl_mini.json",   # a job path, a job dict, an ExplicitJobConfig, or a BuiltJob
+    solver="westervelt",
+    harmonics=(1, 2),
+    out=None,                 # None = in memory, nothing written; a path = the full run folder
+    progress="auto",          # per-period line + a coarse focal preview every 8 periods
+)
+
+res.metrics       # focal metrics (caustica.report.metrics — the definitions REPORT.md quotes)
+res.result.phasor # the complex field, as the solver produced it
+res.preview()     # the <=10 MB caustica-preview/1 package, in memory
+res.save("result.h5")
+```
+
+`out=None` writes nothing at all, but it does **not** skip the planner or the
+two pre-run gates: a run that will not fit in VRAM, or that a CPU would take
+hours over, is refused here exactly as `caustica run` refuses it — with the
+same message and the same exit code, carried on `SimulationError.exit_code`.
+Give `out=<path>` and the call delegates to the runner, producing the ordinary
+output folder (job copy, plan, status, result, preview, stamp).
+
+Progress goes to stderr and turns off with `progress=None`; a callable gets the
+raw payload (`period`, `stage`, `peak`, `eta_s`, …) if you would rather draw it
+yourself.
+
 ## Bring your own setup
 
 Two documents are the contract, and both are kept honest by tests:
@@ -228,6 +260,8 @@ src/caustica/
   report/     # focal metrics (single source of truth), <=10 MB preview package,
               # figures + HTML report rendering
   runner.py   # plan-first job execution: disjoint exit codes, heartbeat, resume
+  facade.py   # caustica.simulate(...): one call over the SAME build_job/plan/gates
+  progress.py # progress payload presentation (tqdm or plain lines, focal preview)
   __main__.py # the CLI: python -m caustica {validate | run | report | schema | example}
 apps/            # focus study (library consumer; not in the wheel)
 tests/        # pytest; CPU-only by default; kwave/gpu tests auto-skip
@@ -246,6 +280,7 @@ python -m caustica run job.json --resume      # continue an interrupted run bit-
 python -m caustica run job.json --allow-slow-cpu   # accept a CPU run the 5-min estimate
                                                    # gate would refuse (CAUSTICA_CPU_LIMIT_MIN)
 python -m caustica run job.json --preview-only     # skip result.h5: preview + metrics only
+python -m caustica run job.json --no-progress      # silence the per-period lines + preview
 python -m caustica report out/                # local HTML + figures from result.h5
 python -m caustica report out/ --preview      # quick look from the <=10 MB preview only
 python -m caustica schema                     # the caustica-job/1 JSON Schema, generated

@@ -733,21 +733,64 @@ geçirmek (özel yol yok — çekirdek, kendi plugin API'sinin birinci müşteri
   `"cupy"` isimlerine dallanıyor, üçüncü taraf bir backend ikisini de atlar. `docs/extending.md`
   ikisini de yazıyor; yetenek sorusuna çevirmek ayrı bir iş
 
-### M10j — Notebook ergonomisi: facade + ilerleme `[ ]`
-M10k'dan SONRA gelir: facade da job şemasına dokunur (`stored_setup` kalkmadan yazılırsa iki kez
-elden geçer).
-- [ ] `caustica.simulate(...)` — girdisini job'a çevirip AYNI `build_job`'dan geçer; `out=None`
-      plan-önce disiplinini KAPATMAZ; `out=<yol>` `run_job_file`'a delege eder (göreli yol job
-      dosyasına göre çözülür kuralı korunur)
-- [ ] `progress=` kancası: `_period_boundary` checkpoint'ten BAĞIMSIZ hale getirilir,
-      linear+westervelt+engine üçlüsüne eklenir, kwave adaptörüne GEÇİRİLMEZ; `_Heartbeat` bu
-      payload'un TÜKETİCİSİ olur (ikinci implementasyon değil); koşu-içi önizleme VARSAYILAN AÇIK
-      (8 periyotta bir odak kesiti); callback hatası koşuyu düşürmez
+### M10j — Notebook ergonomisi: facade + ilerleme `[x]` (2026-08-22)
+M10k'dan SONRA geldi (o kapandı; `stored_setup` yokken tek kind var, facade şemaya bir kez dokundu).
+- [x] `caustica.simulate(...)` (`src/caustica/facade.py`) — KAPALI girdi listesi: job yolu · job
+      dict'i · `ExplicitJobConfig` · `BuiltJob`. Dördü de AYNI `build_job`'dan geçer, ikinci
+      kurulum yolu yok. Desteklenmeyen tip (çıplak `Grid`/`Medium`/`CWSource`) dördünü sayan ve
+      nesne API'sini gösteren TypeError verir — `test_an_unsupported_setup_names_the_accepted_forms`,
+      `test_all_four_setup_forms_produce_the_same_run` (beş yazım, tek tepe değeri).
+      **Plan çelişkisi kayda geçti:** PLAN.md §4 ve W3 "kurulmuş nesneler"i girdi sayıyor, ama
+      W3 kısıt-1 her girdinin `ExplicitJobConfig`'e normalize olmasını şart koşuyor; voxelize
+      edilmiş bir `CWSource` job'a geri çevrilemez. `BuiltJob` (= `build_job`'ın DÖNDÜRDÜĞÜ
+      kurulmuş nesneler, job'ı üstünde) okuması alındı; çıplak nesneler L1'e yönlendiriliyor
+- [x] `out=None` diske hiçbir şey yazmaz AMA planner konuşur, düşük-ppw uyarısı çıkar ve M10i
+      kapılarının İKİSİ de uygulanır. Bunu mümkün kılan tek şey kapıların `runner.check_gates()`
+      + `Refusal`'a çıkarılması — bellek-içi koşunun daha gevşek kapıları olsaydı, plan-önce
+      disiplininin var olma sebebi olan "laptopta çalıştı, Colab'da öldü" hatası geri gelirdi
+- [x] `out=<yol>` `run_job_file`'a delege eder; çıktı/damga/resume mantığı ÇOĞALTILMADI. Job
+      dosyası olan girdide dosyanın KENDİSİ runner'a verilir (T4: içindeki göreli yollar job
+      dosyasına göre çözülür); dosyası olmayan girdide yollar önce CWD'ye sabitlenir, sonra
+      geçici bir job dosyası yazılır — `test_a_job_files_relative_paths_still_resolve_against_the_job_file`
+- [x] `SimulationRun` `SolverResult`'ı SARAR: `.metrics` `report.metrics` (klasör varsa onun
+      `metrics.json`'ından okur — nesne ile klasör asla farklı sayı söyleyemez), `.preview()`
+      aynı ≤10 MB paket bellekte (`build_preview`/`decode_preview` ayrımı), `.save()` var olan
+      `result.h5`'i KOPYALAR (ikinci kez kuantize etmez) — `test_out_path_produces_the_full_runner_folder`
+- [x] `progress=` kancası: `_period_boundary` artık checkpoint'ten BAĞIMSIZ (T1), payload
+      linear+westervelt+engine üçlüsünde (T2), kwave adaptörüne GEÇMİYOR (T3). `_Heartbeat`
+      payload'un TÜKETİCİSİ (`__call__`); `stop_when` artık tick etmiyor. Koşu-içi önizleme
+      VARSAYILAN AÇIK (8 periyotta bir, odaktan geçen kaba kesit; `snapshot` TEMBEL bir
+      erişimci olduğu için isteyen periyotta TEK device→host kopya, istemeyende sıfır).
+      Callback hatası bir kez uyarır, koşu devam eder
+- [x] Sunum çözücünün DIŞINDA (`src/caustica/progress.py`): tqdm varsa ve izleyen bir şey varsa
+      (tty ya da notebook çekirdeği) bar, yoksa düz periyodik satır — tqdm runtime bağımlılığı
+      DEĞİL. Hepsi stderr'e; stdout'un ayrıştırılabilir sözleşmesi (plan metni, sonuç yolu)
+      korunur. CLI aynı payload'dan basar, `--no-progress` susturur
 - Başarı kriterleri:
-  - `simulate(job)` ile `caustica run job.json` bit-aynı alan üretir
-  - Checkpoint'SİZ mini koşu periyot başına tam bir kez callback çağırır
-  - `progress=` verilen kwave işi ÇÖKMEZ; hata fırlatan callback koşuyu düşürmez
-  - `out=None` diske hiçbir şey yazmaz
+  - [x] `simulate(job_dict)` ile `caustica run job.json` BİT-AYNI phasor/p_max üretir (paketli
+        `water_bowl_mini` örneği, `output.quantize=false` — karşılaştırılan çözüm, kodlayıcı
+        değil) — `test_simulate_dict_matches_caustica_run_bit_for_bit`
+  - [x] Checkpoint'SİZ mini koşu periyot başına TAM BİR kez callback çağırır; settle→record
+        geçişi stage değişimi olarak görünür —
+        `test_progress_fires_once_per_period_without_a_checkpoint`
+  - [x] `progress=` verilen kwave işi ÇÖKMEZ (`test_kwave_job_with_progress_set_does_not_crash`,
+        adapter `progress` görürse TypeError atıyor); hata fırlatan callback koşuyu düşürmez ve
+        BİR KEZ uyarır — `test_a_throwing_callback_warns_once_and_the_run_completes`
+  - [x] `out=None` diske hiçbir şey yazmaz (tmp CWD'de `rglob` ile önce/sonra karşılaştırma) ama
+        planner + kapılar çalışır — `test_out_none_writes_absolutely_nothing`,
+        `test_out_none_still_applies_the_vram_gate` (çıkış 3),
+        `test_out_none_still_applies_the_cpu_time_gate` (çıkış 2),
+        `test_allow_slow_cpu_is_the_documented_escape`
+  - [x] Kanca sayısal sonucu ya da hızı değiştirmiyor: 72×72×96 mini koşu (336 adım, 40 periyot),
+        kanca kapalı 8.037 s → ConsoleProgress + ASCII önizleme ile 8.079 s = **+%0.51**
+        (3 koşunun en iyisi; medyan +%0.93), çıplak callback **+%0.23**; phasor ve p_max
+        bit-aynı — `test_progress_does_not_change_the_field`,
+        `test_progress_does_not_change_the_runners_result`
+  - [x] status.json alanları ve run_meta anahtarları M10j ÖNCESİYLE aynı: aynı mini iş, değişiklik
+        öncesi ve sonrası — anahtar kümeleri özdeş, zaman/pid dışındaki her alan aynı değer
+        (`periods_done` 16, `steps_done` 64), `result.h5` ve `preview.npz` bayt-aynı —
+        `test_runner_status_json_matches_the_pre_m10j_contract`
+  - [x] Süit 339 → 367 (365 passed / 2 skipped / 0 failed); `data/setups/` on dosya bayt-aynı
 
 ### M10l — GUI sözleşmesinin dondurulması `[ ]` — GUI kodu YOK
 GUI ayrı repoda olacak ve teknolojisi seçilmedi (PLAN.md K13). Bu milestone yalnızca GUI'nin

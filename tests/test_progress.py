@@ -250,9 +250,9 @@ def test_cli_shows_progress_by_default_and_no_progress_silences_it(tmp_path, cap
     job = mini_job(tmp_path)
     assert main(["run", str(job), "--out", str(tmp_path / "a"), "--no-measure"]) == 0
     loud = capsys.readouterr()
-    # Which line renderer runs depends on whether tqdm happens to be
-    # installed; the mid-run preview is the part that is always there.
-    assert "preview @ period" in loud.err
+    # Captured output is not a tty, so the plain renderer takes over: a
+    # rewriting bar in a log file is noise, not progress.
+    assert "preview @ period" in loud.err and "[settle" in loud.err
     assert "preview @ period" not in loud.out
 
     assert (
@@ -291,3 +291,24 @@ def test_a_failing_display_does_not_mute_the_heartbeat():
     with pytest.raises(RuntimeError):
         fan({"period": 1})
     assert seen == [{"period": 1}], "the healthy consumer still saw the payload"
+
+
+def test_a_bar_is_only_used_where_something_can_watch_it(monkeypatch):
+    """A rewriting tqdm bar piped into a log is noise; plain lines are not."""
+    import io
+
+    from caustica.progress import ConsoleProgress
+
+    monkeypatch.delitem(__import__("sys").modules, "ipykernel", raising=False)
+    monkeypatch.delitem(__import__("sys").modules, "google.colab", raising=False)
+
+    class Tty(io.StringIO):
+        def isatty(self):
+            return True
+
+    assert ConsoleProgress(stream=io.StringIO())._tqdm is None  # not a tty
+    # With tqdm installed a tty gets a bar; without it, plain lines either way.
+    from caustica.progress import _load_tqdm
+
+    expected = _load_tqdm()
+    assert ConsoleProgress(stream=Tty())._tqdm is expected
