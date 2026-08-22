@@ -63,7 +63,7 @@ A bowl in water, ~15 lines, seconds on a CPU. This is the packaged example
 | `drive` | **required** | See [Drive](#drive). |
 | `run` | defaults | See [Run](#run). |
 | `solver` | `"westervelt"` | `linear`, `westervelt`, `kwave`, or any registered solver. |
-| `backend` | `"auto"` | `auto` \| `numpy` \| `cupy`. `auto` = CuPy if a GPU is present. |
+| `backend` | `"auto"` | `auto` \| `numpy` \| `cupy`, or any registered backend ([docs/extending.md](extending.md)). `auto` = CuPy if a GPU is present. |
 | `output` | defaults | See [Output](#output). |
 
 Unknown keys are **errors**, everywhere, at every level. A typo is never a
