@@ -35,6 +35,7 @@ never fatal — the same contract the solver registry keeps.)
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -234,7 +235,18 @@ class KindRegistry:
                 f"{self.label} kind '{name}' already registered by {self._kinds[name].__name__}"
             )
         self._kinds[name] = cls
-        self._notify()
+        try:
+            self._notify()
+        except Exception:
+            # All or nothing. If wiring the kind into the job models fails, it
+            # must not linger in the registry: `available()` and `caustica
+            # schema` would then advertise a kind the schema refuses — and
+            # inside :meth:`discover` the failure is logged as "plugin failed
+            # to load", which would make the inconsistency look explained.
+            self._kinds.pop(name, None)
+            with contextlib.suppress(Exception):
+                self._notify()
+            raise
         return cls
 
     def on_change(self, hook: Callable[[], None]) -> None:

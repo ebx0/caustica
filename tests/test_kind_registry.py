@@ -229,6 +229,32 @@ def test_registration_refusals_teach():
     assert medium_kinds.available() == ("homogeneous", "medium_volume", "scene", "volume_import")
 
 
+def test_registration_is_all_or_nothing_when_wiring_fails():
+    """A kind that cannot be wired into the job models must not linger.
+
+    Otherwise `available()` and `caustica schema` advertise a kind that
+    `validate` refuses — and inside discover() the failure is logged as
+    "plugin failed to load", which makes the inconsistency look explained.
+    """
+
+    class Late(MediumKindConfig):
+        kind: Literal["late_kind"] = "late_kind"
+
+    boom = RuntimeError("rebuild exploded")
+
+    def bad_hook() -> None:
+        raise boom
+
+    medium_kinds._hooks.append(bad_hook)
+    try:
+        with pytest.raises(RuntimeError, match="rebuild exploded"):
+            medium_kinds.register(Late)
+    finally:
+        medium_kinds._hooks.remove(bad_hook)
+    assert "late_kind" not in medium_kinds.available()
+    assert "late_kind" not in json.dumps(jobmod.job_schema())
+
+
 # ------------------------------------------------------------------ plugins
 
 
