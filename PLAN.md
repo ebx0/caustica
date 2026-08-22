@@ -182,13 +182,15 @@ eklenir, şimdi değil.
 
 Üçü de public, üçü de aynı `build_job` çekirdeğinden geçer. **Facade ikinci bir kod yolu değildir.**
 
-**L2 — facade (notebook için tek satır):**
+**L2 — facade (notebook için tek satır):** — M10j'de indi (`caustica/facade.py`). Girdi listesi
+KAPALIDIR: çıplak `Grid`/`Medium`/`CWSource` KABUL EDİLMEZ — voxelize edilmiş bir kaynak job'a
+geri çevrilemez, kabul etmek ikinci bir kurulum yolu demek olurdu. Onlar için L1 kullanılır.
 
 ```python
 import caustica
 
 res = caustica.simulate(
-    setup="job.json",       # job yolu | dict | ExplicitJobConfig | kurulmuş nesneler
+    setup="job.json",       # job yolu | dict | ExplicitJobConfig | BuiltJob
     solver="westervelt",
     backend="auto",         # GPU varsa cupy; yoksa uyarı + 5 dk üstü işte red (K5)
     harmonics=(1, 2),
@@ -336,8 +338,15 @@ sınıfından ve bir kütüphanenin en pahalı hata türü budur.
 - **İlerleme kancası**: periyot sınırında (adım başına ASLA — her adımda device→host senkronu GPU
   verimini yok eder) tek bir payload yayılır:
   `{period, periods_expected, step, steps_expected, peak, converge_delta, elapsed_s, eta_s, stage}`.
+  Bu DOKUZ anahtar serileştirilebilir sözleşmedir. Payload ayrıca **onuncu** bir anahtar taşır:
+  `snapshot` — sıfır argümanlı, odaktan geçen 2-B kesiti döndüren bir CALLABLE (M10j). Tembel
+  olması bilinçli: kopya yalnız tüketici isterse yapılır, yani 8 periyotta bir önizleme çizen
+  tüketici o periyotlarda TEK device→host kopya öder, diğerlerinde sıfır. **Serileştiren tüketici
+  (`status.json`, GUI soketi) bu anahtarı DÜŞÜRMEK ZORUNDADIR** — `json.dumps` onu kaldıramaz.
   `status.json` kalp atışı bu payload'un TÜKETİCİSİDİR, ikinci bir implementasyon değil. Sunum
-  çözücünün dışındadır (tqdm varsa tqdm, yoksa düz satır). Callback hatası koşuyu düşürmez.
+  çözücünün dışındadır (tqdm varsa ve izleyen bir şey varsa tqdm, yoksa düz satır; tqdm bir
+  runtime bağımlılığı DEĞİLDİR ve `extra` olarak da tanımlı değildir). Callback hatası koşuyu
+  düşürmez.
 
 ---
 

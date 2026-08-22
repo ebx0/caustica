@@ -842,6 +842,14 @@ class BuiltJob:
     medium: Medium | None = None
     c_min_hint: float | None = None  # for ppw checks when medium is skipped
     derived: dict[str, Any] = field(default_factory=dict)
+    #: Where THIS job's relative paths resolve (the job file's folder, or None
+    #: for a job that was never a file). ``job`` above keeps the ORIGINAL,
+    #: unresolved config -- resolution happens into local copies during the
+    #: build -- so without this field the base directory is simply lost, and
+    #: anyone rebuilding or re-dumping the job silently resolves against the
+    #: wrong place (adversarial review, 2026-08-22: `simulate(BuiltJob,
+    #: out=<path>)` resolved a medium file against a temp directory).
+    base_dir: Path | None = None
 
 
 def _resolve(path_str: str, base_dir: Path | None) -> str:
@@ -923,6 +931,7 @@ def _build_explicit(job: ExplicitJobConfig, base_dir: Path | None, with_medium: 
         medium=medium,
         c_min_hint=c_min,
         derived=derived,
+        base_dir=base_dir,
     )
 
 
