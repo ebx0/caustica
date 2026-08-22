@@ -14,6 +14,7 @@ record pass (leakage-free thanks to the exact-period dt policy).
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from caustica.core.grid import Grid
@@ -48,6 +49,7 @@ class WesterveltKSpacePSTD(SolverBase):
         reference_point: tuple[int, ...] | None = None,
         harmonics: tuple[int, ...] = (1,),
         checkpoint: CheckpointSpec | None = None,
+        progress: Callable[[dict], None] | None = None,
         **kwargs: Any,
     ) -> SolverResult:
         if kwargs:
@@ -66,4 +68,5 @@ class WesterveltKSpacePSTD(SolverBase):
             nonlinear=True,
             harmonics=harmonics,
             checkpoint=checkpoint,
+            progress=progress,
         )
