@@ -1,10 +1,11 @@
 """Kind registries: the plugin seam for job ``medium`` and ``source.array`` kinds.
 
-Same pattern as :mod:`caustica.solvers.registry`, applied to the two places
-the job schema used to hard-code a closed pydantic union (K15, PLAN rule 6):
-a name -> config-class registry, an ``importlib.metadata`` entry-point group
-for third parties, and a discriminated union *built from the registry*
-instead of written out by hand.
+The shared seam is :class:`caustica.registry.PluginRegistry` (one shape for
+all five axes, K15 / PLAN rule 6); this module applies it to the two places
+the job schema used to hard-code a closed pydantic union, and adds what only
+a pydantic axis needs: the registry key is read out of the class's ``kind``
+field, and the discriminated union is *built from the registry* instead of
+written out by hand.
 
 The core kinds (``homogeneous`` / ``scene`` / ``volume_import`` /
 ``medium_volume``; ``archimedean_spiral`` / ``bowl`` / ``elements``) register
@@ -35,11 +36,9 @@ never fatal — the same contract the solver registry keeps.)
 
 from __future__ import annotations
 
-import contextlib
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from importlib import metadata
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, get_args, get_origin
 
@@ -47,6 +46,7 @@ import numpy as np
 from pydantic import Field
 
 from caustica.config.models import CausticaModel
+from caustica.registry import ARRAY_KIND_GROUP, MEDIUM_KIND_GROUP, PluginRegistry
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from caustica.core.grid import Grid
@@ -55,10 +55,10 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 
 log = logging.getLogger("caustica")
 
-#: Entry-point group for third-party medium kinds.
-MEDIUM_GROUP = "caustica.medium_kinds"
-#: Entry-point group for third-party transducer/array kinds.
-ARRAY_GROUP = "caustica.array_kinds"
+#: Entry-point group for third-party medium kinds (frozen name, M10n).
+MEDIUM_GROUP = MEDIUM_KIND_GROUP
+#: Entry-point group for third-party transducer/array kinds (frozen name, M10n).
+ARRAY_GROUP = ARRAY_KIND_GROUP
 
 
 # --------------------------------------------------------------- medium seam
@@ -191,48 +191,37 @@ def _kind_name(cls: type[CausticaModel], label: str) -> str:
     """The registry key: the ``kind`` field's Literal default."""
     field = cls.model_fields.get("kind") if hasattr(cls, "model_fields") else None
     if field is None:
-        raise ValueError(f"{label} kind {cls.__name__} must declare a 'kind' field")
+        raise ValueError(f"{label} {cls.__name__} must declare a 'kind' field")
     if get_origin(field.annotation) is not Literal:
         raise ValueError(
-            f"{label} kind {cls.__name__}: 'kind' must be annotated "
+            f"{label} {cls.__name__}: 'kind' must be annotated "
             f'Literal["<name>"] (got {field.annotation!r}) so the job schema '
             f"can discriminate on it"
         )
     (tag,) = get_args(field.annotation)
     if not isinstance(tag, str) or not tag:
-        raise ValueError(f"{label} kind {cls.__name__}: 'kind' Literal must be a non-empty string")
+        raise ValueError(f"{label} {cls.__name__}: 'kind' Literal must be a non-empty string")
     if field.default != tag:
         raise ValueError(
-            f"{label} kind {cls.__name__}: 'kind' must default to {tag!r} "
+            f"{label} {cls.__name__}: 'kind' must default to {tag!r} "
             f"(got {field.default!r}) so the kind can be constructed in Python"
         )
     return tag
 
 
-def _same_definition(a: Any, b: Any) -> bool:
-    """True when ``b`` is ``a`` re-executed — a module reload, not a collision.
+class KindRegistry(PluginRegistry[type[CausticaModel]]):
+    """name -> config class, plus the discriminated union built from it.
 
-    ``importlib.reload`` (and therefore ``%autoreload 2`` in a notebook, the
-    workflow this library is aimed at) re-runs the module body and produces
-    NEW class objects carrying the SAME kind tags. Identity alone would call
-    that a name collision and report a class as colliding with itself, halfway
-    through the reload — leaving the module a mix of new and stale objects.
-    Matching module + qualified name keeps the collision guard for two
-    genuinely different classes while letting a redefinition replace itself.
+    The generic machinery (lazy entry-point scan, collision guard, change
+    hooks, actionable lookup failure) lives in :class:`caustica.registry.PluginRegistry`
+    — this class adds what is specific to a *pydantic* axis: the key comes
+    out of the class's ``kind`` field, and the registry can hand the job
+    models a union that follows it.
     """
-    return (a.__module__, a.__qualname__) == (b.__module__, b.__qualname__)
-
-
-class KindRegistry:
-    """name -> config class, plus the discriminated union built from it."""
 
     def __init__(self, label: str, group: str, base: type[CausticaModel]) -> None:
-        self.label = label
-        self.group = group
+        super().__init__(f"{label} kind", group, plural="kinds")
         self.base = base
-        self._kinds: dict[str, type[CausticaModel]] = {}
-        self._loaded = False
-        self._hooks: list[Callable[[], None]] = []
 
     # ---- registration ----
 
@@ -240,98 +229,28 @@ class KindRegistry:
         """Class decorator: add a kind (name collision = error)."""
         if not (isinstance(cls, type) and issubclass(cls, self.base)):
             raise TypeError(
-                f"{self.label} kind {getattr(cls, '__name__', cls)!r} must subclass "
+                f"{self.label} {getattr(cls, '__name__', cls)!r} must subclass "
                 f"{self.base.__module__}.{self.base.__name__}"
             )
-        name = _kind_name(cls, self.label)
-        held = self._kinds.get(name)
-        if held is not None and held is not cls and not _same_definition(held, cls):
-            raise ValueError(f"{self.label} kind '{name}' already registered by {held.__name__}")
-        self._kinds[name] = cls
-        try:
-            self._notify()
-        except Exception:
-            # All or nothing. If wiring the kind into the job models fails, it
-            # must not linger in the registry: `available()` and `caustica
-            # schema` would then advertise a kind the schema refuses — and
-            # inside :meth:`discover` the failure is logged as "plugin failed
-            # to load", which would make the inconsistency look explained.
-            self._kinds.pop(name, None)
-            with contextlib.suppress(Exception):
-                self._notify()
-            raise
-        return cls
+        return self.add(_kind_name(cls, self.label), cls)
 
-    def on_change(self, hook: Callable[[], None]) -> None:
-        """Run ``hook`` whenever the kind set changes (job.py rebuilds its models).
+    def _accept(self, ep_name: str, obj: Any) -> None:
+        """Entry-point path: the KIND field names it, not the entry point.
 
-        A hook re-registered from the same place replaces its predecessor —
-        otherwise a module reload would leave the old module's hook installed
-        forever, rebuilding classes nobody references any more.
+        A ``pyproject.toml`` line cannot disagree with the implementation,
+        because the tag the job schema discriminates on is the only key.
         """
-        self._hooks = [h for h in self._hooks if not _same_definition(h, hook)]
-        self._hooks.append(hook)
+        if isinstance(obj, type) and issubclass(obj, self.base):
+            self.register(obj)
+        else:
+            log.warning(
+                "%s plugin '%s' is not a %s subclass; ignored",
+                self.group,
+                ep_name,
+                self.base.__name__,
+            )
 
-    def _notify(self) -> None:
-        for hook in self._hooks:
-            hook()
-
-    def _forget(self, name: str) -> None:
-        """Remove a kind. Teardown only (tests, plugin fixtures) — not an API."""
-        if self._kinds.pop(name, None) is not None:
-            self._notify()
-
-    # ---- discovery ----
-
-    def discover(self) -> None:
-        """Load third-party kinds from the entry-point group, once."""
-        if self._loaded:
-            return
-        self._loaded = True  # set first: a broken scan must not retry forever
-        try:
-            eps = metadata.entry_points(group=self.group)
-        except Exception as exc:  # pragma: no cover - metadata backend quirks
-            log.warning("could not scan %s entry points: %s", self.group, exc)
-            return
-        for ep in eps:
-            try:
-                obj = ep.load()
-                if isinstance(obj, type) and issubclass(obj, self.base):
-                    self.register(obj)
-                else:
-                    log.warning(
-                        "%s plugin '%s' is not a %s subclass; ignored",
-                        self.group,
-                        ep.name,
-                        self.base.__name__,
-                    )
-            except Exception as exc:  # a broken plugin must not break caustica
-                log.warning(
-                    "%s plugin '%s' failed to load: %s: %s",
-                    self.group,
-                    ep.name,
-                    type(exc).__name__,
-                    exc,
-                )
-
-    # ---- lookup ----
-
-    def get(self, name: str) -> type[CausticaModel]:
-        """Look up a kind's config class by name."""
-        self.discover()
-        try:
-            return self._kinds[name]
-        except KeyError:
-            raise KeyError(
-                f"unknown {self.label} kind '{name}'. Available: "
-                f"{', '.join(self.available()) or '(none)'}. Third-party kinds are "
-                f"added through the '{self.group}' entry-point group."
-            ) from None
-
-    def available(self) -> tuple[str, ...]:
-        """Sorted names of all registered kinds."""
-        self.discover()
-        return tuple(sorted(self._kinds))
+    # ---- unions ----
 
     def union(self) -> Any:
         """The discriminated union of every registered kind, in registration order.
@@ -341,9 +260,9 @@ class KindRegistry:
         stays stable as long as the core kinds keep their order.
         """
         self.discover()
-        members = list(self._kinds.values())
+        members = list(self._items.values())
         if not members:  # pragma: no cover - core kinds always register
-            raise RuntimeError(f"no {self.label} kinds registered")
+            raise RuntimeError(f"no {self.label}s registered")
         if len(members) == 1:
             return members[0]
         union: Any = members[0]
@@ -380,7 +299,7 @@ class _LazyKindUnion:
         self.registry = registry
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
-        return f"<{self.registry.label} kinds: {', '.join(self.registry.available())}>"
+        return f"<{self.registry.label}s: {', '.join(self.registry.available())}>"
 
     def __get_pydantic_core_schema__(self, source: Any, handler: Any) -> Any:
         return handler.generate_schema(self.registry.union())

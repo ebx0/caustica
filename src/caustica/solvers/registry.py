@@ -4,65 +4,45 @@ Built-in solvers self-register at package import via the :func:`register`
 decorator. Third-party packages can ship solvers through the
 ``caustica.solvers`` entry-point group; those load lazily on first lookup so
 a broken plugin can never break ``import caustica``.
+
+The mechanics (lazy scan, collision guard, actionable lookup failure) are
+:class:`caustica.registry.PluginRegistry`, shared with the other four
+extensible axes (K15). What is specific here: the registry key is the
+solver class's own ``name`` attribute, so an entry-point declaration cannot
+disagree with the class it points at.
 """
 
 from __future__ import annotations
 
 import logging
-from importlib import metadata
+from typing import Any
 
+from caustica.registry import SOLVER_GROUP, PluginRegistry
 from caustica.solvers.base import SolverBase
 
 log = logging.getLogger("caustica")
 
-_REGISTRY: dict[str, type[SolverBase]] = {}
-_ENTRY_POINTS_LOADED = False
+
+class SolverRegistry(PluginRegistry[type[SolverBase]]):
+    """name -> solver class; the name comes from the class, not the caller."""
+
+    def register(self, cls: type[SolverBase]) -> type[SolverBase]:
+        """Class decorator: add a solver to the registry (name collision = error)."""
+        name = getattr(cls, "name", None)
+        if not name or not isinstance(name, str):
+            raise ValueError(f"solver class {cls.__name__} must define a string 'name'")
+        return self.add(name, cls)
+
+    def _accept(self, ep_name: str, obj: Any) -> None:
+        if isinstance(obj, type) and issubclass(obj, SolverBase):
+            self.register(obj)
+        else:
+            log.warning("%s plugin '%s' is not a SolverBase subclass; ignored", self.group, ep_name)
 
 
-def register(cls: type[SolverBase]) -> type[SolverBase]:
-    """Class decorator: add a solver to the registry (name collision = error)."""
-    name = getattr(cls, "name", None)
-    if not name or not isinstance(name, str):
-        raise ValueError(f"solver class {cls.__name__} must define a string 'name'")
-    if name in _REGISTRY and _REGISTRY[name] is not cls:
-        raise ValueError(f"solver name '{name}' already registered by {_REGISTRY[name].__name__}")
-    _REGISTRY[name] = cls
-    return cls
+#: The registry the built-in solvers register into (no private path).
+solver_registry = SolverRegistry("solver", SOLVER_GROUP)
 
-
-def _load_entry_points() -> None:
-    global _ENTRY_POINTS_LOADED
-    if _ENTRY_POINTS_LOADED:
-        return
-    _ENTRY_POINTS_LOADED = True
-    try:
-        eps = metadata.entry_points(group="caustica.solvers")
-    except Exception as exc:  # pragma: no cover - metadata backend quirks
-        log.warning("could not scan solver entry points: %s", exc)
-        return
-    for ep in eps:
-        try:
-            obj = ep.load()
-            if isinstance(obj, type) and issubclass(obj, SolverBase):
-                register(obj)
-        except Exception as exc:  # a broken plugin must not break caustica
-            log.warning(
-                "solver plugin '%s' failed to load: %s: %s", ep.name, type(exc).__name__, exc
-            )
-
-
-def get(name: str) -> type[SolverBase]:
-    """Look up a solver class by registry name."""
-    _load_entry_points()
-    try:
-        return _REGISTRY[name]
-    except KeyError:
-        raise KeyError(
-            f"unknown solver '{name}'. Available: {', '.join(available()) or '(none)'}"
-        ) from None
-
-
-def available() -> tuple[str, ...]:
-    """Sorted names of all registered solvers."""
-    _load_entry_points()
-    return tuple(sorted(_REGISTRY))
+register = solver_registry.register
+get = solver_registry.get
+available = solver_registry.available

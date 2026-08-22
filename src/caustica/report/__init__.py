@@ -3,12 +3,15 @@
 Single source of truth for focal metrics (:mod:`caustica.report.metrics` —
 ``apps/focus_study`` delegates here), the <=10 MB preview package the runner
 writes next to every result (:mod:`caustica.report.preview`), and the
-``caustica report`` renderer (:mod:`caustica.report.run_report`).
+``caustica report`` renderers (:mod:`caustica.report.renderers`, with
+caustica's own matplotlib implementation in :mod:`caustica.report.run_report`).
 
-Import discipline (PEP 562, same rule as :mod:`caustica.io`): metric and
-preview names are numpy-only and eager; anything that would pull in
-matplotlib (figures, run_report) or h5py loads lazily, so the runner can
-write previews on a machine with neither installed.
+Import discipline (PEP 562, same rule as :mod:`caustica.io`): metric, preview
+and renderer-registry names are numpy-only/stdlib-only and eager; anything
+that would pull in matplotlib (figures, run_report) or h5py loads lazily, so
+the runner can write previews on a machine with neither installed. The
+renderer registry is eager on purpose — listing what can render a folder
+must not import a plotting library.
 """
 
 from __future__ import annotations
@@ -33,6 +36,7 @@ from caustica.report.preview import (
     load_preview,
     write_preview,
 )
+from caustica.report.renderers import DEFAULT_RENDERER, render_report, report_renderers
 
 _LAZY = {
     "report_out_dir": "caustica.report.run_report",
@@ -56,6 +60,9 @@ __all__ = [
     "block_mean",
     "load_preview",
     "write_preview",
+    "DEFAULT_RENDERER",
+    "render_report",
+    "report_renderers",
     "report_out_dir",
     "FigureContext",
 ]

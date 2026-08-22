@@ -22,6 +22,10 @@ import caustica
 
 
 def build_parser() -> argparse.ArgumentParser:
+    # Lazy: keeps `python -m caustica --help` from importing the report
+    # package (numpy metrics + preview) just to read one default name.
+    from caustica.report.renderers import DEFAULT_RENDERER  # noqa: PLC0415
+
     p = argparse.ArgumentParser(
         prog="caustica",
         description="caustica job tools (job format: caustica-job/1)",
@@ -130,6 +134,13 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="use preview.npz even if result.h5 is present (fast look, no full field read)",
     )
+    rep.add_argument(
+        "--renderer",
+        default=DEFAULT_RENDERER,
+        help=f"which registered report renderer to use (default: {DEFAULT_RENDERER}); "
+        "third-party renderers arrive through the 'caustica.report_renderers' "
+        "entry-point group",
+    )
     return p
 
 
@@ -213,10 +224,10 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(job_schema(), indent=None if args.compact else 2, sort_keys=False))
         return 0
     if args.command == "report":
-        from caustica.report.run_report import report_out_dir
+        from caustica.report.renderers import render_report
 
         try:
-            html = report_out_dir(args.outdir, preview_only=args.preview)
+            html = render_report(args.outdir, preview_only=args.preview, renderer=args.renderer)
         except Exception as exc:
             # A half-synced preview.npz or torn result.h5 is the NORMAL
             # failure mode on a Drive mount — the report command must say
