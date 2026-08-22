@@ -1705,3 +1705,21 @@ birebir geri koyuyor ve İLK sınıfları yeniden kaydediyor — çakışma kont
 - Bir kez görülen kırılganlık: `tests/test_io.py::test_killed_writer_leaves_no_visible_file` (gerçek
   SIGKILL yarışı) iki review ajanı süiti aynı anda koştururken bir kez düştü; tek başına ve tam
   süitte tekrar tekrar yeşil. Yük altında zamanlamaya duyarlı, kayda geçsin.
+
+## 2026-08-22 — M10j kapandı: facade + ilerleme (kapanış operatörce — ajan bağlantı hatasıyla düştü)
+
+Beş commit (`5fb77ac..0b7d6eb`): `caustica.simulate()` (kapalı girdi listesi, AYNI `build_job`,
+ikinci kod yolu yok; `out=None` bellekte ama plan-önce + M10i kapıları aynen), `progress=` kancası
+periyot sınırında ve checkpoint'ten BAĞIMSIZ (T1), heartbeat payload'un TÜKETİCİSİ oldu,
+`caustica.progress` sunumu (tqdm opsiyonel; önizleme 8 periyotta bir, varsayılan açık).
+
+Şüpheci doğrulayıcının mutasyon turu: T1/T3/kapı/hata-yolu mutasyonlarının beşi de testleri
+kırıyor (taşıyıcılık kanıtı); bit-aynılık ve status.json/run_meta sözleşmesi bağımsız repro
+edildi (beş yol: taze + iki resume + max_hours=0 + t_end tabanı). İki gerçek boşluk kapatıldı:
+önizleme KADANSI testsizdi (8→1 ve 8→100000 süiti yeşil bırakıyordu — artık sabitli) ve heartbeat
+periyot sayacı. Hız ölçütü dürüstçe `[~]`: ölçüm var (+%0.1–0.9, %5 kapısının çok altında),
+CI zamanlama kapısı BİLEREK yok (paylaşılan koşucuda yanlış kırmızı üretir).
+
+Süit 339 → **379 toplanan (377 passed / 2 skipped / 0 failed, 84.9 s)** — operatör ölçümü.
+Ajan devlog yazarken API hatasıyla düştü; MILESTONES işaretleri çalışma ağacında doğruydu,
+operatör doğrulayıp commit'ledi.

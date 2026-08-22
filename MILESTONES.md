@@ -781,16 +781,34 @@ M10k'dan SONRA geldi (o kapandı; `stored_setup` yokken tek kind var, facade şe
         `test_out_none_still_applies_the_vram_gate` (çıkış 3),
         `test_out_none_still_applies_the_cpu_time_gate` (çıkış 2),
         `test_allow_slow_cpu_is_the_documented_escape`
-  - [x] Kanca sayısal sonucu ya da hızı değiştirmiyor: 72×72×96 mini koşu (336 adım, 40 periyot),
-        kanca kapalı 8.037 s → ConsoleProgress + ASCII önizleme ile 8.079 s = **+%0.51**
-        (3 koşunun en iyisi; medyan +%0.93), çıplak callback **+%0.23**; phasor ve p_max
-        bit-aynı — `test_progress_does_not_change_the_field`,
-        `test_progress_does_not_change_the_runners_result`
-  - [x] status.json alanları ve run_meta anahtarları M10j ÖNCESİYLE aynı: aynı mini iş, değişiklik
-        öncesi ve sonrası — anahtar kümeleri özdeş, zaman/pid dışındaki her alan aynı değer
-        (`periods_done` 16, `steps_done` 64), `result.h5` ve `preview.npz` bayt-aynı —
-        `test_runner_status_json_matches_the_pre_m10j_contract`
-  - [x] Süit 339 → 367 (365 passed / 2 skipped / 0 failed); `data/setups/` on dosya bayt-aynı
+  - [x] Kanca sayısal sonucu DEĞİŞTİRMİYOR (testli): phasor ve p_max bit-aynı —
+        `test_progress_does_not_change_the_field`, `test_progress_does_not_change_the_runners_result`
+  - [~] Kanca hızı değiştirmiyor: **ölçüm var, CI kapısı YOK** (zamanlama testi kasten
+        eklenmedi — paylaşılan koşucuda gürültülü olur ve yanlış kırmızı üretir). Ölçümler:
+        72×72×96 (336 adım, 40 periyot) kanca kapalı 8.037 s → ConsoleProgress + ASCII önizleme
+        8.079 s = **+%0.51** (3 koşunun en iyisi; medyan +%0.93), çıplak callback **+%0.23**.
+        Bağımsız doğrulayıcı kendi iki kurulumunda: 64×64×88 **+%0.10**, 32×32×48/50 periyot
+        (en kötü hâl: ucuz adım, çok callback) **+%0.89** — hepsi %5 kapısının çok altında
+  - [x] status.json alanları ve run_meta anahtarları M10j ÖNCESİYLE aynı. `b675267` (M10j öncesi)
+        worktree'sinde ve HEAD'de AYNI iş, BEŞ yolda: taze · settle-checkpoint'inden resume ·
+        record-checkpoint'inden resume · `max_hours=0` · `t_end_min_us` tabanı. Beşinde de çıkış
+        kodları, status.json anahtar kümesi ve HER değeri (`periods_done`, `steps_done`,
+        `steps_expected`, `steps_worst`, `state`, `detail`) ve run_meta anahtar kümesi aynı;
+        `preview.npz`, `plan.json`, `job.json` BAYT-aynı; `result.h5`'in tüm dataset'leri
+        bit-aynı (tek fark `git_commit` ATTR'ı — dosya bütünü zaten bayt-aynı OLAMAZ).
+        Sayacın kendisi ayrıca testle çivili: `test_the_heartbeat_counts_exactly_one_period_per_payload`,
+        `test_runner_status_json_matches_the_pre_m10j_contract` (mutasyon `periods += 2` → KIRMIZI)
+  - [x] Önizleme kadansının KENDİSİ (8 periyot, D21) testli:
+        `test_the_mid_run_preview_fires_every_eight_periods` — 8→1 ve 8→100000 mutasyonlarının
+        ikisi de KIRMIZI (gözden geçirmede ikisi de YEŞİLDİ: record-flip önizlemesi kadansı
+        maskeliyordu)
+  - [x] Facade'ın `progress="auto"` varsayılanı testli — `test_the_facade_default_is_progress_on`
+  - [x] Süit 339 → 379 (377 passed / 2 skipped / 0 failed); `data/setups/` on dosya bayt-aynı
+  - [x] Gözden geçirme turu: altı gerçek bulgu onarıldı ve her biri KIRMIZIYA düşen bir
+        mutasyonla çivilendi — `BuiltJob`'ın `base_dir`'i (T4 ihlali),
+        bellek-içi planda eksik `ppw_warnings`, iki çıktı kipinin hatayı FARKLI sınıflaması,
+        medium kurulduktan SONRA yakalanan backend yazım hatası, `options=` ile verilen
+        `out`'un sessizce düşürülmesi, klasörsüz anlamsız seçeneklerin sessizce yok sayılması
 
 ### M10l — GUI sözleşmesinin dondurulması `[ ]` — GUI kodu YOK
 GUI ayrı repoda olacak ve teknolojisi seçilmedi (PLAN.md K13). Bu milestone yalnızca GUI'nin
