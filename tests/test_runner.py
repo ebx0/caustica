@@ -57,6 +57,38 @@ def opts(**kw) -> RunnerOptions:
     return RunnerOptions(**kw)
 
 
+# ---------------------------------------------------------- the exit-code set
+
+
+def test_the_five_exit_codes_really_are_0_2_3_4_5(tmp_path):
+    """The NUMBERS are the API — a queue routes on them, not on the names.
+
+    Every other assertion in this file compares a constant against itself,
+    which cannot see a renumbering: the mutation round set ``EXIT_OOM = 6``
+    and nothing in this file went red (measured, 2026-08-22). So each of the
+    five is pinned to its literal here, once, plus the two properties the
+    contract rests on and one real run whose code is compared as a number.
+    """
+    assert EXIT_OK == 0
+    assert EXIT_CONFIG == 2
+    assert EXIT_OOM == 3
+    assert EXIT_SOLVER == 4
+    assert EXIT_INTERRUPTED == 5
+
+    codes = (EXIT_OK, EXIT_CONFIG, EXIT_OOM, EXIT_SOLVER, EXIT_INTERRUPTED)
+    assert len(set(codes)) == len(codes)  # disjoint: the queue's whole premise
+    # 1 stays reserved for "an exception escaped the classification" — a bug
+    # to report, not a verdict to retry. It is deliberately not in the set.
+    assert 1 not in codes
+
+    # ...and the numbers are what a caller actually receives, not just what
+    # the module defines: a broken job returns 2, a run that cannot fit 3.
+    broken = tmp_path / "broken.json"
+    broken.write_text("{not json", encoding="utf-8")
+    assert run_job_file(broken, opts(out=tmp_path / "o1")) == 2
+    assert run_job_file(mini_job(tmp_path), opts(out=tmp_path / "o2", vram_limit_gib=1e-5)) == 3
+
+
 # ------------------------------------------------------------------- dry-run
 
 
@@ -507,30 +539,32 @@ def _store_crash(tmp_path, monkeypatch):
     return mini_job(tmp_path), opts(out=tmp_path / "out")
 
 
-#: (scenario, stage, exit code, error_class) — the failure classes a GUI must
-#: be able to route on WITHOUT parsing stderr (M10l). Nine of them, seven
-#: distinct classes; the table is asserted, not just enumerated.
+#: (scenario, stage, exit code, error_class, wants_advice) — the failure
+#: classes a GUI must be able to route on WITHOUT parsing stderr (M10l). Ten
+#: of them, seven distinct classes; the table is asserted, not just enumerated.
+#: ``wants_advice`` is the measured truth per class, not an aspiration: only a
+#: solver crash with no checkpoint on disk has nothing actionable to say.
 ERROR_SCENARIOS = [
-    (_bad_schema, "config", EXIT_CONFIG, "ValidationError"),
-    (_wrong_format, "config", EXIT_CONFIG, "JobError"),
-    (_malformed_json, "config", EXIT_CONFIG, "JSONDecodeError"),
-    (_unknown_backend, "config", EXIT_CONFIG, "ValueError"),
-    (_unknown_gpu, "plan", EXIT_CONFIG, "ValueError"),
-    (_vram_refusal, "gate", EXIT_OOM, "VramRefusal"),
-    (_cpu_refusal, "gate", EXIT_CONFIG, "CpuTimeRefusal"),
-    (_checkpoint_conflict, "checkpoint", EXIT_CONFIG, "CheckpointConflict"),
-    (_solver_crash, "solve", EXIT_SOLVER, "ArithmeticError"),
-    (_store_crash, "store", EXIT_SOLVER, "OSError"),
+    (_bad_schema, "config", EXIT_CONFIG, "ValidationError", True),
+    (_wrong_format, "config", EXIT_CONFIG, "JobError", True),
+    (_malformed_json, "config", EXIT_CONFIG, "JSONDecodeError", True),
+    (_unknown_backend, "config", EXIT_CONFIG, "ValueError", True),
+    (_unknown_gpu, "plan", EXIT_CONFIG, "ValueError", True),
+    (_vram_refusal, "gate", EXIT_OOM, "VramRefusal", True),
+    (_cpu_refusal, "gate", EXIT_CONFIG, "CpuTimeRefusal", True),
+    (_checkpoint_conflict, "checkpoint", EXIT_CONFIG, "CheckpointConflict", True),
+    (_solver_crash, "solve", EXIT_SOLVER, "ArithmeticError", False),
+    (_store_crash, "store", EXIT_SOLVER, "OSError", True),
 ]
 
 
 @pytest.mark.parametrize(
-    ("build", "stage", "code", "error_class"),
+    ("build", "stage", "code", "error_class", "wants_advice"),
     ERROR_SCENARIOS,
     ids=[b.__name__.lstrip("_") for b, *_ in ERROR_SCENARIOS],
 )
 def test_every_failure_class_writes_a_conformant_error_json(
-    tmp_path, monkeypatch, build, stage, code, error_class
+    tmp_path, monkeypatch, build, stage, code, error_class, wants_advice
 ):
     job, options = build(tmp_path, monkeypatch)
     assert run_job_file(job, options) == code  # the exit code is UNCHANGED
@@ -543,12 +577,42 @@ def test_every_failure_class_writes_a_conformant_error_json(
     assert payload["message"].strip()
     assert isinstance(payload["advice"], list)
     assert all(isinstance(a, str) and a.strip() for a in payload["advice"])
+    if wants_advice:
+        # The `all(...)` above is VACUOUSLY TRUE on an empty list, so nine of
+        # these rows say what they actually promise: something to do next
+        # (mutation review, 2026-08-22 — emptying every advice tuple left the
+        # whole suite green).
+        assert payload["advice"], f"the {stage!r} failure must tell the caller what to do"
+    else:
+        # The one honest exception: a solver that raised with no checkpoint on
+        # disk has nothing actionable to offer, and inventing a line would be
+        # worse than silence.
+        assert payload["advice"] == []
+
+
+@pytest.mark.parametrize("build", [_vram_refusal, _cpu_refusal], ids=["vram", "cpu"])
+def test_a_refusal_prints_the_same_advice_it_writes(tmp_path, monkeypatch, capsys, build):
+    """A gate that refuses without saying what to do is a dead end.
+
+    The two pre-run gates exist to be ACTIONABLE, so both renderings are
+    pinned here: the ``  -> `` lines a human reads on stderr, and the
+    ``advice[]`` a GUI reads from ``error.json`` — and they must be the SAME
+    list, because a copy kept only for the file is a copy that drifts.
+    """
+    job, options = build(tmp_path, monkeypatch)
+    assert run_job_file(job, options) in (EXIT_OOM, EXIT_CONFIG)
+    err = capsys.readouterr().err
+    assert "REFUSED before solving" in err
+    arrows = [ln.removeprefix("  -> ") for ln in err.splitlines() if ln.startswith("  -> ")]
+    assert arrows, "a refusal printed no actionable line"
+    written = json.loads((Path(options.out) / ERROR_FILE).read_text(encoding="utf-8"))["advice"]
+    assert written == arrows  # ONE list, two renderings
 
 
 def test_the_error_table_covers_at_least_seven_distinct_classes():
     """M10l's own criterion, asserted rather than counted by hand."""
-    assert len({cls for *_, cls in ERROR_SCENARIOS}) >= 7
-    assert {stage for _, stage, _, _ in ERROR_SCENARIOS} == set(ERROR_STAGES)
+    assert len({row[3] for row in ERROR_SCENARIOS}) >= 7
+    assert {row[1] for row in ERROR_SCENARIOS} == set(ERROR_STAGES)
 
 
 def test_a_successful_run_writes_no_error_json_and_clears_a_stale_one(tmp_path):
