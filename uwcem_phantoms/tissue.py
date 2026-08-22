@@ -47,133 +47,43 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from caustica.materials import Material, MaterialDB
+# The literature acoustic values and their carrier live in caustica.materials
+# since M10k/W0b (D17): they are generic soft-tissue literature, not UWCEM's.
+# What stays HERE is everything UWCEM-specific — the media-number ordering,
+# the interpolated sub-group ramp, the tissue models and the pval rules.
+from caustica.materials import (  # noqa: F401 (conversion helpers re-exported)
+    DB_CM_TO_NP_M,
+    TISSUE_LIBRARY,
+    AcousticTissue,
+    Material,
+    MaterialDB,
+    db_cm_to_np_m,
+    np_m_to_db_cm,
+)
 from uwcem_phantoms.reader import MEDIA_NUMBERS, MEDIA_TOKENS, N_CLASSES
-
-#: 1 dB/cm = 100/(20*log10(e)) Np/m.
-DB_CM_TO_NP_M = 100.0 / 8.685889638065035
 
 TISSUE_MODELS = ("detailed", "grouped", "simple")
 
 
-def db_cm_to_np_m(alpha_db_cm: float) -> float:
-    """Convert an attenuation in dB/cm to Np/m."""
-    return alpha_db_cm * DB_CM_TO_NP_M
-
-
-def np_m_to_db_cm(alpha_np_m: float) -> float:
-    return alpha_np_m / DB_CM_TO_NP_M
-
-
-@dataclass(frozen=True)
-class AcousticTissue:
-    """One acoustic tissue: nominal values plus their literature spread.
-
-    Every quantity is a ``(low, high)`` pair. The nominal value used when
-    pval interpolation is off is the midpoint; with pval on, voxel value =
-    ``low + p*(high - low)``, matching the repository's own prescription for
-    its dielectric data.
-    """
-
-    name: str
-    c: tuple[float, float]  # sound speed [m/s]
-    rho: tuple[float, float]  # density [kg/m^3]
-    alpha0: tuple[float, float]  # attenuation prefactor [dB/(cm MHz^b)]
-    b: float  # attenuation power-law exponent
-    bona: tuple[float, float]  # nonlinearity parameter B/A
-    source: str
-    interpolated: bool = False
-
-    def alpha_np_m(self, f0_hz: float, which: str = "mid") -> float:
-        """Absorption [Np/m] at ``f0_hz`` from the power law."""
-        f_mhz = f0_hz / 1e6
-        a0 = self._pick(self.alpha0, which)
-        return db_cm_to_np_m(a0 * f_mhz**self.b)
-
-    def beta(self, which: str = "mid") -> float:
-        """Nonlinearity coefficient ``1 + B/2A``."""
-        return 1.0 + 0.5 * self._pick(self.bona, which)
-
-    @staticmethod
-    def _pick(pair: tuple[float, float], which: str) -> float:
-        if which == "lo":
-            return pair[0]
-        if which == "hi":
-            return pair[1]
-        if which == "mid":
-            return 0.5 * (pair[0] + pair[1])
-        raise ValueError(f"which must be 'lo', 'mid' or 'hi', got {which!r}")
-
-    def to_material(self, f0_hz: float, which: str = "mid") -> Material:
-        return Material(
-            name=self.name,
-            alpha_np_m=self.alpha_np_m(f0_hz, which),
-            rho=self._pick(self.rho, which),
-            c=self._pick(self.c, which),
-            beta=self.beta(which),
-        )
-
-
 # ---------------------------------------------------------------------------
-# The table. Endpoint rows are literature; sub-group rows are interpolated
-# along the water-content axis the UWCEM numbering encodes.
+# The table. Endpoint rows come from caustica's literature library; sub-group
+# rows are interpolated along the water-content axis the UWCEM numbering
+# encodes (a UWCEM modelling choice, so they live here).
 # ---------------------------------------------------------------------------
 
-_DUCK = "Duck, Physical Properties of Tissue (1990)"
-_ITIS = "IT'IS Foundation Tissue Properties Database (acoustic)"
 _RAMP = "interpolated along the UWCEM water-content ordering (see module docstring)"
 
 #: Acoustic properties per class code (index = code in ``reader.MEDIA_NUMBERS``).
 DEFAULT_TISSUES: tuple[AcousticTissue, ...] = (
-    # 0 : media -1, immersion medium. Degassed water at body temperature, the
-    #     standard HIFU coupling bath. Absorption is tiny but NOT zero.
-    AcousticTissue(
-        name="Coupling medium (water, 37 C)",
-        c=(1515.0, 1530.0),
-        rho=(992.0, 995.0),
-        # 37 C, not the textbook 20 C figure. Water absorption falls with
-        # temperature: alpha/f^2 is ~25e-15 Np m^-1 s^2 at 20 C (the familiar
-        # 0.0022 dB/(cm MHz^2)) but ~16-18e-15 at body temperature. The c and
-        # rho above are already the 37 C values, so quoting the 20 C alpha
-        # made this row ~1.6x too lossy for the temperature it names (review
-        # finding, 2026-08-18).
-        alpha0=(0.0014, 0.0017),
-        b=2.0,
-        bona=(5.0, 5.4),
-        source=f"{_DUCK}, ch. 4 (water B/A = 5.2; alpha(37 C) ~ 0.0015 f^2 dB/cm)",
-    ),
+    # 0 : media -1, immersion medium.
+    TISSUE_LIBRARY["water_37c"],
     # 1 : media -2, skin (~1.5 mm dermis layer).
-    AcousticTissue(
-        name="Skin",
-        c=(1595.0, 1660.0),
-        rho=(1085.0, 1125.0),
-        alpha0=(2.20, 3.50),
-        b=1.0,
-        bona=(7.5, 8.3),
-        source=f"{_ITIS} (skin c=1624, rho=1109); {_DUCK} (alpha 2.2-3.5 dB/cm/MHz, B/A 7.9)",
-    ),
+    TISSUE_LIBRARY["skin"],
     # 2 : media -4, pectoral muscle (chest wall).
-    AcousticTissue(
-        name="Muscle (chest wall)",
-        c=(1545.0, 1600.0),
-        rho=(1050.0, 1095.0),
-        alpha0=(0.57, 1.09),
-        b=1.0,
-        bona=(7.0, 7.8),
-        source=f"{_ITIS} (c=1588, rho=1090); {_DUCK} "
-        "(alpha 0.57 along / 1.09 across fibres, B/A 7.4)",
-    ),
+    TISSUE_LIBRARY["muscle"],
     # 3 : media 1.1, fibroconnective/glandular-1 — HIGHEST water content.
-    #     This is the glandular ENDPOINT of the ramp (literature-anchored).
-    AcousticTissue(
-        name="Fibroglandular-1 (highest water)",
-        c=(1530.0, 1580.0),
-        rho=(1035.0, 1060.0),
-        alpha0=(0.85, 1.15),
-        b=1.1,
-        bona=(7.0, 8.0),
-        source=f"{_ITIS} breast gland (c=1505, rho=1041); Duric et al. UST breast (c 1500-1580)",
-    ),
+    #     The glandular ENDPOINT of the ramp (literature-anchored).
+    TISSUE_LIBRARY["fibroglandular"],
     # 4 : media 1.2
     AcousticTissue(
         name="Fibroglandular-2",
@@ -231,16 +141,8 @@ DEFAULT_TISSUES: tuple[AcousticTissue, ...] = (
         interpolated=True,
     ),
     # 9 : media 3.3, fatty-3 — LOWEST water content, essentially lipid.
-    #     This is the fat ENDPOINT of the ramp (literature-anchored).
-    AcousticTissue(
-        name="Fatty-3 (lowest water, lipid)",
-        c=(1425.0, 1460.0),
-        rho=(900.0, 930.0),
-        alpha0=(0.40, 0.60),
-        b=1.1,
-        bona=(9.6, 11.3),
-        source=f"{_ITIS} breast fat (c=1440, rho=911); {_DUCK} (fat B/A 9.6-11.3, alpha 0.4-0.6)",
-    ),
+    #     The fat ENDPOINT of the ramp (literature-anchored).
+    TISSUE_LIBRARY["fat"],
 )
 
 assert len(DEFAULT_TISSUES) == N_CLASSES  # noqa: S101 - table/code-space contract

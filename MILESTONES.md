@@ -456,8 +456,14 @@ olur, UWCEM işleri ayrı repoya taşınır, yerine genel `medium_volume` kind'�
 - [ ] `geometry/volumes.py::load_breast_phantom()` taşınır: UWCEM üretim fantomunun şekli
       (310×355×253, 0.5 mm) ve `breast_phantom_mapping` kaynağa özgüdür. `load_labels_txt`
       GENELDİR (mapping callable'ı kaynağa özgü kısmı dışarıda tutuyor) — o KALIR
-- [ ] Literatür akustik doku değerleri `caustica.materials`e taşınır (`breast_default()` yanına,
-      ölçüm/interpolasyon ayrımı koruyan yorumlarıyla); UWCEM media-numarası eşlemesi taşınmaz
+- [x] (W0b, 2026-08-22) Literatür akustik doku değerleri `caustica.materials.TISSUE_LIBRARY`'de
+      (`AcousticTissue` taşıyıcısı + dB/cm↔Np/m dönüşümleriyle; kaynak/ölçüm yorumları harfiyen,
+      isimler dahil — isim MaterialDB JSON'una gömülü olduğundan değişmedi). Beş literatür-çapa
+      giriş taşındı (su-37C, deri, kas, fibroglandüler uç, yağ ucu); UWCEM ramp satırları ve
+      media-numarası eşlemesi tissue.py'de KALDI ve artık uçları kütüphaneden `is`-aynı nesne
+      olarak kullanıyor. KANIT: `test_tissue_library_values_pinned_to_the_digit` (rakamlar
+      donmuş literal), `test_uwcem_table_uses_the_moved_library_rows` (tek kaynak), 93 fantom
+      testi değişmeden yeşil
 - [ ] `_require_uwcem`, `PhantomDatasetMediumConfig`, `StoredSetupJobConfig` SİLİNİR;
       `caustica-job/1` iki kind kaybeder — **kırıcı şema değişikliği**, devlog'a yazılır, format
       numarası değişmez (v1.0 öncesi stabilite garantisi yok, PLAN.md K14)
