@@ -159,6 +159,15 @@ def test_wheel_carries_a_build_info_module(wheel):
     assert ns["VERSION"] == caustica.__version__
 
 
+def test_wheel_ships_the_validation_suite(wheel):
+    """Colab installs a WHEEL and then runs ``python -m caustica.validation
+    gpu-gates``. A subpackage missing from the distribution is invisible from
+    inside a checkout — the exact shape of the gpu_db.json bug."""
+    names = set(wheel.namelist())
+    for mod in ("__init__", "__main__", "gpu_gates"):
+        assert f"caustica/validation/{mod}.py" in names
+
+
 def test_build_stamp_keeps_an_existing_stamp_when_git_is_absent(tmp_path):
     """The sdist rule: no git + a stamp already there -> do not clobber it.
 
