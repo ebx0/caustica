@@ -268,6 +268,10 @@ def _plan(built: BuiltJob, backend_name: str, opts: RunnerOptions):
             built.spec,
             gpu=opts.gpu,
             measure=True,
+            # The probe must time the backend the run will USE — "auto" on a
+            # GPU machine forced to numpy would time cuFFT and feed the CPU
+            # gate an hours-wrong "measured" number (review, 2026-08-22).
+            measure_backend=backend_name,
             **common,
         )
         if opts.measure
@@ -404,6 +408,11 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
     # Low ppw is loud in four places (M10i/D31): plan, status.json,
     # run_meta.json and the report head. Ignorable — never a block.
     ppw_warns = _ppw_warnings_for(built)
+    # GPU facts are snapshotted BEFORE the plan: the measure probe fills the
+    # cupy memory pool with ~the run's own footprint and the pool keeps its
+    # blocks, so free VRAM read AFTER the probe would falsely refuse any job
+    # over ~half the free VRAM (review finding, 2026-08-22).
+    gpu_env = _gpu_environment(backend_name) if backend_name == "cupy" else {}
     try:
         dump_job(job, outdir / "job.json")
         if native:
@@ -429,15 +438,15 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
         limit_gib = opts.vram_limit_gib
         limit_label = "requested limit (--vram-limit-gib)"
         if limit_gib is None and backend_name == "cupy":
-            env = _gpu_environment(backend_name)
-            gpu_name = env.get("gpu_name", "unknown GPU")
+            gpu_name = gpu_env.get("gpu_name", "unknown GPU")
             # FREE VRAM, not total (M10i): the CUDA context alone eats
             # 0.8-1.5 GB on Colab — gating on the total says "fits" and then
             # dies OOM mid-run. The message names which limit was used.
-            limit_gib = env.get("vram_free_gib")
+            # (gpu_env is the PRE-probe snapshot — see above.)
+            limit_gib = gpu_env.get("vram_free_gib")
             limit_label = f"free device VRAM ({gpu_name})"
             if limit_gib is None:
-                limit_gib = env.get("vram_total_gib")
+                limit_gib = gpu_env.get("vram_total_gib")
                 limit_label = f"total device VRAM ({gpu_name}; free VRAM unavailable)"
         if limit_gib is not None and est.vram_gib > limit_gib:
             print(
@@ -454,7 +463,18 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
         # ---- CPU gate (M10i/D20): refuse an hours-long numpy run BEFORE
         # paying for it; the message names its own escapes. Reuses
         # EXIT_CONFIG — the exit-code set is the queue's API (no sixth code).
-        if backend_name == "numpy":
+        if backend_name == "numpy" and opts.resume and ck_path.exists():
+            # An explicit --resume of an existing checkpoint is its own
+            # acceptance: the sunk periods are already paid for, and a
+            # refusal here would strand pre-gate checkpoints forever
+            # (review finding, 2026-08-22 — reproduced).
+            warnings.warn(
+                "resuming an interrupted CPU run: the slow-CPU gate is bypassed for "
+                "an explicit --resume of an existing checkpoint.",
+                CausticaWarning,
+                stacklevel=2,
+            )
+        elif backend_name == "numpy":
             limit_min = _cpu_limit_min()
             cpu_est = _cpu_time_estimate(est, built.grid.shape, opts)
             if cpu_est is None:
@@ -468,23 +488,36 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
             else:
                 t_cpu, cpu_src = cpu_est
                 if t_cpu > limit_min * 60.0 and not opts.allow_slow_cpu:
-                    print(
-                        f"REFUSED before solving: estimated wall time on the numpy (CPU) "
-                        f"backend is ~{t_cpu:.0f} s (~{t_cpu / 3600:.1f} h, estimate source: "
-                        f"{cpu_src}), over the {limit_min:g} min CPU limit.",
-                        file=sys.stderr,
-                    )
-                    print(
-                        "  -> run on a GPU backend (--backend cupy / backend='cupy'), or",
-                        file=sys.stderr,
-                    )
-                    print(
-                        "  -> accept the wait: --allow-slow-cpu (CLI) / allow_slow_cpu=True; "
-                        "the threshold itself is CAUSTICA_CPU_LIMIT_MIN (minutes).",
-                        file=sys.stderr,
-                    )
-                    return EXIT_CONFIG
-                if t_cpu > limit_min * 60.0:
+                    if opts.dry_run:
+                        # A dry run pays nothing, and planning a Colab-bound
+                        # job on a CPU box is a legitimate flow — preview the
+                        # verdict without breaking the dry-run exit-0
+                        # contract (review finding, 2026-08-22).
+                        print(
+                            f"NOTE: a REAL run would be refused here — estimated "
+                            f"~{t_cpu:.0f} s (~{t_cpu / 3600:.1f} h, source: {cpu_src}) on "
+                            f"the numpy backend, over the {limit_min:g} min CPU limit "
+                            f"(escapes: --backend cupy, --allow-slow-cpu)."
+                        )
+                    else:
+                        print(
+                            f"REFUSED before solving: estimated wall time on the numpy (CPU) "
+                            f"backend is ~{t_cpu:.0f} s (~{t_cpu / 3600:.1f} h, estimate "
+                            f"source: {cpu_src}), over the {limit_min:g} min CPU limit.",
+                            file=sys.stderr,
+                        )
+                        print(
+                            "  -> run on a GPU backend (--backend cupy / backend='cupy'), or",
+                            file=sys.stderr,
+                        )
+                        print(
+                            "  -> accept the wait: --allow-slow-cpu (CLI) / "
+                            "allow_slow_cpu=True; the threshold itself is "
+                            "CAUSTICA_CPU_LIMIT_MIN (minutes).",
+                            file=sys.stderr,
+                        )
+                        return EXIT_CONFIG
+                elif t_cpu > limit_min * 60.0:
                     warnings.warn(
                         f"slow CPU run ACCEPTED via allow_slow_cpu: estimated ~{t_cpu:.1f} s "
                         f"(~{t_cpu / 3600:.1f} h, source: {cpu_src}) on the numpy backend.",

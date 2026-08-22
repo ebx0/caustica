@@ -137,8 +137,15 @@ def main(argv: list[str] | None = None) -> int:
         from caustica.runner import RunnerOptions, run_job_file
 
         # D33: the LIBRARY installs no logging handler on import; the CLI is
-        # an application and turns logging on at its entry point.
-        logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+        # an application and turns logging on at its entry point — scoped to
+        # the caustica logger so a notebook calling main() does not suddenly
+        # see every third-party INFO record (review, 2026-08-22).
+        clog = logging.getLogger("caustica")
+        if not clog.handlers:
+            handler = logging.StreamHandler()
+            handler.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
+            clog.addHandler(handler)
+            clog.setLevel(logging.INFO)
 
         return run_job_file(
             args.job,

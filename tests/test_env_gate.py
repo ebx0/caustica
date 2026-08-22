@@ -97,13 +97,39 @@ def test_cpu_gate_warns_when_it_cannot_judge(tmp_path, monkeypatch):
     assert len([w for w in cw if "cannot judge" in str(w.message)]) == 1
 
 
-def test_dry_run_is_gated_too(tmp_path, monkeypatch, capsys):
-    """--dry-run answers 'would this run?' — so the gate applies, exactly
-    like the VRAM refusal that precedes it."""
+def test_dry_run_previews_the_gate_without_refusing(tmp_path, monkeypatch, capsys):
+    """A dry run pays nothing and planning a Colab-bound job on a CPU box is
+    a legitimate flow: the gate PREVIEWS its verdict (exit stays 0, the
+    dry-run contract scripts key on) instead of refusing."""
     monkeypatch.setenv("CAUSTICA_CPU_LIMIT_MIN", "0")
     code = run_job_file(mini_job(tmp_path), opts(out=tmp_path / "out", dry_run=True))
-    assert code == EXIT_CONFIG
-    assert "REFUSED" in capsys.readouterr().err
+    captured = capsys.readouterr()
+    assert code == EXIT_OK
+    assert "would be refused" in captured.out
+    assert "REFUSED before solving" not in captured.err
+
+
+def test_cpu_gate_never_refuses_an_explicit_resume(tmp_path, monkeypatch):
+    """A checkpointed CPU run must stay resumable even when the gate would
+    refuse a fresh start — refusing strands pre-gate checkpoints and makes
+    a 95%-done run unfinishable (review finding, reproduced)."""
+    import json
+
+    out = tmp_path / "out"
+    job = mini_job(tmp_path)
+    # phase 1: accepted slow run, interrupted at the first period boundary
+    monkeypatch.setenv("CAUSTICA_CPU_LIMIT_MIN", "0")
+    code, _ = run_recording_warnings(
+        job, opts(out=out, allow_slow_cpu=True, stop_after_periods=1, max_hours=0.0)
+    )
+    assert code == 5 and (out / "checkpoint.npz").is_file()  # EXIT_INTERRUPTED
+    # phase 2: the previously-valid resume command line, WITHOUT the flag
+    code, cw = run_recording_warnings(job, opts(out=out, resume=True))
+    assert code == EXIT_OK
+    assert (out / "result.h5").is_file()
+    assert any("slow-CPU gate is bypassed" in str(w.message) for w in cw)
+    meta = json.loads((out / "run_meta.json").read_text(encoding="utf-8"))
+    assert meta["actual"]["resumed_from_period"] is not None  # it truly resumed
 
 
 def test_cli_wires_allow_slow_cpu(tmp_path, monkeypatch):
@@ -333,3 +359,52 @@ def test_default_output_unchanged_full_result_plus_preview(tmp_path):
     code, _ = run_recording_warnings(mini_job(tmp_path), opts(out=out))
     assert code == EXIT_OK
     assert (out / "result.h5").is_file() and (out / "preview.npz").is_file()
+
+
+def test_vram_snapshot_is_taken_before_the_plan_probe(tmp_path, monkeypatch):
+    """The measure probe fills the cupy pool with ~the run's own footprint
+    and the pool keeps its blocks — free VRAM must be read BEFORE the plan
+    or big jobs get falsely refused (call-order regression test)."""
+    from types import SimpleNamespace
+
+    from caustica import runner as R
+
+    calls = []
+    monkeypatch.setattr(R, "get_backend", lambda name=None: SimpleNamespace(name="cupy"))
+    monkeypatch.setattr(
+        R,
+        "_gpu_environment",
+        lambda backend_name: (
+            calls.append("gpu_env") or {"gpu_name": "FakeGPU", "vram_free_gib": 0.001}
+        ),
+    )
+    real_plan = R._plan
+
+    def spying_plan(built, backend_name, o):
+        calls.append("plan")
+        return real_plan(built, backend_name, o)
+
+    monkeypatch.setattr(R, "_plan", spying_plan)
+    code = run_job_file(mini_job(tmp_path), opts(out=tmp_path / "out", measure=False))
+    assert code == 3  # refused on the tiny FREE number
+    assert calls.index("gpu_env") < calls.index("plan")  # snapshot BEFORE probe
+
+
+def test_measure_probe_uses_the_resolved_backend(tmp_path, monkeypatch):
+    """estimate(measure=True) must time the backend the run will USE — an
+    'auto' probe on a GPU machine forced to numpy would feed the gate a
+    cuFFT number labeled 'measured'."""
+    import caustica.planner as planner_pkg
+    from caustica.planner import calibration
+
+    seen = {}
+    real = calibration.measure_step_time
+
+    def spy(shape, nonlinear=False, backend="auto", n_steps=20, warmup=3):
+        seen["backend"] = backend
+        return real(shape, nonlinear=nonlinear, backend=backend, n_steps=2, warmup=0)
+
+    monkeypatch.setattr(planner_pkg, "measure_step_time", spy)
+    code, _ = run_recording_warnings(mini_job(tmp_path), opts(out=tmp_path / "out", measure=True))
+    assert code == EXIT_OK
+    assert seen["backend"] == "numpy"  # the RESOLVED backend, not "auto"
