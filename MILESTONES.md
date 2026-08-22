@@ -640,15 +640,23 @@ basılıyor, iki referans doküman testle taze tutuluyor. K15 gereği kind kapı
       `ruff check ... uwcem_phantoms` yolu düzeltildi
 - Başarı kriterleri:
   - [x] `.npz`'den eleman okuyan `elements` job'ı uçtan uca koşuyor ve `derived()` yeniden
-        yüklemede eşleşiyor — `test_elements_derived_matches_on_reload` (tablo diskte 1 mm
-        kayınca `r_max_mm` üzerinden REDDEDİYOR, yani kontrol gerçekten yanlışlanabilir)
+        yüklemede eşleşiyor — `test_elements_derived_matches_on_reload`. **Yanlışlanabilirlik
+        gözden geçirmede ÇÜRÜTÜLDÜ ve onarıldı:** özet sayılar (n, r_max, shell_depth) sıra
+        istatistikleridir; aynalama, döndürme, satır sırası, iki elemanın yarıçapını takas
+        etme ve normalleri değiştirme hepsi bunları KORUYOR ama alanı %48–59 (bağıl L2)
+        değiştiriyor — beşi de eski kontrolden geçiyordu. `derived()` artık `table_sha256`
+        (pozisyon+normal özeti; dosyanın değil GEOMETRİNİN, böylece inline/.npz/.csv aynı)
+        taşıyor — `test_derived_catches_table_changes_that_summaries_miss` (4 mutasyon),
+        `test_derived_catches_a_normals_only_change`,
+        `test_the_summary_numbers_alone_would_not_catch_these` (mutasyonların gerçekten
+        özet-görünmez olduğunu sabitler)
   - [x] `caustica schema` çıktısı geçerli JSON Schema; şemadaki kind listesi ile
         `docs/job_reference.md` başlıkları testle karşılaştırılıyor — `test_schema_doc.py` (13)
   - [x] **Yabancı-kullanıcı provası**: repo DIŞINDA temiz venv, wheel kurulumu, YALNIZCA
         README + job_reference okunarak çanak+su job'ı yazıldı, `validate` → `run` → `report`
         (9.1 s, tepe 1.337 MPa) — sonra kendi 16 elemanlı `.npz` tablosuyla `elements` job'ı
         (adım adım devlog 2026-08-22). Kaynak koda inmek GEREKMEDİ
-  - [x] Mevcut davranış bit-değişmez: 279 test → 311 (309 passed / 2 skipped / 0 failed);
+  - [x] Mevcut davranış bit-değişmez: 279 test → 325 (323 passed / 2 skipped / 0 failed);
         eski commit'e karşı üretilen altın dosya (normalize job.json baytları, `derived` anahtar
         SIRASI + değerleri, focus_vox, kaynak voxel sayısı, faz toplamı, `validate` metni,
         sekiz hata metni) TEK farkla aynı: array beklenen-etiket listesi `'elements'` kazandı
@@ -657,6 +665,20 @@ basılıyor, iki referans doküman testle taze tutuluyor. K15 gereği kind kapı
         `test_import_caustica_does_not_scan_entry_points`
   - [x] Kayıtsız kind adı aksiyonlu hata: `test_unknown_kind_lists_what_is_registered`
         (kayıtlı adlar + entry-point grubu adı), `test_registration_refusals_teach`
+  - [x] **Plugin kurulu ortamda caustica'nın KENDİ süiti yeşil kalıyor** (gözden geçirme
+        bulgusu: registry'nin tam içeriğini iddia eden altı test, üçüncü taraf kind kurulunca
+        kırmızıya dönüyordu — registry'nin var olma sebebi onu etkinleştiren kütüphanenin
+        süitini bozuyordu). Testler artık `core_kinds()` ile caustica'nın kendi kind'larını
+        soruyor; gerçek bir plugin `PYTHONPATH`'te iken tam süit doğrulandı
+  - [x] `importlib.reload(caustica.config.job)` çalışıyor (`%autoreload 2` = notebook akışı;
+        eskiden sınıfın kendisiyle çakıştığını söyleyip modülü yarı-değişmiş bırakıyordu) —
+        `test_reloading_the_job_module_still_works`
+  - [x] `run_meta.json` geçerli JSON: eksen üstü tabloda `f_number` artık `Infinity` (JSON'da
+        böyle bir token yok) yazmıyor — `test_an_on_axis_table_records_no_f_number`
+  - [x] Her array kind'ının, dokümanın KENDİ örnek job'ı içinde `validate`'ten geçen en az bir
+        parçası var — `test_every_array_kind_has_a_snippet_that_fits_the_documented_grid`
+        (spiral bölümü yalnız 100 mm üretim dizisini gösteriyordu: şema-geçerli, odak grid
+        dışında)
 
 ### M10n — Plugin mimarisi: beş eksen entry-point `[ ]` (K15, kullanıcı 2026-08-22)
 "Proje her kısmında modüler olabilmeli." Çözücülerdeki kalıp (registry + entry-point +
@@ -916,7 +938,8 @@ Protokol **paylaşılan bir klasör yolu** alır; Drive onun bir örneğidir ve 
   alt-ajanları. Proje yönetim sistemi = bu dosya (MILESTONES.md); ek araç/MCP gerekmiyor.
   Önemli kararlar kullanıcıya sorulur; gerisi operatörde.
 - **Durum (2026-08-22):** M10h ✅ (CI dahil) + M10i ✅ + M10k ✅ + M10m ✅ — kütüphane UWCEM'siz,
-  311 test yeşil (M10m öncesi 279); taşınan süit `../uwcem-phantom`'da 165+ yeşil (yerel git, push yok — kullanıcı kararı).
+  325 test yeşil (M10m öncesi 279); taşınan süit `../uwcem-phantom`'da 165+ yeşil
+  (yerel git, push yok — kullanıcı kararı).
   UWCEM'e dair her şey artık TEK dosyada: **docs/uwcem.md** — kalanları EN SON yapılacak.
   Yalınlaştırma turu #1 (2026-08-22): kök mtype.txt (123 MB) + labels.npz + _code_cells.py +
   kaynak notebook silindi (kullanıcı onayı; M14 notu güncellendi); bayat `build/` silindi.
