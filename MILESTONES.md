@@ -257,21 +257,47 @@ düşen bir odak istiyor. Bu karar artık `data/setups/`ta yazılı (fantom baş
   - Kurcalanan dosya (format, türetilmiş geometri, voxel sayısı, apex, geçiş payı) beş ayrı
     yerden yakalanıyor (testli); tam suite + 11 setup testi yeşil
 
-### M7 — CuPy backend (CUDA) `[ ]` — Colab oturumu gerektirir
+### M7 — CuPy backend (CUDA) `[ ]` — ikinci Colab oturumu gerektirir
 - [ ] ElementwiseKernel'ların portu; aynı çözücü kodu iki backend'de; fp32 yolu
+- **Ölçüm protokolü HAZIR (2026-08-23):** `python -m caustica.validation gpu-gates` tek komutta
+  kalibrasyon → VRAM merdiveni → OOM reddi → numpy/cupy paritesi → damgalı MD+JSON rapor
+  (`benchmarks/reports/gpu_gates/<gpu>-<tarih>/`). GPU yoksa eyleme geçirilebilir mesajla temiz
+  çıkış (kod 2 = CI'da SKIP). Merdiven kurulumu, VERDICT cebri, rapor şeması, OOM dalı ve
+  parite ölçüm noktası CPU'da 36 testle çivili (`tests/test_validation_gpu_gates.py`).
+  **Aşağıdaki kutular yine de `[ ]`: sayılar cihazda ölçülmeden işaretlenmez.**
 - Başarı kriterleri:
-  - numpy↔cupy parite: mini 3D senaryoda fazor/p_max rel fark < 1e-5 (fp32 toleransı belgelenir)
-  - Colab T4 VE A100'de tam boy (dx=0.30, 512³ FFT sınıfı) koşu OOM'suz tamamlanır
-  - Adım süresi ölçülür ve `benchmarks/`e damgalanır (baseline; M19 bunu referans alır)
-  - GPU yokken testler otomatik SKIP (CI kırılmaz)
+  - [ ] numpy↔cupy parite: mini 3D senaryoda fazor/p_max rel fark < 1e-5 (fp32 toleransı
+        belgelenir) — süitte `M7.parity` kapısı. **Ölçüm noktası düzeltildi (operatör ölçümü,
+        2026-08-23):** kapı BELLEKTEKİ fp32 alanlar üzerinden ölçülür, `result.h5` round-trip'i
+        üzerinden DEĞİL. İlk oturumun dosyası yerel CPU koşusuyla relL2 3.6e-5 / relL∞ 4.883e-4
+        farkla uyuşuyordu ve 4.883e-4 tam olarak 2^-11 = **bir float16 ULP'u** (p_max'ta %99.17
+        voxel bit-özdeş, 517 voxel 1 ULP, >1 ULP sıfır). Yani alanlar dosyanın çözünürlüğünün
+        ALTINDA uyuşuyor; 1e-5 kapısını float16 depolamaya bakarak kurmak kusursuz bir çözücüye
+        YANLIŞ FAIL verirdi. Depolama tabanı raporda ayrı başlıkta (`stored_float16_reference`,
+        bilgi amaçlı, kapıya girmez)
+  - [ ] Colab T4 VE A100'de tam boy (dx=0.30, 512³ FFT sınıfı) koşu OOM'suz tamamlanır —
+        süitte `M7.fullsize` kapısı; merdivenin 14 GiB basamağı tam olarak 512³/dx=0.30
+  - [ ] Adım süresi ölçülür ve `benchmarks/`e damgalanır (baseline; M19 bunu referans alır) —
+        süit `step_time_baseline` bölümünü yazar; ısınma AYRIŞTIRILMIŞ (`t_step_steady_s`)
+  - [x] GPU yokken testler otomatik SKIP (CI kırılmaz) — süit de dahil:
+        `test_the_real_cli_skips_cleanly_on_a_machine_without_a_gpu`
 
 ### M8 — Planner v1 (süre + VRAM tahmini) `[~]` — yerel yarısı tamam (2026-08-11), Colab kapıları açık
 - [x] Statik VRAM modeli (tampon dökümü + cuFFT workspace payı + %15 marj); süre modeli a·N·logN + b·N; `gpu_db.json` (T4/L4/V100/A100/H100); cihazda kalibrasyon (~20 adım) → `~/.caustica/calibration.json`; `planner.estimate(gpu=...)` + `planner.compare(...)` — `src/caustica/planner/`, 11 test (`tests/test_planner.py`)
 - Başarı kriterleri:
-  - [ ] VRAM tahmini, Colab'da ölçülen mempool tepe değerinin ±%10'u içinde (≥2 farklı grid boyutunda) — **Colab kapısı, M7 oturumunda ölçülecek**
-  - [ ] Kalibrasyon SONRASI süre tahmini gerçekleşenin ±%25'i içinde (aynı cihaz, ≥2 senaryo) — **Colab kapısı** (mekanik yerelde testli: cpu kalibrasyonu → fit → estimate zinciri)
+  - [ ] VRAM tahmini, Colab'da ölçülen mempool tepe değerinin ±%10'u içinde (≥2 farklı grid boyutunda) — **Colab kapısı, ikinci oturumda ölçülecek**; süitte `M8.vram`: merdiven ≥2 basamak üretir ve tek iyi ölçüm PASS saydırmaz (`test_one_measurement_is_not_two`)
+  - [ ] Kalibrasyon SONRASI süre tahmini gerçekleşenin ±%25'i içinde (aynı cihaz, ≥2 senaryo) — **Colab kapısı** (mekanik yerelde testli: cpu kalibrasyonu → fit → estimate zinciri); süitte `M8.time`: süit kendi `planner.calibrate()`ini koşarak "kalibrasyon sonrası" şartını ÜRETİR, varsaymaz
+  - [ ] OOM reddi cihazda kanıtlanır: merdivenin bir üstü (cihaza SIĞMAYAN en küçük şekil) çıkış 3 ile reddedilir ve öneri metni rapora kanıt olarak girer — süitte `M8.oom` (**ikinci Colab oturumu**)
   - [x] Tahmin kaynağı raporda etiketli: `db` | `calibrated` | `measured` (testli; cpu kalibrasyonu GPU anahtarıyla asla eşleşmez)
   - [x] OOM öngörüsünde eyleme geçirilebilir öneri metni (dx büyüt ×m hesaplı / AOI küçült / linear'a geç / daha büyük cihaz) — testli
+- **Süre modeli düzeltildi (fix A2, 2026-08-23):** `t_expected = warmup + steps·t_step`. İlk Colab
+  oturumu `t_step_measured_s`i 26.6 ms okudu, planner probu aynı süreçte aynı şekilde 1.03 ms —
+  25.9× "sapma". Aynı iş CPU'da 0.96×. Muhasebe doğruydu, EKSİK OLAN SABİT terimdi: ~2.66 s'lik
+  tek seferlik cuFFT-plan/JIT/ilk-tahsis maliyeti 104 adıma yayılıyordu. `model.GPU_WARMUP_S`
+  (3.0 s, o oturumdan), `calibrate()` cihazda ısınma ölçüp saklıyor, `planner.record_warmup()`
+  gerçek koşunun ödediğini geri yazıyor. run_meta.actual'a EKLENEN alanlar: `warmup_s`,
+  `t_step_steady_s`, `steady_samples` — mevcut anahtarların hiçbiri değişmedi
+  (`t_step_measured_s` dahil; M8'in Colab kapıları ve gui_contract onu okuyor)
 - Not: dt/spp ve time-of-flight türetimi motordan `cw_discretization`/`cw_tof_periods` fonksiyonlarına çıkarıldı (tek doğruluk kaynağı; planner==engine testli). VRAM envanteri engine.py tampon listesini birebir aynalar — motora yeni kalıcı tampon eklersen `test_memory_inventory_matches_hand_count` kırılır (bilerek).
 
 ### M9 — KZK çözücüsü `[ERTELENDİ 2026-08-22]`
@@ -952,9 +978,25 @@ hücre, tek düzenlenen satır CONFIG yolu; gerisi `from caustica.colab import r
         `env.py:102` (`_on_colab`, M10i'den beri), `progress.py:189` (notebook renderer
         seçimi, M10j'den beri). Köprü bu TEK yoklamayı yeniden kullanıyor, ikincisini
         tanımlamıyor. Testle çivili: `test_the_library_has_no_drive_code_and_never_imports_google_colab`
-  - [ ] **Colab kapısı (ilk Colab oturumunda):** repodan açılan notebook → `/content` altında
-        koşu → sonuç indirilip lokalde `caustica report` ile açılır (uçtan uca). CPU kanıtıyla
-        işaretlenmez
+  - [x] **Colab kapısı — İLK OTURUM KOŞULDU (operatör ölçümü, 2026-08-22):** repodan açılan
+        notebook → `/content/runs/water_bowl_mini` → sonuç indirilip lokalde `caustica report`
+        ile açıldı. Kanıt REPO'DA: `benchmarks/reports/colab_first_session_2026-08-22/`
+        (run_meta + plan + metrics + status + job + REPORT.md + index.html; `result.h5` ve
+        `preview.npz` girmedi — repo ikili alan verisi taşımıyor). Gerçek
+        NVIDIA A100-SXM4-40GB, Python 3.13.15, cupy 14.0.1,
+        koşu 2.77 s / 104 adım, periyot 11'de yakınsadı. Metrik seviyesinde parite MÜKEMMEL:
+        aynı job CPU'da koşuldu, tepe basınç bağıl fark **1.8e-7**, geometri/−6dB/hacim birebir,
+        yakınsama yörüngesi aynı
+- **Oturumun ortaya çıkardığı ÜÇ kusur ve düzeltmeleri (2026-08-22/23):**
+  - `git_commit: "unknown"` — Colab wheel'den kuruyor, wheel'de checkout yok, damga commit
+    kaydedemiyordu. **fix A1:** `build_stamp.py` + `setup.py` build sırasında
+    `caustica/_build_info.py` yazıyor; `caustica.env.git_commit()` önce canlı checkout'a bakıyor,
+    yoksa gömülü damgaya düşüyor. İkisi de KUŞATAN repo'nun commit'ini reddediyor (`git rev-parse`
+    yukarı yürür). Yeni bağımlılık YOK (setuptools_scm eklenmedi). CI wheel bacağı uçtan uca
+    kanıtlıyor; `tests/test_packaging.py`e 5 test eklendi (biri temiz kurulumdan gerçek koşu)
+  - `t_step_measured_s` ısınmayı gizliyordu → **fix A2** (yukarıda, M8 notunda)
+  - CI Colab'ın Python'unu test etmiyordu (3.10 + 3.12 vardı, Colab 3.13.15) → **fix A3:**
+    matrise ubuntu/3.13 bacağı eklendi
   - [ ] **İlk Colab oturumu üç kapıyı birden kapatır (ilk Colab oturumunda):** M7 parite + tam
         boy OOM'suz koşu, M8 VRAM ±%10 ve kalibre süre ±%25, bu E2E — runner damgası
         ölçümleri zaten topluyor (`run_meta.json` → `planner` vs `actual`;
@@ -989,6 +1031,13 @@ Kriterleri (v12 referans sayıları dahil) M29 taşıyor.
 ### M11 — Doğrulama + çok-motor harness `[ ]` (M12'yi yuttu — kullanıcı 2026-08-22)
 Tek çatı: analitik süit + N-motor çapraz karşılaştırma + damgalı rapor. Adaptörler (M25/M26)
 bu harness'in İÇİNE doğar.
+- [x] `caustica.validation` paketi + `python -m caustica.validation` CLI'ı AÇILDI (2026-08-23):
+      ilk süit `gpu-gates` — M7/M8'in cihaza bağlı ölçütlerini tek koşuda ölçen protokol
+      (kalibrasyon → VRAM merdiveni → OOM reddi → parite → damgalı MD+JSON rapor). Damga:
+      ortam/GPU/git + kalibrasyon + her basamağın plan-vs-gerçek satırı + kapı VERDICT'i.
+      `Harness` dikişi sayesinde GPU dışındaki HER ŞEY CPU'da testli; sahte ölçümlerle yanlış
+      PASS üretemediği gösterildi (SKIP asla PASS sayılmaz; kapı, milestone'un istediği
+      SAYIDA geçen ölçüm olmadan PASS vermez)
 - [ ] `study.Study`: config + koşu(lar) + sonuç + figürler; `report()` → MD+JSON; ortam/GPU/git
       damgası; `Study.sweep(...)`
 - [ ] `python -m caustica.validation run-analytic` → damgalı rapor `benchmarks/reports/`a
