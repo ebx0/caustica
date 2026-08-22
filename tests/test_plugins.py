@@ -701,6 +701,127 @@ def test_a_broken_plugin_is_skipped_not_fatal(tmp_path, caplog):
         assert "failed to load" in caplog.text
 
 
+# ------------------------------------------------ what a factory must return
+
+
+def test_a_backend_factory_is_held_to_its_registry_key():
+    """The key and ``Backend.name`` must agree, or a run is mislabelled.
+
+    Everything downstream reads ``Backend.name``, never the name that was
+    asked for: the ``run_meta.json`` stamp, the ``backend`` attr in
+    ``result.h5``, and the checkpoint fingerprint that decides whether a
+    resume is the SAME run. The closed ``Literal`` used to make the mismatch
+    unreachable; the registry does not, so ``get_backend`` checks.
+    """
+    import numpy as np
+
+    from caustica.core.backend import Backend
+
+    @backends.register("test_liar")
+    def _liar() -> Backend:
+        return Backend("numpy", np)  # not "test_liar"
+
+    @backends.register("test_not_a_backend")
+    def _not_a_backend():
+        return "I am a string"
+
+    try:
+        with pytest.raises(ValueError, match="registry key and Backend.name must match"):
+            get_backend("test_liar")
+        with pytest.raises(TypeError, match="not a caustica.core.backend.Backend"):
+            get_backend("test_not_a_backend")
+    finally:
+        backends._forget("test_liar")
+        backends._forget("test_not_a_backend")
+
+
+def test_two_anonymous_factories_still_collide():
+    """The reload-tolerant guard must not become a free pass for lambdas.
+
+    ``same_definition`` calls two objects the same definition when module and
+    qualname match — true for a reloaded class, and ALSO true for any two
+    module-level lambdas, which all answer to ``<lambda>``. Without this the
+    second silently replaced the first under one name.
+    """
+    import numpy as np
+
+    from caustica.core.backend import Backend
+
+    first = lambda: Backend("test_anon", np)  # noqa: E731 - the point of the test
+    second = lambda: Backend("test_anon", np)  # noqa: E731
+    assert not same_definition(first, second)
+
+    backends.add("test_anon", first)
+    try:
+        with pytest.raises(ValueError, match="already registered"):
+            backends.add("test_anon", second)
+    finally:
+        backends._forget("test_anon")
+
+
+def test_collision_messages_kept_their_pre_m10n_wording():
+    """The shared base must not quietly reword an existing refusal."""
+    with pytest.raises(ValueError, match=r"^solver name 'linear' already registered by "):
+
+        @solvers.register
+        class Duplicate(solvers.SolverBase):  # pragma: no cover - definition only
+            name = "linear"
+            caps = solvers.LinearKSpacePSTD.caps
+
+            def run(self, *a, **k):
+                raise NotImplementedError
+
+    class Clash(MediumKindConfig):
+        kind: Literal["scene"] = "scene"
+
+    with pytest.raises(ValueError, match=r"^medium kind 'scene' already registered by Scene"):
+        medium_kinds.register(Clash)
+
+
+def test_the_cli_parser_stays_free_of_the_report_package():
+    """Building the parser must not import numpy metrics for one default name.
+
+    It reads one string; `caustica.report.__init__` eagerly imports the
+    metrics and preview modules, so doing it at parser-build time doubled
+    startup for EVERY command, `--help` included (M10n review).
+    """
+    code = (
+        "import sys\n"
+        "from caustica.__main__ import build_parser\n"
+        "build_parser()\n"
+        "leaked = [m for m in ('caustica.report', 'scipy', 'h5py', 'matplotlib') "
+        "if m in sys.modules]\n"
+        "assert not leaked, leaked\n"
+        "print('clean')\n"
+    )
+    proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=180)
+    assert proc.returncode == 0, proc.stderr
+    assert "clean" in proc.stdout
+
+
+def test_a_misspelled_backend_is_refused_before_the_medium_is_built(tmp_path, monkeypatch):
+    """`--backend` was an argparse `choices=`: a typo cost nothing.
+
+    Now the registry owns the name, so the refusal has to happen before
+    `build_job(with_medium=True)` — otherwise a misspelling is paid for with
+    a full (possibly multi-GB) medium build.
+    """
+    from caustica.config import job as jm
+    from caustica.runner import EXIT_CONFIG, RunnerOptions, run_job_file
+
+    built = []
+    real_build = jm.build_job
+    monkeypatch.setattr(
+        "caustica.runner.build_job",
+        lambda *a, **k: (built.append(1), real_build(*a, **k))[1],
+    )
+    path = tmp_path / "job.json"
+    path.write_text(json.dumps(plugin_job_dict() | {"medium": {"kind": "homogeneous"}}), "utf-8")
+    code = run_job_file(path, RunnerOptions(out=tmp_path / "out", backend="torch", measure=False))
+    assert code == EXIT_CONFIG
+    assert not built, "the medium was built before the backend name was refused"
+
+
 # --------------------------------------------------------------------- docs
 
 

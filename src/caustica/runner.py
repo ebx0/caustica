@@ -48,7 +48,7 @@ import numpy as np
 
 import caustica
 from caustica.config.job import BuiltJob, build_job, dump_job, load_job
-from caustica.core.backend import CausticaWarning, get_backend
+from caustica.core.backend import CausticaWarning, check_backend_name, get_backend
 from caustica.env import env_report, gpu_environment
 from caustica.io.atomic import atomic_write
 from caustica.io.checkpoint import CheckpointSpec, RunInterrupted
@@ -369,6 +369,12 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
 
     # ---- everything before the solve is, by definition, a config problem ----
     try:
+        # BEFORE the medium is built: `--backend` used to be an argparse
+        # `choices=`, so a typo was refused instantly. Since M10n opened the
+        # name to the registry, refusing it here keeps that — otherwise a
+        # misspelled backend costs a multi-GB medium build first.
+        if opts.backend is not None:
+            check_backend_name(opts.backend)
         job, base_dir = load_job(job_path)
         built = build_job(job, base_dir=base_dir, with_medium=True)
         backend_name = get_backend(opts.backend or built.backend).name

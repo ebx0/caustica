@@ -95,11 +95,18 @@ def same_definition(a: Any, b: Any) -> bool:
     objects. Matching module + qualified name keeps the collision guard for
     two genuinely different implementations while letting a redefinition
     replace itself.
+
+    ``<lambda>`` is refused: two unrelated module-level lambdas share both
+    parts of that identity, so a factory registry would let one silently
+    replace the other under the same name (M10n review). An anonymous
+    function cannot claim to be a redefinition of anything.
     """
     missing = object()
     a_id = (getattr(a, "__module__", missing), getattr(a, "__qualname__", missing))
     b_id = (getattr(b, "__module__", missing), getattr(b, "__qualname__", missing))
-    return missing not in a_id and a_id == b_id
+    if missing in a_id or "<lambda>" in str(a_id[1]):
+        return False
+    return a_id == b_id
 
 
 class PluginRegistry(Generic[T]):
@@ -129,7 +136,7 @@ class PluginRegistry(Generic[T]):
         self._validate(name, obj)
         held = self._items.get(name)
         if held is not None and held is not obj and not same_definition(held, obj):
-            raise ValueError(f"{self.label} '{name}' already registered by {_label_of(held)}")
+            raise ValueError(self.collision_message(name, held))
         self._items[name] = obj
         try:
             self._notify()
@@ -147,6 +154,10 @@ class PluginRegistry(Generic[T]):
 
     def _validate(self, name: str, obj: Any) -> None:
         """Refuse an unusable implementation. Default: accept anything."""
+
+    def collision_message(self, name: str, held: Any) -> str:
+        """Text for two genuinely different implementations claiming one name."""
+        return f"{self.label} '{name}' already registered by {_label_of(held)}"
 
     def on_change(self, hook: Callable[[], None]) -> None:
         """Run ``hook`` whenever the entry set changes.
