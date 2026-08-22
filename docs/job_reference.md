@@ -92,15 +92,18 @@ change it.
     "name": "water",
     "c": 1500.0,
     "rho": 1000.0,
-    "alpha_np_m": 0.0,
+    "alpha_np_m": 0.025,
     "beta": 3.5
   }
 }
 ```
 
-`material` defaults to `water()` (c = 1500, ρ = 1000, α = 0, β = 0) — a lossless,
-linear reference medium, because the fields it is used to check (O'Neil, Rayleigh)
-are themselves lossless. Set `beta` for a nonlinear water tank.
+Omit `material` entirely and you get `water()`: c = 1500 m/s, ρ = 1000 kg/m³,
+**α = 0 and β = 0** — a lossless, *linear* reference medium, because the fields
+this default exists to check (O'Neil, Rayleigh) are themselves lossless. That
+is not real water: the snippet above is the override you want for a nonlinear
+water tank (β = 3.5, and α ≈ 0.025 Np/m at 1 MHz). A `westervelt` run against
+the bare default is a linear run with extra steps.
 
 ### `scene`
 
@@ -156,6 +159,17 @@ One imported label volume placed on the job grid — the shortcut for
   "materials": "breast_default",
   "background": 0
 }
+```
+
+The `.npz` is a `LabelVolume`, and it needs **three** arrays — `labels`, `dx`
+and `origin`. A file with only `labels` and `dx` fails with
+`KeyError: 'origin is not a file in the archive'`, so write it with the
+library rather than by hand:
+
+```python
+from caustica.geometry import LabelVolume
+
+LabelVolume(labels=labels, dx=0.5e-3, origin=(0.0, 0.0, 0.0)).save_npz("phantom.npz")
 ```
 
 `materials` is either the string `"breast_default"` (the built-in generic
@@ -261,6 +275,21 @@ production geometry's fill factor — real arrays leave kerf between elements.
 `n_elements` defaults to 64; the shipped default geometry is the 128-element
 one.
 
+**That snippet is a 100 mm production array** — dropped into the small example
+job at the top of this page its focus lands outside the grid (`validate` says
+so). A spiral sized for that 18 × 18 × 24 mm grid:
+
+```json
+{
+  "kind": "archimedean_spiral",
+  "n_elements": 16,
+  "d_outer_mm": 10.0,
+  "d_inner_mm": 4.0,
+  "roc_mm": 12.0,
+  "active_fraction": 0.6
+}
+```
+
 Can be steered and phased.
 
 ### `bowl`
@@ -324,6 +353,26 @@ x,y,z
 4.0,0.0,0.69
 0.0,4.0,0.69
 ```
+
+**What a run records about your table.** `run_meta.json`'s `derived` block
+carries the aperture numbers (`n_elements`, `r_max_mm`, `shell_depth_mm`,
+`f_number`, `half_angle_deg`) *and* `table_sha256`, a digest of the positions
+and normals actually used. The digest is the part that matters: aperture
+numbers are order statistics, and they survive mirroring the array, rotating
+it, re-scattering all but the outermost element, or changing every normal —
+each of which moves the field by tens of per cent. A reload compares both, so
+"the table under this job changed" is an error rather than a surprise. The
+digest is of the *geometry*, not the file, so the same array given inline, as
+`.npz` or as `.csv` digests identically.
+
+(The other array kinds need no digest: their geometry is generated from the
+handful of numbers already in the job, so pinning the aperture pins the
+transducer.)
+
+**Normals set the element plane, not a direction.** Voxelization tilts each
+element's disc into the plane its normal defines; the sign is not used, so
+`[0,0,1]` and `[0,0,-1]` build the identical source. Do not expect a flipped
+normal to mean anything.
 
 Can be steered and phased, exactly like a spiral array. Refusals you may meet:
 
@@ -447,8 +496,10 @@ settle sooner and ring more.
 
 `record_region_vox` is the field that decides whether your result is 40 MB or
 4 GB: the record buffer is 8 bytes per voxel **per harmonic**, and the full grid
-of a large phantom is a multi-GB `result.h5`. `validate` prints the size and
-warns above 10 million voxels. Bounds are in full-grid voxels, PML included.
+of a large phantom is a multi-GB `result.h5`. `validate` always prints the
+region and its cost; it *warns* only when you left it `null` and the full grid
+exceeds 10 million voxels — an explicit region is treated as a decision you
+already made, however large. Bounds are in full-grid voxels, PML included.
 
 ## Output
 

@@ -17,13 +17,19 @@ unit tag, so the schema fixes it: an element table read by a job is in mm.
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import numpy as np
 
 from caustica.arrays.transducer import TransducerArray
 
-__all__ = ["elements_array", "read_element_file"]
+__all__ = ["element_table_digest", "elements_array", "read_element_file"]
+
+#: Rounding applied before hashing an element table [m]. 1 pm is ~1e-10 of a
+#: therapy aperture — far below anything physical, far above float64 noise —
+#: so the digest is stable across the inline and file paths.
+_DIGEST_DECIMALS = 12
 
 #: Largest plausible distance of an element from the beam axis [m]. A table
 #: that exceeds it is almost always a unit mistake, and a silently 1000x
@@ -93,6 +99,29 @@ def read_element_file(path: str | Path) -> tuple[np.ndarray, np.ndarray | None]:
     raise ValueError(
         f"{path.name}: unsupported element-table format '{suffix or path.name}'; use .npz or .csv"
     )
+
+
+def element_table_digest(array: TransducerArray) -> str:
+    """A short content hash of an array's element table (positions + normals).
+
+    Summary statistics cannot falsify an element table. Aperture numbers —
+    element count, maximum radius, shell depth — are order statistics: they
+    survive mirroring the array, rotating it, re-scattering every element but
+    the outermost, swapping two elements' radii, or changing every normal.
+    Each of those changes the radiated field by tens of per cent while every
+    recorded number stays put (measured, M10m review). So a *table*-backed
+    kind records a digest of the table itself, and a reload that reads a
+    different table says so.
+
+    Deliberately not a checksum of the FILE: the same geometry given inline,
+    as ``.npz`` or as ``.csv`` must produce the same digest, and a file whose
+    bytes changed without its geometry changing is not drift.
+    """
+    h = hashlib.sha256()
+    for a in (array.positions, array.normals):
+        rounded = np.round(np.asarray(a, np.float64), _DIGEST_DECIMALS) + 0.0  # kill -0.0
+        h.update(np.ascontiguousarray(rounded).tobytes())
+    return h.hexdigest()[:16]
 
 
 def elements_array(

@@ -209,6 +209,20 @@ def _kind_name(cls: type[CausticaModel], label: str) -> str:
     return tag
 
 
+def _same_definition(a: Any, b: Any) -> bool:
+    """True when ``b`` is ``a`` re-executed — a module reload, not a collision.
+
+    ``importlib.reload`` (and therefore ``%autoreload 2`` in a notebook, the
+    workflow this library is aimed at) re-runs the module body and produces
+    NEW class objects carrying the SAME kind tags. Identity alone would call
+    that a name collision and report a class as colliding with itself, halfway
+    through the reload — leaving the module a mix of new and stale objects.
+    Matching module + qualified name keeps the collision guard for two
+    genuinely different classes while letting a redefinition replace itself.
+    """
+    return (a.__module__, a.__qualname__) == (b.__module__, b.__qualname__)
+
+
 class KindRegistry:
     """name -> config class, plus the discriminated union built from it."""
 
@@ -230,10 +244,9 @@ class KindRegistry:
                 f"{self.base.__module__}.{self.base.__name__}"
             )
         name = _kind_name(cls, self.label)
-        if name in self._kinds and self._kinds[name] is not cls:
-            raise ValueError(
-                f"{self.label} kind '{name}' already registered by {self._kinds[name].__name__}"
-            )
+        held = self._kinds.get(name)
+        if held is not None and held is not cls and not _same_definition(held, cls):
+            raise ValueError(f"{self.label} kind '{name}' already registered by {held.__name__}")
         self._kinds[name] = cls
         try:
             self._notify()
@@ -250,7 +263,13 @@ class KindRegistry:
         return cls
 
     def on_change(self, hook: Callable[[], None]) -> None:
-        """Run ``hook`` whenever the kind set changes (job.py rebuilds its models)."""
+        """Run ``hook`` whenever the kind set changes (job.py rebuilds its models).
+
+        A hook re-registered from the same place replaces its predecessor —
+        otherwise a module reload would leave the old module's hook installed
+        forever, rebuilding classes nobody references any more.
+        """
+        self._hooks = [h for h in self._hooks if not _same_definition(h, hook)]
         self._hooks.append(hook)
 
     def _notify(self) -> None:
@@ -341,6 +360,13 @@ class KindRegistry:
         defined as soon as it is rebuilt — pydantic only re-resolves a field
         annotation that failed to resolve, so a plain module global would go
         stale (found while writing the plugin test, M10m).
+
+        The one cost: the field's *declared* annotation is ``Any``, so
+        ``model_fields[...].annotation`` and ``typing.get_type_hints`` see
+        ``Any`` where a closed union would show the member classes. The
+        validation schema, the JSON Schema and serialization are unaffected.
+        Ask the registry (:meth:`available`, :meth:`union`) — or
+        ``caustica schema`` — for the kinds, never the field annotation.
         """
         return Annotated[Any, _LazyKindUnion(self)]
 

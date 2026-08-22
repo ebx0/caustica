@@ -39,7 +39,7 @@ from typing import Any, ClassVar, Literal
 import numpy as np
 from pydantic import Field, TypeAdapter, model_validator
 
-from caustica.arrays.elements import elements_array, read_element_file
+from caustica.arrays.elements import element_table_digest, elements_array, read_element_file
 from caustica.arrays.transducer import TransducerArray, archimedean_spiral
 from caustica.config.kinds import (
     ArrayKindConfig,
@@ -534,17 +534,32 @@ class ElementsArrayConfig(_ElementArrayConfig):
     def focal_length_mm(self) -> float:
         return self.roc_mm
 
-    def derived(self, arr: TransducerArray | None = None) -> dict[str, float]:
-        """Re-derivable aperture numbers (the table itself stays in its file)."""
+    def derived(self, arr: TransducerArray | None = None) -> dict[str, Any]:
+        """Aperture numbers PLUS a digest of the table itself.
+
+        The spiral's five config numbers generate its geometry, so pinning
+        the aperture pins the transducer. A supplied table has no such
+        constraint: mirroring it, rotating it, re-scattering all but the
+        outermost element or changing every normal leaves the element count,
+        the maximum radius and the shell depth untouched while moving the
+        field by tens of per cent (measured, M10m review). Hence the digest —
+        without it this record would certify nothing.
+        """
         arr = arr if arr is not None else self.build()
         shape = self._shape_derived(arr)
         r_max_mm = shape["r_max_mm"]
-        return {
+        out: dict[str, Any] = {
             **shape,
             "n_elements": float(arr.n_elements),
-            "f_number": self.roc_mm / (2.0 * r_max_mm) if r_max_mm > 0 else float("inf"),
-            "half_angle_deg": float(np.degrees(np.arcsin(min(1.0, r_max_mm / self.roc_mm)))),
+            "table_sha256": element_table_digest(arr),
         }
+        # An all-on-axis table has no f-number. Recording `inf` would put the
+        # token `Infinity` in run_meta.json — accepted by Python's json, and
+        # rejected by JSON.parse, jq, Go and serde (review, M10m).
+        if r_max_mm > 0.0:
+            out["f_number"] = self.roc_mm / (2.0 * r_max_mm)
+        out["half_angle_deg"] = float(np.degrees(np.arcsin(min(1.0, r_max_mm / self.roc_mm))))
+        return out
 
 
 #: Field annotation for ``source.array``: see :data:`MediumConfig`.
@@ -657,9 +672,19 @@ class ArraySourceConfig(CausticaModel):
         for key, want in derived.items():
             if key not in fresh:
                 continue
-            if not math.isclose(float(want), fresh[key], abs_tol=GEOM_ATOL_MM):
+            have = fresh[key]
+            if isinstance(have, str) or isinstance(want, str):
+                # Content digests (an explicit element table) compare exactly.
+                if str(want) != str(have):
+                    raise JobError(
+                        f"re-deriving the array gives {key} = {have} but the record "
+                        f"says {want}. The transducer this job describes is no longer "
+                        f"the one that ran; do not trust the recorded run."
+                    )
+                continue
+            if not math.isclose(float(want), have, abs_tol=GEOM_ATOL_MM):
                 raise JobError(
-                    f"re-deriving the array gives {key} = {fresh[key]:.9g} but the record "
+                    f"re-deriving the array gives {key} = {have:.9g} but the record "
                     f"says {float(want):.9g}. The array construction changed under this "
                     f"job; do not trust the recorded run."
                 )
@@ -949,7 +974,12 @@ def validate_job(path: str | Path, fast: bool = False) -> JobReport:
         report.errors.append(f"{type(exc).__name__}: {exc}")
         return report
 
-    heavy_medium = isinstance(job.medium, MediumVolumeConfig)
+    # A grid-providing kind reads its geometry from a file, so its property
+    # volumes are the expensive part by construction — skip them here for the
+    # same reason MediumPrep defers them. Asked of the KIND, not of one class,
+    # or a third-party grid-providing kind would materialize GBs inside a
+    # command whose whole promise is that it costs nothing (review, M10m).
+    heavy_medium = type(job.medium).provides_grid
     with_medium = not fast and not heavy_medium
     try:
         built = build_job(job, base_dir=base_dir, with_medium=with_medium)
