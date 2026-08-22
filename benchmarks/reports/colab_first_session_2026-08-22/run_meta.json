@@ -1,0 +1,82 @@
+{
+  "format": "caustica-run-meta/1",
+  "job": "water_bowl_mini",
+  "job_kind": "explicit",
+  "solver": "linear",
+  "backend": "cupy",
+  "generated": "2026-08-22T20:17:09+00:00",
+  "git_commit": "unknown",
+  "environment": {
+    "caustica": "0.1.0.dev0",
+    "python": "3.13.15",
+    "platform": "Linux-6.6.122+-x86_64-with-glibc2.35",
+    "numpy": "2.1.3",
+    "scipy": "1.16.3",
+    "pydantic": "2.13.4",
+    "h5py": "3.16.0",
+    "resolved_backend": "cupy",
+    "gpu_name": "NVIDIA A100-SXM4-40GB",
+    "driver_version": 13000,
+    "cuda_runtime_version": 12090,
+    "cupy_version": "14.0.1",
+    "vram_total_gib": 39.494,
+    "vram_free_gib": 39.058
+  },
+  "ppw_warnings": [],
+  "planner": {
+    "source": "measured",
+    "spp": 8,
+    "dt_s": 1.5625e-07,
+    "t_step_s": 0.0010300624999786123,
+    "steps_expected": 104,
+    "steps_worst": 120,
+    "t_expected_s": 0.1,
+    "t_worst_s": 0.1,
+    "vram_gib": 0.006,
+    "vram_breakdown_bytes": {
+      "state (p + u)": 995328,
+      "property maps": 746496,
+      "sponge": 248832,
+      "spectral factors (i*k*kappa)": 777600,
+      "record buffers": 746496,
+      "step temporaries": 1275264,
+      "fft workspace": 518400
+    },
+    "result_size_mb_expected": 0.4,
+    "gpu": "A100",
+    "gpu_t_expected_s": 0.0,
+    "gpu_fits": true,
+    "warnings": [],
+    "advice": [],
+    "ppw_warnings": []
+  },
+  "actual": {
+    "elapsed_solve_s": 2.77,
+    "elapsed_total_s": 5.4,
+    "steps_total": 104,
+    "t_step_measured_s": 0.026648,
+    "converged_period": 11,
+    "settle_capped": false,
+    "resumed_from_period": null,
+    "vram_pool_peak_gib": 0.006,
+    "preview_only": false
+  },
+  "derived": {
+    "apex_vox": [
+      18,
+      18,
+      12
+    ],
+    "focus_vox": [
+      18,
+      18,
+      36
+    ],
+    "focus_mode": "natural",
+    "aperture_radius_mm": 5.0,
+    "roc_mm": 12.0,
+    "f_number": 1.2,
+    "half_angle_deg": 24.624318352164078,
+    "source_voxels": 405
+  }
+}

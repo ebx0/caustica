@@ -1,0 +1,76 @@
+{
+  "format": "caustica-job/1",
+  "kind": "explicit",
+  "name": "water_bowl_mini",
+  "medium": {
+    "kind": "homogeneous",
+    "material": {
+      "name": "water",
+      "alpha_np_m": 0.0,
+      "rho": 1000.0,
+      "c": 1500.0,
+      "beta": 0.0,
+      "thermal_conductivity": null,
+      "specific_heat": null,
+      "perfusion_rate": null
+    }
+  },
+  "grid": {
+    "ndim": 3,
+    "dx_mm": 0.5,
+    "size_mm": [
+      18.0,
+      18.0,
+      24.0
+    ],
+    "pml": {
+      "thickness_mm": 3.0,
+      "edge": 2.0
+    }
+  },
+  "source": {
+    "kind": "array",
+    "array": {
+      "kind": "bowl",
+      "d_outer_mm": 10.0,
+      "roc_mm": 12.0
+    },
+    "apex_mm": [
+      9.0,
+      9.0,
+      6.0
+    ],
+    "focus": {
+      "mode": "natural",
+      "target_mm": null
+    },
+    "phases_rad": null
+  },
+  "drive": {
+    "f0_mhz": 0.8,
+    "amplitude_kpa": 100.0,
+    "ramp_periods": 3.0
+  },
+  "run": {
+    "spec": {
+      "cfl": 0.48,
+      "cfl_hard_max": 0.5,
+      "min_settle_periods": 2,
+      "max_settle_periods": 6,
+      "convergence_tol": 0.01,
+      "n_record_periods": 2,
+      "t_end_min_us": null
+    },
+    "harmonics": [
+      1
+    ],
+    "record_region_vox": null
+  },
+  "solver": "linear",
+  "backend": "auto",
+  "output": {
+    "folder": null,
+    "quantize": true,
+    "max_norm_err": 0.001
+  }
+}
