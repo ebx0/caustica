@@ -50,7 +50,7 @@ improvements arrive with `pip install -U` and the notebook's own diff stays zero
 ```python
 from caustica.colab import run_job, show
 
-outdir = run_job("my_job.json")   # a path, or an https URL to a caustica-job/1 file
+outdir = run_job("my_job.json")   # a path, or an http(s) URL to a caustica-job/1 file
 show(outdir)                      # the run's metrics + its report figures, inline
 ```
 

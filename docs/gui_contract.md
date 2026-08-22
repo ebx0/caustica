@@ -456,4 +456,12 @@ carries on.
 - Log records and their wording.
 - Any framework, transport, socket or IPC mechanism. There is none, on
   purpose: the contract is files in a folder, which works identically for a
-  local run, an SSH'd machine and a Colab session syncing through Drive.
+  local run, an SSH'd machine and a Colab session writing into a Drive folder
+  the *user* mounted. caustica never mounts one itself.
+- `caustica.colab` (M10f). It is a convenience entry point for a human in a
+  notebook: it prints an environment verdict, requires a GPU, picks a default
+  folder under `/content` and hands the runner's own failures back readably.
+  Every decision in it is an opinion about where it is running, which is
+  exactly what a contract must not be. It adds nothing a program cannot get
+  from `caustica run` / `caustica.simulate` plus this page, and a driving
+  program should use those.

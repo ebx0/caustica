@@ -891,11 +891,15 @@ GUI ayrı repoda olacak ve teknolojisi seçilmedi (PLAN.md K13). Bu milestone ya
 "Değişmeyen dosya" şartı mantığın notebook'ta DEĞİL repoda yaşamasıyla sağlanır: notebook 5
 hücre, tek düzenlenen satır CONFIG yolu; gerisi `from caustica.colab import run_job`. Güncelleme
 `pip install -U` ile gelir, .ipynb'ye dokunulmaz.
-- [x] `caustica.colab`: ortam kontrolü (`env_report()` basılır + GPU ZORUNLU — uygunsuzsa
-      HİÇBİR ŞEY hazırlanmadan, aksiyon önerisiyle durur: indirme yok, klasör yok, medium
-      yok), koşu, çıktı `/content` altında. İki ayrı ret mesajı (K6): "cupy kurulu değil" ile
-      "runtime'da CUDA cihazı yok" AYRI cümleler, çünkü çözümleri ayrı — ikincisi
-      `caustica.env.require_gpu`'nun kendi mesajı, burada tekrar YAZILMIYOR
+- [x] `caustica.colab`: ortam kontrolü (`env_report()` basılır + GPU ZORUNLU), koşu, çıktı
+      `/content` altında. İki ayrı ret mesajı (K6): "cupy kurulu değil" ile "runtime'da CUDA
+      cihazı yok" AYRI cümleler, çünkü çözümleri ayrı — ikincisi `caustica.env.require_gpu`'nun
+      kendi mesajı, burada tekrar YAZILMIYOR. **"Hiçbir şey hazırlanmadan" GPU kapısı için
+      geçerli** (indirme yok, klasör yok, medium yok — ayrıca hatalı bir keyword de indirmeye mal
+      olmuyor; testli). VRAM kapısı için DEĞİL: o kapı runner'da, plan-first ama `build_job`
+      medium'u kurduktan ve çıktı klasörü açıldıktan SONRA. Bu runner'ın öteden beri davranışı;
+      köprünün belgesinde aksini iddia etmek abartı olurdu (W6 planındaki eski cümle de
+      düzeltildi)
 - [x] VRAM kapısı köprüde TEKRARLANMADI: tek kopya `runner.check_gates`'te, plan-first ve BOŞ
       VRAM'e karşı. Köprünün eklediği şey runner'ın bilerek yapmadığı kontrol — `auto`
       backend'in GPU'suz makinede sessizce numpy'a düşmesi Colab'da saatlerce CPU koşusu demek
@@ -904,17 +908,39 @@ hücre, tek düzenlenen satır CONFIG yolu; gerisi `from caustica.colab import r
       fantomu isteyen `uwcem-phantom` repo'sunu kullanır
 - [x] Drive KALDIRILDI (PLAN.md K12): `caustica.colab` Drive mount ETMEZ, Drive yollarını bilmez,
       Drive'a özgü yeniden deneme mantığı taşımaz. Kalıcılık isteyen kullanıcı Drive'ı KENDİ mount
-      edip `out=` ile oraya yazdırır (runner bunu zaten destekler; testli). Kabul edilen risk:
+      edip `out=` ile oraya yazdırır (runner bunu zaten destekler). Testin KANITLADIĞI şey
+      dar: açık bir `out=` her zaman kazanıyor, verilen klasöre yazılıyor
+      (`test_an_explicit_out_wins_including_a_folder_the_user_mounted` — geçici bir dizin, mount
+      DEĞİL). Gerçek bir Drive mount'u üstünde koşu ilk Colab oturumunun işi. Kabul edilen risk:
       oturum çökerse `/content` gider — checkpoint oturum-içi restart'ı kurtarır, VM teardown'ı
       kurtarmaz
-- [x] `notebooks/colab_run.ipynb` repoda; Colab'ın open-in-GitHub linkiyle açılır (README'de
-      "Run on Colab" rozeti). Link push'tan sonra canlı olur (M10e ön koşulu)
+- [~] `notebooks/colab_run.ipynb` repoda ve README'de "Run on Colab" rozeti var; ama link
+      HENÜZ ÇALIŞMIYOR ve bu M10e'ye bağlı sert bir engel. `origin/master` hâlâ f0bff2f'te
+      (yeniden adlandırma ÖNCESİ): `notebooks/` dizini orada yok, `src/caustica` da yok. Yani
+      `master`'a bakan ÜÇ şey birden bugün kırık: (1) rozetin
+      `…/blob/master/notebooks/colab_run.ipynb` hedefi 404; (2) notebook'un kurulum hücresi
+      `git+https://github.com/ebx0/caustica` ile VARSAYILAN dalı kuruyor, o dal hâlâ `hifusim`
+      paketini taşıyor, dolayısıyla `from caustica.colab import run_job` ModuleNotFoundError
+      verirdi; (3) varsayılan `CONFIG` ham URL'si 404. Üçü de `library-first` master'a
+      MERGE edilince düzelir — "push" yetmez. Colab kapısı bu yüzden denenemez bile
+      (aşağıdaki iki açık ölçütün ön koşulu)
 - Başarı kriterleri:
   - [x] Notebook sözleşmesi: CONFIG satırı dışında düzenleme gerektirmez; mantık değişikliği
         notebook diff'i SIFIR olacak şekilde repodan gelir. Kontrat testi hücre içeriklerini
         sabit şablonla BAYT BAYT karşılaştırıyor:
         `tests/test_colab.py::test_notebook_cells_match_the_frozen_template` (+ çıktı/execution
-        count yok, tek literal atama CONFIG, notebook'ta `run_job`/`show` dışında çağrı yok)
+        count yok, tek literal atama CONFIG, notebook'ta `run_job`/`show` dışında çağrı yok).
+        **İnceleme turu (2026-08-22) kilidin DELİKLERİNİ buldu ve hepsi kapatıldı:** şablon
+        karşılaştırması gerçekti (16 mutasyondan 6'sı yakalanıyordu) ama şablonu "bilerek"
+        güncelleyen biri için 9 delik açıktı — kurulum hücresi hiç AST'den geçmiyordu (`!`
+        satırı yüzünden hücre TÜMÜYLE atlanıyordu; oraya `import os` + gate'i kapatan bir env
+        var + döngü gizlenebiliyordu), attribute çağrısı / lambda / ternary / comprehension
+        "mantık" sayılmıyordu, çağrı ARGÜMANLARI hiç bakılmıyordu, notebook ve hücre
+        METADATA'sı tamamen serbestti (`accelerator: GPU` silinebiliyor, `cellView: form` ile
+        hücre gizlenebiliyordu). Şimdi: magic satırları atlanmıyor BOŞALTILIYOR, mantık düğüm
+        listesi genişledi, argümanlar isim olmak zorunda, tek `!` satırı var ve `!pip install`
+        ile başlıyor, notebook metadata'sı ve her hücrenin boş metadata'sı çivili. Aynı 9
+        mutasyon yeniden koşuldu: 9/9 YAKALANIYOR, değiştirilmemiş notebook geçiyor
   - [x] `caustica.colab` içinde `google.colab`/Drive dışı hiçbir ortam varsayımı yok.
         **Ölçüt düzeltmesi (operatör, 2026-08-22):** eski cümle "`grep -ri drive src/caustica`
         boş" idi; bu LAFZEN yanlış — job şemasındaki `drive` bölümü AKUSTİK sürüştür (f0,
