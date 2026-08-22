@@ -868,7 +868,7 @@ GUI ayrı repoda olacak ve teknolojisi seçilmedi (PLAN.md K13). Bu milestone ya
   - [x] kwave cancel'ı desteklemiyor ve bunu dürüstçe SÖYLÜYOR (checkpoint yok → durulacak sınır
         yok; öldürmek dosyanın var oluş sebebinin tersi) —
         `test_a_non_native_solver_says_cancel_does_nothing`
-  - [x] Süit 379 → 411 (409 passed / 2 skipped / 0 failed); `ruff check .` + `ruff format --check`
+  - [x] Süit 379 → 412 (410 passed / 2 skipped / 0 failed); `ruff check .` + `ruff format --check`
         temiz; `git status --porcelain data/setups/` boş — dokuz kurulum dosyası + manifest bayt-aynı
 
 ### M10f — Colab köprüsü: `caustica.colab` + değişmeyen notebook `[ ]` — Colab kapısı içerir

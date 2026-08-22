@@ -523,7 +523,10 @@ def check_gates(
             ),
             # The planner's own advice, verbatim — printed AND written to
             # error.json (M10l), where it is the actionable part for a GUI.
-            advice=(),  # MUTATION: the vram refusal now hands a GUI nothing
+            advice=tuple(
+                est.advice
+                or ("coarsen dx, shrink the record region, or switch to the linear solver",)
+            ),
         )
 
     # ---- CPU gate (M10i/D20): refuse an hours-long numpy run BEFORE

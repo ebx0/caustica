@@ -72,7 +72,7 @@ yourself.
 
 ## Bring your own setup
 
-Two documents are the contract, and both are kept honest by tests:
+These documents are the contract, and each is kept honest by a test:
 
 - **[docs/job_reference.md](docs/job_reference.md)** — every field of the job
   file: each medium kind, each array kind, drive / run / output, with a working
@@ -85,6 +85,10 @@ Two documents are the contract, and both are kept honest by tests:
 - **[docs/extending.md](docs/extending.md)** — the five extension points
   (solver, medium kind, array kind, backend, report renderer), their frozen
   entry-point group names, and a copy-paste plugin package that uses all five.
+- **[docs/gui_contract.md](docs/gui_contract.md)** — the surface a GUI (or any
+  other program driving caustica) may rely on: the run folder, the exit codes,
+  `status.json`, `error.json`, the `cancel` stop signal, and the progress
+  payload. Nothing outside that page is a contract.
 
 Edit the packaged example, or start from the two entry points below.
 
