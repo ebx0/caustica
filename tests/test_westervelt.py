@@ -11,12 +11,12 @@ capture, not harmonic-ratio physics — this gate pins the physics.
 import numpy as np
 import pytest
 
-import hifusim.solvers as solvers
-from hifusim import Grid, Medium, PMLSpec
-from hifusim.analytic import fubini_harmonic, shock_distance
-from hifusim.materials import water
-from hifusim.solvers import CWRunSpec
-from hifusim.sources import plane_cw_source
+import caustica.solvers as solvers
+from caustica import Grid, Medium, PMLSpec
+from caustica.analytic import fubini_harmonic, shock_distance
+from caustica.materials import water
+from caustica.solvers import CWRunSpec
+from caustica.sources import plane_cw_source
 
 F0, C0, BETA = 1.0e6, 1500.0, 3.5
 

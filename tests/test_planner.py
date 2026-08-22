@@ -15,16 +15,16 @@ import math
 
 import pytest
 
-import hifusim as hs
-import hifusim.solvers as solvers
-from hifusim import planner
-from hifusim.materials import water
-from hifusim.medium import Medium
-from hifusim.planner import calibration as cal
-from hifusim.planner import model
-from hifusim.solvers import CWRunSpec
-from hifusim.solvers.kspace.engine import cw_tof_periods
-from hifusim.sources import plane_cw_source
+import caustica as hs
+import caustica.solvers as solvers
+from caustica import planner
+from caustica.materials import water
+from caustica.medium import Medium
+from caustica.planner import calibration as cal
+from caustica.planner import model
+from caustica.solvers import CWRunSpec
+from caustica.solvers.kspace.engine import cw_tof_periods
+from caustica.sources import plane_cw_source
 
 
 def tiny_setup(shape=(32, 32), dx=1e-3, f0=0.5e6):

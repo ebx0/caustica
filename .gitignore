@@ -27,7 +27,18 @@ Thumbs.db
 .DS_Store
 
 # Local calibration / caches
-.hifusim/
+.caustica/
+
+# App run outputs (figures + npz + reports are regenerated, never committed)
+apps/outputs/
 
 # Source notebook stays in Drive/Colab, not in git (11 MB)
 hifu_pred_dx300_t128.ipynb
+
+# The local phantom-data root (CAUSTICA_PHANTOM_DATA points here): raw UWCEM
+# downloads, caches, exports, the generated dataset and the stored setups.
+# All of it moved OUT of this repository's git at M10k — the tooling lives in
+# the uwcem-phantom repo, the bytes stay local.
+data/
+runs/
+janitor/

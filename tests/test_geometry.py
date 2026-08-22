@@ -3,8 +3,8 @@
 import numpy as np
 import pytest
 
-from hifusim import Grid, PMLSpec
-from hifusim.geometry import (
+from caustica import Grid, PMLSpec
+from caustica.geometry import (
     Ball,
     Box,
     Cylinder,
@@ -13,7 +13,6 @@ from hifusim.geometry import (
     LabelVolume,
     Scene,
     SceneConfig,
-    breast_phantom_mapping,
     load_labels_txt,
 )
 
@@ -186,6 +185,16 @@ def test_label_volume_validation():
         LabelVolume(labels=np.zeros((4, 4), np.uint8), dx=-1.0)
 
 
+def _txt_mapping(values):
+    # An arbitrary value->label rule for the GENERIC text-import tests (the
+    # production phantom's own rule moved out with its package at M10k/W0c).
+    labels = np.full(values.shape, 4, dtype=np.uint8)
+    labels[values == -2] = 1
+    labels[values > 0] = 2
+    labels[values == -4] = 3
+    return labels
+
+
 def test_txt_import_roundtrip(tmp_path):
     rng = np.random.default_rng(3)
     raw = rng.choice([-4.0, -2.0, 0.5, np.nan], size=(6, 5, 4))
@@ -195,11 +204,11 @@ def test_txt_import_roundtrip(tmp_path):
         path,
         shape=(6, 5, 4),
         dx=0.5e-3,
-        mapping=breast_phantom_mapping,
+        mapping=_txt_mapping,
         order="F",
         cache=False,
     )
-    expected = breast_phantom_mapping(np.nan_to_num(raw, nan=0.0))
+    expected = _txt_mapping(np.nan_to_num(raw, nan=0.0))
     np.testing.assert_array_equal(vol.labels, expected)
     assert vol.dx == 0.5e-3
 
@@ -208,9 +217,9 @@ def test_txt_import_cache(tmp_path):
     raw = np.full((4, 4), -2.0)
     path = tmp_path / "p.txt"
     np.savetxt(path, raw.reshape(-1, order="F"))
-    v1 = load_labels_txt(path, (4, 4), 1e-3, breast_phantom_mapping, cache=True)
+    v1 = load_labels_txt(path, (4, 4), 1e-3, _txt_mapping, cache=True)
     assert (tmp_path / "p.txt.labels.npz").exists()
-    v2 = load_labels_txt(path, (4, 4), 1e-3, breast_phantom_mapping, cache=True)
+    v2 = load_labels_txt(path, (4, 4), 1e-3, _txt_mapping, cache=True)
     np.testing.assert_array_equal(v1.labels, v2.labels)
 
 
@@ -333,10 +342,10 @@ def test_volume_import_config_references_file(tmp_path):
 
 @pytest.mark.slow
 def test_scene_to_medium_to_solver_smoke():
-    import hifusim.solvers as solvers
-    from hifusim.materials import Material, MaterialDB, water
-    from hifusim.solvers import CWRunSpec
-    from hifusim.sources import plane_cw_source
+    import caustica.solvers as solvers
+    from caustica.materials import Material, MaterialDB, water
+    from caustica.solvers import CWRunSpec
+    from caustica.sources import plane_cw_source
 
     grid = Grid(shape=(96, 96), dx=0.5e-3, pml=PMLSpec(thickness=8e-3))
     scene = Scene(ndim=2, background=0)
@@ -358,24 +367,6 @@ def test_scene_to_medium_to_solver_smoke():
         backend="numpy",
     )
     assert np.isfinite(res.amp).all() and res.amp.max() > 0
-
-
-@pytest.mark.slow
-def test_real_mtype_phantom_if_present():
-    """Load + resample the actual production phantom when it exists locally."""
-    import pathlib
-
-    from hifusim.geometry import load_breast_phantom
-
-    path = pathlib.Path("mtype.txt")
-    if not path.exists():
-        pytest.skip("mtype.txt not present")
-    vol = load_breast_phantom(path)  # cached as mtype.txt.labels.npz after 1st run
-    assert vol.shape == (253, 355, 310)  # transposed (2,1,0) from raw
-    assert set(vol.label_set) <= {1, 2, 3, 4}
-    sub = LabelVolume(labels=vol.labels[100:140, 150:190, 140:180], dx=vol.dx)
-    out = sub.resample(0.3e-3, method="nearest")
-    assert set(out.label_set) <= set(sub.label_set)
 
 
 # ---------------- review-hardening regressions (2026-08-11) ----------------
@@ -493,7 +484,7 @@ def test_halfspace_and_transform_configs_roundtrip():
     rebuilt = SceneConfig.model_validate_json(cfg.model_dump_json())
     grid = _grid2d()
 
-    from hifusim.geometry import Ellipsoid as Ell
+    from caustica.geometry import Ellipsoid as Ell
 
     hand = Scene(ndim=2, background=0)
     shape = (

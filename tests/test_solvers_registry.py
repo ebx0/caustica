@@ -3,11 +3,11 @@
 import numpy as np
 import pytest
 
-import hifusim.solvers as solvers
-from hifusim import Grid, Medium
-from hifusim.materials import breast_default, water
-from hifusim.solvers import CWRunSpec, SolverCapabilityError
-from hifusim.sources import CWSource, plane_cw_source
+import caustica.solvers as solvers
+from caustica import Grid, Medium
+from caustica.materials import breast_default, water
+from caustica.solvers import CWRunSpec, SolverCapabilityError
+from caustica.sources import CWSource, plane_cw_source
 
 
 def test_builtin_solvers_registered():
@@ -52,6 +52,36 @@ def test_out_of_grid_source_rejected():
     src = CWSource(indices=np.array([[99, 0]]), phases=np.zeros(1), amplitude=1.0, f0=1e6)
     with pytest.raises(ValueError, match="outside grid"):
         solvers.get("linear")().validate(g, med, src)
+
+
+def test_source_buried_in_the_pml_is_rejected():
+    """The trap: a standoff exactly one PML thick.
+
+    Every source voxel then sits in the sponge, is damped as fast as it is
+    driven, and the run still converges — on a field that is quietly wrong.
+    Nothing else in the native path notices, so ``validate`` must.
+    """
+    from caustica import PMLSpec
+
+    g = Grid(shape=(64, 64, 96), dx=0.25e-3, pml=PMLSpec(thickness=5e-3))
+    assert g.pml_vox == 20
+    med = Medium.homogeneous(g.shape, water())
+
+    buried = plane_cw_source(g, f0=1e6, amplitude=1e5, axis=2, position_vox=10)
+    with pytest.raises(SolverCapabilityError, match="inside the PML band"):
+        solvers.get("linear")().validate(g, med, buried)
+
+    # ...but a plane that CLEARS the band is fine, even though its own edges
+    # necessarily run into the lateral sponge (that is the plane-wave setup).
+    ok = plane_cw_source(g, f0=1e6, amplitude=1e5, axis=2, position_vox=24)
+    solvers.get("linear")().validate(g, med, ok)
+
+    # and a grid with no PML has no band to fall into
+    solvers.get("linear")().validate(
+        Grid(shape=g.shape, dx=g.dx),
+        med,
+        buried,
+    )
 
 
 def test_run_spec_validation():
