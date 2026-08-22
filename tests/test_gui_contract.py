@@ -139,6 +139,22 @@ def test_the_page_says_what_is_not_a_contract():
     assert "**Output is ONE folder.**" in doc_text()
 
 
+def test_the_page_says_which_of_its_own_parts_are_machine_checked():
+    """The page's scope, made honest (mutation review, 2026-08-22).
+
+    Everything this file pins is a list, a table or a literal. Every review
+    finding against the page has been a SENTENCE — a class no list comparison
+    reaches — so the page now says which half of itself is checked instead of
+    implying the whole of it is, and names the tie-breaker.
+    """
+    body = " ".join(section("The GUI contract").split())  # markdown re-wraps
+    assert "**What on this page is machine-checked, and what is not.**" in body
+    for word in ("bullet lists", "tables", "prose"):
+        assert word in body, f"the scope note no longer mentions {word!r}"
+    assert "**If prose and a list disagree, the list is the contract.**" in body
+    assert "tests/test_gui_contract.py" in body  # it names its own checker
+
+
 def test_documented_exit_codes_are_the_runners_exit_codes():
     documented = {unbacktick(name): int(unbacktick(code)) for code, name, _ in table("Exit codes")}
     real = {n: getattr(runner_mod, n) for n in dir(runner_mod) if n.startswith("EXIT_")}
@@ -264,7 +280,22 @@ def test_every_caustica_name_on_the_page_actually_exists():
 
     named = set(re.findall(r"`caustica\.(\w+)\(?\)?`", doc_text()))
     assert named, "the page no longer mentions any caustica.* name"
-    missing = sorted(n for n in named if not hasattr(caustica, n))
+
+    def resolves(name: str) -> bool:
+        # A SUBMODULE is only an attribute of the package once something has
+        # imported it, so `hasattr` alone made this test pass only when
+        # tests/test_colab.py happened to run first: `pytest
+        # tests/test_gui_contract.py` on its own was red at 28996ac for
+        # `caustica.colab` (found while hardening, 2026-08-22).
+        if hasattr(caustica, name):
+            return True
+        try:
+            importlib.import_module(f"caustica.{name}")
+        except ImportError:
+            return False
+        return True
+
+    missing = sorted(n for n in named if not resolves(n))
     assert missing == [], f"docs/gui_contract.md names non-existent caustica.{missing}"
     # and the dotted paths it gives (caustica.io.store.load_result, ...)
     for dotted in sorted(set(re.findall(r"`caustica((?:\.\w+){2,})\(", doc_text()))):
