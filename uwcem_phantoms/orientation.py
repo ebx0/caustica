@@ -29,9 +29,8 @@ The transform is ``flip(transpose(2, 1, 0), axis=0)``. Both halves matter:
 * the flip restores HANDEDNESS. A single axis swap is an ODD permutation
   (determinant -1), i.e. a mirror image — a left breast silently becomes a
   right breast. One extra flip brings the determinant back to +1. This is
-  the same transform :func:`caustica.geometry.load_breast_phantom` already
-  applies, so phantoms exported here land in the frame the rest of the
-  library already uses.
+  the same transform the pre-split text importer applied, so phantoms
+  exported here land in the frame the rest of the library already uses.
 """
 
 from __future__ import annotations

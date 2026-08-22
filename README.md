@@ -67,13 +67,13 @@ volumes (e.g. the breast phantom's `mtype`-style text), and resample everything
 to YOUR `dx` with a selectable method:
 
 ```python
-from caustica.geometry import Ball, Box, Scene, load_breast_phantom
+from caustica.geometry import Ball, Box, LabelVolume, Scene
 from caustica.materials import breast_default
 
 scene = Scene(ndim=3, background=4)                     # coupling gel
 scene.add((Ball((0, 0, 0.05), 0.04) | Box((0, 0, 0.09), (0.08, 0.08, 0.02)))
           - Ball((0, 0, 0.05), 0.01), label=2)          # CSG: (A | B) - C
-phantom = load_breast_phantom("mtype.txt")              # cached as .labels.npz
+phantom = LabelVolume.load_npz("phantom.npz")           # any label volume
 scene.add_volume(phantom.resample(0.3e-3, method="smooth"), ignore=(4,))
 medium = scene.to_medium(grid, breast_default(), supersample=3)
 ```

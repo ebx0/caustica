@@ -127,7 +127,7 @@ def check_source_clears_pml(grid: Grid, source: CWSource) -> None:
     that is true of EVERY source voxel the run still completes and still
     converges — on a quietly wrong field, with no error anywhere. That is the
     natural trap for any geometry whose coupling standoff happens to be about
-    one PML thick; the UWCEM dataset shipped that way once (a 5 mm water gap
+    one PML thick; the first aligned phantom dataset shipped that way once (a 5 mm water gap
     with a 5 mm PML), which is what motivated this check.
 
     PARTIAL overlap is not an error and is not flagged: a plane source spanning

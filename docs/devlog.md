@@ -1329,3 +1329,42 @@ eksik 2 boyut (motor-checkpoint, job-config/steering) elle tarandı.
      kapsandı (main() çağıran notebook üçüncü-parti INFO seline maruz kalmasın).
 - Ders: 1. bulgu bu milestone'da eklenen boş-VRAM düzeltmesinin etkileşim hatası — "düzeltme
   de bir değişikliktir" merceği kendini kanıtladı.
+
+## 2026-08-22 — Oturum 13 devamı (Fable): M10k başladı — W0a + W0b + W0c indi
+
+### W0a — medium_volume (`e16deb2`)
+- `caustica.io.medium_volume`: format artık kütüphanenin malı. Okuyucu mevcut dosya
+  etiketlerini (`caustica-phantom/1` + `hifusim-phantom/1`) kabul ediyor — plan metnindeki
+  `*-dataset/2` adları manifest etiketiydi, dosya etiketi ground-truth'tan düzeltildi (satır
+  kayması değil, ad düzeltmesi; sapma raporu gerektirmeyen türden — davranış: mevcut dosyalar
+  OLDUĞU GİBİ okunuyor, T7 hedefi bu). Yazıcı `write_medium_volume` public, yeni etiket
+  `caustica-medium-volume/1`.
+- BİT-AYNILIK KANITI (R11): gerçek 560×700×480 dataset dosyası → `medium_volume` Medium'u,
+  PhantomAsset yolunun Medium'uyla sha256 düzeyinde birebir (alpha/rho/c/beta + id_map;
+  25 sn). Round-trip (yaz→oku) iki modda da bit-aynı. 13 yeni test.
+- M6f f0-alpha koruması ve su-odak reddi medium_volume'a genelleşti; su-odak `water_label`
+  alanıyla (varsayılan 0) kapatılabilir — genel bir hacimde etiket 0 su olmayabilir.
+
+### W0b — literatür doku değerleri (`d2bac95`)
+- `TISSUE_LIBRARY` (5 giriş) + `AcousticTissue` + dB/cm↔Np/m caustica.materials'a HARFİYEN
+  taşındı (isimler dahil — isim, MaterialDB JSON'una gömülü). uwcem tissue.py uçları artık
+  kütüphaneden `is`-aynı nesne olarak alıyor; ramp + eşleme + pval kuralları yerinde.
+  Rakamlar donmuş literalle test-pinli; 93 fantom testi değişmeden yeşil.
+
+### W0c — bağ kesildi (kırıcı şema değişikliği, K14)
+- SİLİNDİ: `_require_uwcem`, `PhantomDatasetMediumConfig`, `StoredSetupJobConfig`,
+  `StoredSetupOverrides`, `RunPolicyOverrides` (yalnız stored katmanı kullanıyordu),
+  `_build_stored`, `_stored_phantom_file`; `geometry.load_breast_phantom` +
+  `breast_phantom_mapping` + `VolumeImportConfig`'in `breast_phantom_txt` formatı.
+  `caustica-job/1` İKİ kind kaybetti; format numarası DEĞİŞMEDİ (D35: kalkan kind'a özel
+  hata yok — pydantic union hatası yeterli, tek karşılaşacak kişi migrasyonu yapan).
+- `tests/test_import_direction.py` W0c'den ÖNCE yazıldı ve kırmızı doğdu (planın istediği
+  kanıt sırası); şimdi YEŞİL: AST importları + kaba metin taraması ("uwcem" src'de 0 —
+  base.py tarihsel yorumu ve W0a/W0b'nin kendi yorumları dahil yeniden ifade edildi).
+- Test ayrıştırması: test_job'dan 10 blok + test_geometry'den 1 blok VERBATIM staging'e
+  (scratchpad/uwcem_staging/) — W0d'de yeni repoda load_setup→explicit-job kapsamına
+  dönüşecek. Kalan test_job'da full-grid uyarı testi medium_volume kind'ına geçirildi
+  (gerçek dataset dosyasıyla, yeni kapıdan). Generic `load_labels_txt` testleri yerel
+  mapping fonksiyonuyla kaldı.
+- D26 penceresi AÇIK: dokuz yerel setup şu an `caustica run` ile koşamaz (stored_setup yok);
+  `load_setup` çalışıyor. W0d kapatacak: load_setup explicit job üretecek.

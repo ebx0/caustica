@@ -17,7 +17,7 @@ from pydantic import Field
 from caustica.config.models import CausticaModel
 from caustica.geometry import shapes as sh
 from caustica.geometry.scene import Scene
-from caustica.geometry.volumes import LabelVolume, load_breast_phantom
+from caustica.geometry.volumes import LabelVolume
 
 _MM = 1e-3
 
@@ -164,9 +164,15 @@ ShapeConfig = Annotated[
 
 
 class VolumeImportConfig(CausticaModel):
-    """File REFERENCE to an imported label volume (heterogeneous phantom)."""
+    """File REFERENCE to an imported label volume (heterogeneous phantom).
 
-    format: Literal["npz", "breast_phantom_txt"]
+    M10k/W0c removed the ``breast_phantom_txt`` format (a one-source special
+    case): text volumes are converted to ``.npz`` by the source's own tooling
+    — ``load_labels_txt`` with a source-specific ``mapping`` — and imported
+    here as ``npz``.
+    """
+
+    format: Literal["npz"]
     path: str
     position_mm: tuple[float, ...] | None = None
     ignore_labels: tuple[int, ...] = ()
@@ -174,10 +180,7 @@ class VolumeImportConfig(CausticaModel):
     resample_method: Literal["nearest", "smooth"] = "nearest"
 
     def load(self) -> LabelVolume:
-        if self.format == "npz":
-            vol = LabelVolume.load_npz(self.path)
-        else:
-            vol = load_breast_phantom(self.path)
+        vol = LabelVolume.load_npz(self.path)
         if self.resample_dx_mm is not None:
             vol = vol.resample(self.resample_dx_mm * _MM, method=self.resample_method)
         return vol

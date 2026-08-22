@@ -1,8 +1,9 @@
-"""M10b gates: the caustica-job/1 contract — round-trip, parity, overrides,
-scene/volume paths, derived-geometry falsification, and validate's catches.
+"""M10b gates: the caustica-job/1 contract — round-trip, scene/volume paths,
+derived-geometry falsification, and validate's catches.
 
-Stored-setup tests need only the setup JSONs (in git); the ones that touch a
-dataset npz are skipped when ``data/phantoms`` is not populated (CI).
+M10k/W0c: the stored_setup and phantom_dataset cases moved out with the
+phantom package; volume-file coverage lives in tests/test_medium_volume.py.
+Tests touching a local dataset npz skip when ``data/phantoms`` is empty (CI).
 """
 
 import json
@@ -22,13 +23,10 @@ from caustica.config.job import (
     HomogeneousMediumConfig,
     JobConfig,
     JobError,
+    MediumVolumeConfig,
     OutputConfig,
-    PhantomDatasetMediumConfig,
     RunConfig,
-    RunPolicyOverrides,
     SpiralArrayConfig,
-    StoredSetupJobConfig,
-    StoredSetupOverrides,
     build_job,
     dump_job,
     load_job,
@@ -38,13 +36,8 @@ from caustica.geometry.volumes import LabelVolume
 from caustica.materials import water
 
 REPO = Path(__file__).resolve().parents[1]
-SETUPS = REPO / "data" / "setups"
 PHANTOMS = REPO / "data" / "phantoms"
 
-needs_setups = pytest.mark.skipif(
-    not (SETUPS / "manifest.json").exists(),
-    reason="stored setups not built (python -m uwcem_phantoms setup)",
-)
 needs_dataset = pytest.mark.skipif(
     not any(PHANTOMS.glob("*.npz")),
     reason="phantom dataset not built (python -m uwcem_phantoms dataset)",
@@ -106,18 +99,15 @@ def write_job(tmp_path: Path, d: dict, name: str = "job.json") -> Path:
     [
         DriveConfig(f0_mhz=1.2, amplitude_kpa=150.0),
         RunConfig(harmonics=(1, 2, 3), record_region_vox=((4, 40), (0, 32), (2, 60))),
-        RunPolicyOverrides(max_settle_periods=50, convergence_tol=0.005),
         OutputConfig(folder="out/x", quantize=False),
         HomogeneousMediumConfig(material=water(c=1481.0)),
-        PhantomDatasetMediumConfig(file="data/phantoms/x.npz", pml_mm=4.0, linear=True),
+        MediumVolumeConfig(file="data/volumes/x.npz", pml_mm=4.0, linear=True),
         SpiralArrayConfig(n_elements=32, d_outer_mm=60, d_inner_mm=26.4, roc_mm=60),
         BowlArrayConfig(d_outer_mm=12, roc_mm=15),
         FocusConfig(mode="steered", target_mm=(70.0, 87.5, 60.0)),
         ArraySourceConfig(
             array=BowlArrayConfig(d_outer_mm=12, roc_mm=15), apex_mm=(9.0, 9.0, 3.75)
         ),
-        StoredSetupOverrides(amplitude_kpa=200.0, steer_target_mm=(70.0, 87.5, 60.0)),
-        StoredSetupJobConfig(name="j", setup="s1-010204"),
     ],
 )
 def test_every_node_round_trips_through_json(model):
@@ -148,115 +138,6 @@ def test_wrong_format_tag_refused(tmp_path):
     p = write_job(tmp_path, {**scene_job_dict(), "format": "caustica-job/9"})
     with pytest.raises(JobError, match="format"):
         load_job(p)
-
-
-# ------------------------------------------------------- stored-setup parity
-
-
-@needs_setups
-def test_stored_job_reproduces_load_setup_exactly(tmp_path):
-    """The M10b parity gate: the job path and load_setup build the SAME run."""
-    from uwcem_phantoms.setup import load_setup, setup_names
-
-    name = setup_names()[0]
-    p = write_job(
-        tmp_path, {"format": JOB_FORMAT, "kind": "stored_setup", "name": "p", "setup": name}
-    )
-    job, base = load_job(p)
-    built = build_job(job, base_dir=base, with_medium=False)
-    s = load_setup(name, with_medium=False)
-    assert (built.grid.shape, built.grid.dx, built.grid.pml_vox) == (
-        s.grid.shape,
-        s.grid.dx,
-        s.grid.pml_vox,
-    )
-    np.testing.assert_array_equal(built.source.indices, s.source.indices)
-    np.testing.assert_array_equal(built.source.phases, s.source.phases)
-    assert built.source.amplitude == s.source.amplitude
-    assert built.source.f0 == s.source.f0
-    assert built.source.ramp_periods == s.source.ramp_periods
-    assert built.spec == s.run_spec
-    assert built.record_region == s.record_region
-    assert built.focus_vox == s.focus_vox
-    assert built.harmonics == tuple(s.spec["run"]["harmonics"])
-
-
-@needs_setups
-def test_overrides_change_exactly_what_they_name(tmp_path):
-    from uwcem_phantoms.setup import load_setup, setup_names
-
-    name = setup_names()[0]
-    s = load_setup(name, with_medium=False)
-    p = write_job(
-        tmp_path,
-        {
-            "format": JOB_FORMAT,
-            "kind": "stored_setup",
-            "name": "p",
-            "setup": name,
-            "overrides": {
-                "amplitude_kpa": 250.0,
-                "harmonics": [1, 2, 3],
-                "run": {"max_settle_periods": 120, "convergence_tol": 0.005},
-            },
-        },
-    )
-    job, base = load_job(p)
-    built = build_job(job, base_dir=base, with_medium=False)
-    assert built.source.amplitude == 250e3
-    np.testing.assert_array_equal(built.source.indices, s.source.indices)  # geometry untouched
-    assert built.harmonics == (1, 2, 3)
-    assert built.spec.max_settle_periods == 120
-    assert built.spec.convergence_tol == 0.005
-    assert built.spec.min_settle_periods == s.run_spec.min_settle_periods  # unnamed -> unchanged
-
-
-@needs_setups
-def test_f0_override_trips_the_baked_alpha_guard(tmp_path):
-    from uwcem_phantoms.setup import setup_names
-
-    name = setup_names()[0]
-    base_dict = {"format": JOB_FORMAT, "kind": "stored_setup", "name": "p", "setup": name}
-    # Same f0 -> a no-op, allowed.
-    p_ok = write_job(tmp_path, {**base_dict, "overrides": {"f0_mhz": 1.0}}, "ok.json")
-    job, base = load_job(p_ok)
-    build_job(job, base_dir=base, with_medium=False)
-    # Different f0 -> refused, naming alpha (the M6f guarantee survives).
-    p_bad = write_job(tmp_path, {**base_dict, "overrides": {"f0_mhz": 1.5}}, "bad.json")
-    job, base = load_job(p_bad)
-    with pytest.raises(JobError, match="alpha"):
-        build_job(job, base_dir=base, with_medium=False)
-
-
-@needs_setups
-def test_steering_override_rephases_without_moving_voxels(tmp_path):
-    from uwcem_phantoms.setup import load_setup, setup_names
-
-    name = setup_names()[0]
-    s = load_setup(name, with_medium=False)
-    fx, fy, fz = s.focus_vox
-    dxmm = s.grid.dx * 1e3
-    target = [fx * dxmm + 4.0, fy * dxmm, fz * dxmm]  # 4 mm lateral steer
-    p = write_job(
-        tmp_path,
-        {
-            "format": JOB_FORMAT,
-            "kind": "stored_setup",
-            "name": "p",
-            "setup": name,
-            "overrides": {"steer_target_mm": target},
-        },
-    )
-    job, base = load_job(p)
-    built = build_job(job, base_dir=base, with_medium=False)
-    np.testing.assert_array_equal(built.source.indices, s.source.indices)  # same voxel set
-    assert float(np.abs(built.source.phases).max()) > 0.1  # but phased now
-    assert built.focus_vox != s.focus_vox
-    assert built.focus_vox[0] == fx + round(4.0 / dxmm)
-    assert built.derived["focus_mode"] == "steered"
-
-
-# ------------------------------------------------- explicit paths + smoke run
 
 
 def test_scene_job_end_to_end_mini_solve(tmp_path):
@@ -302,55 +183,6 @@ def test_volume_import_job_builds_medium(tmp_path):
     built = build_job(job, base_dir=base)
     assert built.medium is not None
     assert built.medium.c.min() == pytest.approx(1450.0)  # breast_default fat
-
-
-@needs_dataset
-def test_phantom_dataset_job_and_focus_in_water_refusal(tmp_path):
-    npz = sorted(PHANTOMS.glob("*.npz"))[0]
-    common = {
-        "format": JOB_FORMAT,
-        "kind": "explicit",
-        "name": "ds",
-        "medium": {"kind": "phantom_dataset", "file": str(npz), "pml_mm": 5.0},
-        "source": {
-            "kind": "array",
-            "array": {
-                "kind": "archimedean_spiral",
-                "n_elements": 64,
-                "d_outer_mm": 60.0,
-                "d_inner_mm": 26.4,
-                "roc_mm": 60.0,
-            },
-            "apex_mm": [70.0, 87.5, 5.5],
-        },
-        "drive": {"f0_mhz": 1.0, "amplitude_kpa": 100.0},
-    }
-    # Natural focus (z = 65.5 mm) lands in tissue: builds.
-    job, base = load_job(write_job(tmp_path, common, "ok.json"))
-    built = build_job(job, base_dir=base, with_medium=False)
-    assert built.grid.shape == (560, 700, 480)
-    assert built.c_min_hint is not None
-    # A steer into the coupling-water gap is refused by name.
-    bad = {
-        **common,
-        "source": {
-            **common["source"],
-            "focus": {"mode": "steered", "target_mm": [70.0, 87.5, 10.0]},
-        },
-    }
-    job, base = load_job(write_job(tmp_path, bad, "bad.json"))
-    with pytest.raises(JobError, match="water"):
-        build_job(job, base_dir=base, with_medium=False)
-
-
-def test_grid_rule_dataset_fixes_the_grid(tmp_path):
-    d = scene_job_dict(medium={"kind": "phantom_dataset", "file": "x.npz"})
-    with pytest.raises(ValidationError, match="fixes the grid"):
-        _ADAPTER.validate_python(d)  # dataset medium + explicit grid section
-    d2 = scene_job_dict()
-    del d2["grid"]
-    with pytest.raises(ValidationError, match="requires a grid"):
-        _ADAPTER.validate_python(d2)
 
 
 def test_bowl_cannot_be_steered_or_phased(tmp_path):
@@ -406,37 +238,11 @@ def test_validate_passes_a_good_job_and_warns_on_ppw(tmp_path):
     assert any("harmonic 3" in w for w in rep.warnings)
 
 
-@needs_setups
-def test_validate_all_nine_stored_setup_jobs(tmp_path):
-    from uwcem_phantoms.setup import setup_names
-
-    names = setup_names()
-    assert len(names) == 9
-    for name in names:
-        p = write_job(
-            tmp_path,
-            {"format": JOB_FORMAT, "kind": "stored_setup", "name": f"j-{name}", "setup": name},
-            f"{name}.json",
-        )
-        rep = validate_job(p)
-        assert rep.ok, f"{name}: {rep.errors}"
-
-
 def test_validate_catches_typo(tmp_path):
     d = scene_job_dict()
     d["sover"] = "linear"
     rep = validate_job(write_job(tmp_path, d))
     assert not rep.ok and any("sover" in e for e in rep.errors)
-
-
-@needs_setups
-def test_validate_catches_broken_setup_reference(tmp_path):
-    p = write_job(
-        tmp_path,
-        {"format": JOB_FORMAT, "kind": "stored_setup", "name": "j", "setup": "s9-nonexistent"},
-    )
-    rep = validate_job(p)
-    assert not rep.ok and any("s9-nonexistent" in e for e in rep.errors)
 
 
 def test_validate_catches_source_buried_in_pml(tmp_path):
@@ -486,64 +292,13 @@ def test_cli_validate_exit_codes(tmp_path):
 
 
 @needs_dataset
-def test_explicit_dataset_f0_guard(tmp_path):
-    """M6f survives the EXPLICIT path too: dataset + wrong f0 is refused."""
-    npz = sorted(PHANTOMS.glob("*.npz"))[0]
-    d = {
-        "format": JOB_FORMAT,
-        "kind": "explicit",
-        "name": "wrong-f0",
-        "medium": {"kind": "phantom_dataset", "file": str(npz)},
-        "source": {
-            "kind": "array",
-            "array": {
-                "kind": "archimedean_spiral",
-                "n_elements": 64,
-                "d_outer_mm": 60.0,
-                "d_inner_mm": 26.4,
-                "roc_mm": 60.0,
-            },
-            "apex_mm": [70.0, 87.5, 5.5],
-        },
-        "drive": {"f0_mhz": 1.5, "amplitude_kpa": 100.0},  # dataset baked at 1.0
-    }
-    job, base = load_job(write_job(tmp_path, d))
-    with pytest.raises(JobError, match="alpha"):
-        build_job(job, base_dir=base, with_medium=False)
-
-
-@needs_setups
-@needs_dataset
-def test_steered_stored_into_water_refused_at_build(tmp_path):
-    """run and validate must AGREE: the water-steer refusal lives in build."""
-    from uwcem_phantoms.setup import setup_names
-
-    name = setup_names()[0]
-    p = write_job(
-        tmp_path,
-        {
-            "format": JOB_FORMAT,
-            "kind": "stored_setup",
-            "name": "w",
-            "setup": name,
-            "overrides": {"steer_target_mm": [70.0, 87.5, 10.0]},  # coupling-water gap
-        },
-    )
-    job, base = load_job(p)
-    with pytest.raises(JobError, match="water"):
-        build_job(job, base_dir=base, with_medium=False)
-    rep = validate_job(p)  # and validate reports the same refusal as an error
-    assert not rep.ok and any("water" in e for e in rep.errors)
-
-
-@needs_dataset
 def test_validate_warns_on_full_grid_recording(tmp_path):
     npz = sorted(PHANTOMS.glob("*.npz"))[0]
     d = {
         "format": JOB_FORMAT,
         "kind": "explicit",
         "name": "full-rec",
-        "medium": {"kind": "phantom_dataset", "file": str(npz)},
+        "medium": {"kind": "medium_volume", "file": str(npz)},
         "source": {
             "kind": "array",
             "array": {

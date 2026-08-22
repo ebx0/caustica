@@ -246,28 +246,7 @@ def load_labels_txt(
     return out
 
 
-def breast_phantom_mapping(values: np.ndarray) -> np.ndarray:
-    """The production breast phantom's value->tissue rule (notebook port).
-
-    -2 -> 1 (skin), >0 -> 2 (fat/glandular), -4 -> 3 (muscle),
-    everything else -> 4 (coupling gel / background).
-    """
-    labels = np.full(values.shape, 4, dtype=np.uint8)
-    labels[values == -2] = 1
-    labels[values > 0] = 2
-    labels[values == -4] = 3
-    return labels
-
-
-def load_breast_phantom(path: str | Path, cache: bool = True) -> LabelVolume:
-    """Load the production mtype phantom (0.5 mm, 310x355x253, Fortran order)."""
-    return load_labels_txt(
-        path,
-        shape=(310, 355, 253),
-        dx=0.5e-3,
-        mapping=breast_phantom_mapping,
-        order="F",
-        transpose=(2, 1, 0),
-        flip_axes=(0,),
-        cache=cache,
-    )
+# ``breast_phantom_mapping`` / ``load_breast_phantom`` moved to the phantom
+# repository (M10k/W0c): they hardcoded ONE source's production shape and
+# value->tissue rule. ``load_labels_txt`` above is the generic machinery —
+# the ``mapping`` callable is where a source's specifics belong.

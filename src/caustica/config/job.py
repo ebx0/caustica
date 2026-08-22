@@ -5,26 +5,21 @@ later, the GUI) writes a job file, ``python -m caustica validate`` checks it
 without burning GPU time, and the runner (M10c) executes it. Everything a
 run needs is either IN the file or derived from it — nothing is baked.
 
-Two job kinds, discriminated on ``kind``:
-
-* ``stored_setup`` — references one of the stored, verified setups in
-  ``data/setups/`` (phantom + transducer + placement + focus + run policy as
-  one reviewed decision) and optionally OVERRIDES the safe-to-vary knobs:
-  amplitude, harmonics, run policy, electronic steering. Changing ``f0`` is
-  refused — the dataset's absorption was baked at the stored f0 (the M6f
-  guarantee survives the override layer).
-* ``explicit`` — the full tree: medium (phantom dataset | CSG scene | volume
-  import | homogeneous) + grid + array source (spiral | bowl, natural or
-  steered focus) + drive + run policy.
+One job kind: ``explicit`` — the full tree: medium (medium_volume file |
+CSG scene | volume import | homogeneous) + grid + array source (spiral |
+bowl, natural or steered focus) + drive + run policy.
 
 Contract rules (same as every caustica config): pydantic, ``extra="forbid"``
 (a typo'd key is an error, never a silent no-op), user units are mm / MHz /
 kPa, voxel counts are always derived, and every model round-trips through
 JSON losslessly.
 
-The ``uwcem_phantoms`` side package (repo checkout, not part of the wheel)
-is imported lazily and only for the two kinds that need it; a wheel-only
-install can still build scene / volume / homogeneous jobs.
+History (M10k, 2026-08-22): the ``stored_setup`` job kind and the
+``phantom_dataset`` medium kind were REMOVED — a breaking ``caustica-job/1``
+change, deliberate and recorded (the format number stays; no stability
+guarantee before v1.0). The library carries no phantom-source-specific code;
+volume media enter through the generic ``medium_volume`` kind, and the
+external phantom tooling emits explicit jobs.
 """
 
 from __future__ import annotations
@@ -51,7 +46,7 @@ from caustica.sources import CWSource, bowl_cw_source
 JOB_FORMAT = "caustica-job/1"
 
 _MM = 1e-3
-#: Geometry tolerance for derived-value re-checks [mm] (same as uwcem setups).
+#: Geometry tolerance for derived-value re-checks [mm].
 GEOM_ATOL_MM = 1e-6
 #: Steering phases assume propagation through coupling water (das_phases c0).
 STEER_C0 = 1500.0
@@ -59,20 +54,6 @@ STEER_C0 = 1500.0
 
 class JobError(ValueError):
     """A job that parses but cannot be built into a valid run."""
-
-
-def _require_uwcem(what: str):
-    """Import the repo-side phantom package, or explain what is missing."""
-    try:
-        import uwcem_phantoms  # noqa: PLC0415 (lazy on purpose)
-
-        return uwcem_phantoms
-    except ImportError as exc:  # pragma: no cover - wheel-only installs
-        raise JobError(
-            f"{what} requires the `uwcem_phantoms` side package, which ships with the "
-            f"repo checkout (not the caustica wheel). Run from a repo checkout or add "
-            f"the repo root to PYTHONPATH."
-        ) from exc
 
 
 # ------------------------------------------------------------------ drive/run
@@ -118,25 +99,6 @@ class RunConfig(CausticaModel):
         if self.record_region_vox is None:
             return None
         return tuple(slice(int(a), int(b)) for a, b in self.record_region_vox)
-
-
-class RunPolicyOverrides(CausticaModel):
-    """Partial :class:`CWRunSpec`: only the fields you set change."""
-
-    cfl: float | None = None
-    min_settle_periods: int | None = None
-    max_settle_periods: int | None = None
-    convergence_tol: float | None = None
-    n_record_periods: int | None = None
-    t_end_min_us: float | None = None
-
-    def apply(self, spec: CWRunSpec) -> CWRunSpec:
-        updates = {k: v for k, v in self.model_dump().items() if v is not None}
-        if not updates:
-            return spec
-        # Full re-validation on purpose: model_copy(update=...) would skip the
-        # cross-field validators (min <= max, cfl <= hard max).
-        return CWRunSpec(**{**spec.model_dump(), **updates})
 
 
 class OutputConfig(CausticaModel):
@@ -213,31 +175,6 @@ class VolumeImportMediumConfig(CausticaModel):
         return min(m.c for m in self._db().materials.values())
 
 
-class PhantomDatasetMediumConfig(CausticaModel):
-    """One aligned dataset phantom from ``data/phantoms`` (npz asset file).
-
-    The grid comes FROM the file (shape + dx are the dataset's); only the
-    PML thickness is chosen here, so an explicit job cannot silently run a
-    resampled ghost of the dataset.
-    """
-
-    kind: Literal["phantom_dataset"] = "phantom_dataset"
-    file: str = Field(..., description="Path to the dataset npz (absolute or job-relative)")
-    pml_mm: float = Field(5.0, ge=0.0)
-    linear: bool = Field(False, description="Zero the nonlinearity (asset.to_medium(linear=...))")
-
-    def load_asset(self, base_dir: Path | None):
-        _require_uwcem("medium kind 'phantom_dataset'")
-        from uwcem_phantoms.asset import PhantomAsset  # noqa: PLC0415 (lazy)
-
-        path = Path(self.file)
-        if base_dir is not None and not path.is_absolute():
-            path = base_dir / path
-        if not path.exists():
-            raise JobError(f"phantom dataset file not found: {path}")
-        return PhantomAsset.load(path)
-
-
 class MediumVolumeConfig(CausticaModel):
     """A caustica ``medium_volume`` file — the ONE door for volume media.
 
@@ -286,11 +223,7 @@ class MediumVolumeConfig(CausticaModel):
 
 
 MediumConfig = Annotated[
-    HomogeneousMediumConfig
-    | SceneMediumConfig
-    | VolumeImportMediumConfig
-    | PhantomDatasetMediumConfig
-    | MediumVolumeConfig,
+    HomogeneousMediumConfig | SceneMediumConfig | VolumeImportMediumConfig | MediumVolumeConfig,
     Field(discriminator="kind"),
 ]
 
@@ -299,7 +232,7 @@ MediumConfig = Annotated[
 
 
 class SpiralArrayConfig(CausticaModel):
-    """Archimedean-spiral multi-element array recipe (mirror of uwcem S1)."""
+    """Archimedean-spiral multi-element array recipe (the production S1 layout)."""
 
     kind: Literal["archimedean_spiral"] = "archimedean_spiral"
     n_elements: int = Field(64, ge=1)
@@ -519,45 +452,6 @@ class ArraySourceConfig(CausticaModel):
 # ------------------------------------------------------------------ job kinds
 
 
-class StoredSetupOverrides(CausticaModel):
-    """The knobs that are SAFE to vary on a stored setup.
-
-    ``f0_mhz`` is accepted only when it equals the setup's own f0 — the
-    dataset's absorption (alpha) was baked at that frequency, and running
-    another one would silently use wrong tissue losses (M6f guarantee).
-    """
-
-    amplitude_kpa: float | None = Field(None, gt=0.0)
-    f0_mhz: float | None = Field(None, gt=0.0)
-    harmonics: tuple[int, ...] | None = None
-    steer_target_mm: tuple[float, float, float] | None = Field(
-        None, description="Electronic steering target (grid frame, mm); phases become DAS"
-    )
-    run: RunPolicyOverrides = Field(default_factory=RunPolicyOverrides)
-
-    @model_validator(mode="after")
-    def _check(self) -> StoredSetupOverrides:
-        h = self.harmonics
-        if h is not None and (not h or h[0] != 1):
-            raise ValueError(f"harmonics must start at 1, got {h}")
-        return self
-
-
-class StoredSetupJobConfig(CausticaModel):
-    """A job that references a stored, verified setup (``data/setups``)."""
-
-    format: Literal["caustica-job/1"] = JOB_FORMAT
-    kind: Literal["stored_setup"] = "stored_setup"
-    name: str = Field(..., min_length=1, description="Job name (output naming)")
-    setup: str = Field(..., description="Stored setup name, e.g. 's1-010204'")
-    setups_dir: str | None = None
-    data_dir: str | None = None
-    overrides: StoredSetupOverrides = Field(default_factory=StoredSetupOverrides)
-    solver: str = "westervelt"
-    backend: Literal["auto", "numpy", "cupy"] = "auto"
-    output: OutputConfig = Field(default_factory=OutputConfig)
-
-
 class ExplicitJobConfig(CausticaModel):
     """A job that describes the whole setup itself."""
 
@@ -566,7 +460,7 @@ class ExplicitJobConfig(CausticaModel):
     name: str = Field(..., min_length=1)
     medium: MediumConfig
     grid: GridConfig | None = Field(
-        None, description="Required unless medium is phantom_dataset (grid comes from the file)"
+        None, description="Required unless medium is medium_volume (grid comes from the file)"
     )
     source: ArraySourceConfig
     drive: DriveConfig
@@ -577,7 +471,7 @@ class ExplicitJobConfig(CausticaModel):
 
     @model_validator(mode="after")
     def _grid_rule(self) -> ExplicitJobConfig:
-        grid_from_file = isinstance(self.medium, (PhantomDatasetMediumConfig, MediumVolumeConfig))
+        grid_from_file = isinstance(self.medium, MediumVolumeConfig)
         if grid_from_file and self.grid is not None:
             raise ValueError(
                 f"medium '{self.medium.kind}' fixes the grid (shape + dx come from the "
@@ -589,12 +483,14 @@ class ExplicitJobConfig(CausticaModel):
         return self
 
 
-JobConfig = Annotated[StoredSetupJobConfig | ExplicitJobConfig, Field(discriminator="kind")]
+#: One job kind since M10k (``stored_setup`` removed — see the module
+#: docstring); the alias survives so consumers keep one import site.
+JobConfig = ExplicitJobConfig
 
 _JOB_ADAPTER: TypeAdapter = TypeAdapter(JobConfig)
 
 
-def load_job(path: str | Path) -> tuple[StoredSetupJobConfig | ExplicitJobConfig, Path]:
+def load_job(path: str | Path) -> tuple[ExplicitJobConfig, Path]:
     """Parse a job file; returns (config, base_dir for relative paths)."""
     path = Path(path)
     if not path.exists():
@@ -605,7 +501,7 @@ def load_job(path: str | Path) -> tuple[StoredSetupJobConfig | ExplicitJobConfig
     return _JOB_ADAPTER.validate_python(data), path.parent
 
 
-def dump_job(job: StoredSetupJobConfig | ExplicitJobConfig, path: str | Path) -> Path:
+def dump_job(job: ExplicitJobConfig, path: str | Path) -> Path:
     """Write a job file (pretty JSON, atomic)."""
     from caustica.io.atomic import atomic_write  # noqa: PLC0415 (io stays lazy here)
 
@@ -632,7 +528,7 @@ class BuiltJob:
     solver: str
     backend: str
     output: OutputConfig
-    job: StoredSetupJobConfig | ExplicitJobConfig
+    job: ExplicitJobConfig
     medium: Medium | None = None
     c_min_hint: float | None = None  # for ppw checks when medium is skipped
     derived: dict[str, Any] = field(default_factory=dict)
@@ -663,110 +559,13 @@ def _resolve_medium_paths(medium, base_dir: Path | None):
     return medium
 
 
-def _build_stored(job: StoredSetupJobConfig, base_dir: Path | None, with_medium: bool) -> BuiltJob:
-    _require_uwcem("job kind 'stored_setup'")
-    from uwcem_phantoms.setup import load_setup  # noqa: PLC0415 (lazy)
-
-    out_dir = _resolve(job.setups_dir, base_dir) if job.setups_dir else None
-    data_dir = _resolve(job.data_dir, base_dir) if job.data_dir else None
-    s = load_setup(job.setup, out_dir=out_dir, data_dir=data_dir, with_medium=with_medium)
-    ov = job.overrides
-
-    # The M6f alpha guarantee survives the override layer: a different f0
-    # would run the dataset's baked absorption at the wrong frequency.
-    if ov.f0_mhz is not None and abs(ov.f0_mhz * 1e6 - s.f0) > 1e-3:
-        raise JobError(
-            f"override f0 = {ov.f0_mhz:g} MHz != the setup's {s.f0 / 1e6:g} MHz. The dataset "
-            f"phantom baked its absorption (alpha) at {s.f0 / 1e6:g} MHz; running another "
-            f"frequency would silently use wrong tissue losses. Rebuild the dataset at the "
-            f"new f0 instead of overriding it."
-        )
-
-    src, focus_vox = s.source, s.focus_vox
-    derived: dict[str, Any] = {
-        "setup": job.setup,
-        "array": s.spec["array"],
-        "apex_vox": s.spec["placement"]["apex_vox"],
-        "focus_mode": "natural",
-        "phases": "zeros",
-    }
-
-    if ov.steer_target_mm is not None:
-        apex_vox = tuple(int(v) for v in s.spec["placement"]["apex_vox"])
-        target_m = np.asarray(ov.steer_target_mm, np.float64) * _MM
-        apex_m = np.asarray(apex_vox, np.float64) * s.grid.dx
-        phases = s.array.das_phases(target_m - apex_m, s.f0, c0=STEER_C0)
-        asrc = s.array.voxelize(s.grid, apex_vox, f0=s.f0, amplitude=src.amplitude, phases=phases)
-        src = CWSource(
-            indices=asrc.source.indices,
-            phases=asrc.source.phases,
-            amplitude=asrc.source.amplitude,
-            f0=asrc.source.f0,
-            ramp_periods=s.source.ramp_periods,
-            label=asrc.source.label,
-        )
-        focus_vox = tuple(int(round(t / s.grid.dx)) for t in target_m)  # type: ignore[assignment]
-        for v, ax_n in zip(focus_vox, s.grid.shape, strict=True):
-            if not 0 <= v < ax_n:
-                raise JobError(
-                    f"steer target {ov.steer_target_mm} mm -> voxel {focus_vox} is outside "
-                    f"the grid {s.grid.shape}"
-                )
-        check_source_clears_pml(s.grid, src)
-        # The stored file only vouches for ITS OWN natural focus; a steer can
-        # drag it into the coupling-water gap. Refuse HERE (build), so run and
-        # validate agree — reading only the labels member of the npz, which
-        # is cheap relative to the medium (adversarial review, 2026-08-19).
-        ph_file = _stored_phantom_file(job, base_dir)
-        if ph_file is not None:
-            with np.load(ph_file, allow_pickle=False) as npz:
-                if int(npz["labels"][tuple(focus_vox)]) == 0:
-                    raise JobError(
-                        f"steered focus {tuple(focus_vox)} lands in the coupling water "
-                        f"(dataset class 0), not tissue — steer deeper or drop the override."
-                    )
-        derived["focus_mode"] = "steered"
-        derived["phases"] = f"das(c0={STEER_C0:g})"
-        derived["steer_target_mm"] = list(ov.steer_target_mm)
-
-    if ov.amplitude_kpa is not None:
-        src = CWSource(
-            indices=src.indices,
-            phases=src.phases,
-            amplitude=ov.amplitude_kpa * 1e3,
-            f0=src.f0,
-            ramp_periods=src.ramp_periods,
-            label=src.label,
-        )
-
-    derived["focus_vox"] = list(focus_vox)
-    derived["source_voxels"] = int(src.n_points)
-    harmonics = ov.harmonics or tuple(int(h) for h in s.spec["run"]["harmonics"])
-    return BuiltJob(
-        name=job.name,
-        grid=s.grid,
-        source=src,
-        spec=ov.run.apply(s.run_spec),
-        harmonics=harmonics,
-        record_region=s.record_region,
-        focus_vox=tuple(focus_vox),  # type: ignore[arg-type]
-        solver=job.solver,
-        backend=job.backend,
-        output=job.output,
-        job=job,
-        medium=s.medium,
-        c_min_hint=None,  # dataset materials are not loaded in the cheap path
-        derived=derived,
-    )
-
-
 def _check_dataset_f0(job_f0_hz: float, baked_f0_mhz: float | None, what: str) -> None:
-    """The M6f alpha guarantee, on EVERY path that can pair a dataset with a drive.
+    """The M6f alpha guarantee, on EVERY path that can pair a file with a drive.
 
-    The dataset phantom baked its absorption (alpha) at one frequency;
-    running another silently uses wrong tissue losses. build_setups and the
-    stored-setup override layer refuse this — the explicit path must too
-    (adversarial review, 2026-08-19: this guard was missing here).
+    A volume file whose absorption (alpha) was baked at one frequency must
+    refuse to run at another — anything else silently uses wrong tissue
+    losses (adversarial review, 2026-08-19: this guard was once missing on
+    the explicit path).
     """
     if baked_f0_mhz is None:
         return
@@ -782,26 +581,12 @@ def _check_dataset_f0(job_f0_hz: float, baked_f0_mhz: float | None, what: str) -
 def _build_explicit(job: ExplicitJobConfig, base_dir: Path | None, with_medium: bool) -> BuiltJob:
     medium_cfg = _resolve_medium_paths(job.medium, base_dir)
 
-    # The medium build is the EXPENSIVE part (GBs for a dataset phantom), so
+    # The medium build is the EXPENSIVE part (GBs for a full-size volume), so
     # every refusal that only needs geometry/labels runs first.
     labels = None
     water_label: int | None = None
-    asset = None
     volume = None
-    if isinstance(medium_cfg, PhantomDatasetMediumConfig):
-        asset = medium_cfg.load_asset(base_dir)
-        _check_dataset_f0(
-            job.drive.f0_hz,
-            asset.meta.get("f0_mhz", asset.meta.get("dataset", {}).get("f0_mhz")),
-            "explicit phantom_dataset job",
-        )
-        grid = asset.grid(
-            PMLSpec(thickness=medium_cfg.pml_mm * _MM) if medium_cfg.pml_mm > 0 else None
-        )
-        labels = asset.labels
-        water_label = 0
-        c_min = min(m.c for m in asset.materials.materials.values())
-    elif isinstance(medium_cfg, MediumVolumeConfig):
+    if isinstance(medium_cfg, MediumVolumeConfig):
         volume = medium_cfg.load_volume(base_dir)
         # The M6f protection generalizes: a file whose alpha was baked at a
         # frequency refuses to run at another one.
@@ -832,10 +617,7 @@ def _build_explicit(job: ExplicitJobConfig, base_dir: Path | None, with_medium: 
             f"medium_volume) set water_label to null if label {water_label} is not water."
         )
 
-    if asset is not None:
-        medium = asset.to_medium(linear=medium_cfg.linear) if with_medium else None
-        del asset
-    elif volume is not None:
+    if volume is not None:
         medium = volume.to_medium(linear=medium_cfg.linear) if with_medium else None
         del volume
     else:
@@ -860,7 +642,7 @@ def _build_explicit(job: ExplicitJobConfig, base_dir: Path | None, with_medium: 
 
 
 def build_job(
-    job: StoredSetupJobConfig | ExplicitJobConfig,
+    job: ExplicitJobConfig,
     base_dir: Path | None = None,
     with_medium: bool = True,
 ) -> BuiltJob:
@@ -870,8 +652,6 @@ def build_job(
     geometry is wanted (validation, planning); everything geometric is still
     built and checked for real.
     """
-    if isinstance(job, StoredSetupJobConfig):
-        return _build_stored(job, base_dir, with_medium)
     return _build_explicit(job, base_dir, with_medium)
 
 
@@ -903,7 +683,7 @@ class JobReport:
 
 
 #: Conservative soft-tissue minimum sound speed for approximate ppw checks
-#: when the medium is not loaded (stored setups in the cheap path).
+#: when the medium is not loaded (the cheap validation path).
 _APPROX_C_MIN = 1450.0
 
 
@@ -940,9 +720,7 @@ def validate_job(path: str | Path, fast: bool = False) -> JobReport:
         report.errors.append(f"{type(exc).__name__}: {exc}")
         return report
 
-    heavy_medium = isinstance(job, StoredSetupJobConfig) or isinstance(
-        getattr(job, "medium", None), (PhantomDatasetMediumConfig, MediumVolumeConfig)
-    )
+    heavy_medium = isinstance(job.medium, MediumVolumeConfig)
     with_medium = not fast and not heavy_medium
     try:
         built = build_job(job, base_dir=base_dir, with_medium=with_medium)
@@ -961,10 +739,10 @@ def validate_job(path: str | Path, fast: bool = False) -> JobReport:
         f"harmonics {built.harmonics}",
     ]
 
-    # Recording cost is a CHOICE the user must see: the stored setups record
-    # a deliberate AOI, but an explicit job silently defaults to the full
-    # grid — 188 Mvox on the dataset grid is ~1.5 GiB of complex64 record
-    # buffer PER HARMONIC plus a multi-GB result file over Drive.
+    # Recording cost is a CHOICE the user must see: an explicit job silently
+    # defaults to the full grid — 188 Mvox on a full-size volume is ~1.5 GiB
+    # of complex64 record buffer PER HARMONIC plus a multi-GB result file
+    # over Drive.
     rec = built.record_region
     if rec is None:
         n_rec = int(np.prod(g.shape))
@@ -981,21 +759,6 @@ def validate_job(path: str | Path, fast: bool = False) -> JobReport:
             f"recording the FULL grid ({n_rec:,} voxels): ~{per_h_mib:,.0f} MiB of record "
             f"buffer per harmonic and a multi-GB result file. If you only need the focal "
             f"region, set run.record_region_vox."
-        )
-
-    # Steering a stored setup can move the focus into the coupling water;
-    # the stored file only vouches for ITS OWN natural focus.
-    # (The steered stored-setup water-focus refusal lives in _build_stored,
-    # so run and validate agree by construction; when the dataset npz is not
-    # on disk the build simply cannot check it, and that is worth a note.)
-    if (
-        isinstance(job, StoredSetupJobConfig)
-        and job.overrides.steer_target_mm is not None
-        and _stored_phantom_file(job, base_dir) is None
-    ):
-        report.warnings.append(
-            "steered focus tissue NOT verified: dataset npz not on disk (the check "
-            "will run wherever the dataset is present, e.g. on Colab)"
         )
 
     # Solver capabilities (needs the medium for the nonlinearity check).
@@ -1031,18 +794,3 @@ def validate_job(path: str | Path, fast: bool = False) -> JobReport:
     report.warnings.extend(low_ppw_warnings(g, f0, built.harmonics, c_min, approx))
     report.summary.append(f"ppw at f0: {g.ppw(f0, c_min):.2f}{approx}")
     return report
-
-
-def _stored_phantom_file(job: StoredSetupJobConfig, base_dir: Path | None) -> Path | None:
-    """The dataset npz a stored setup points at (for the steered-focus check)."""
-    from uwcem_phantoms.paths import dataset_dir  # noqa: PLC0415
-    from uwcem_phantoms.setup import setups_dir  # noqa: PLC0415
-
-    out = Path(_resolve(job.setups_dir, base_dir)) if job.setups_dir else setups_dir()
-    sp = out / f"{job.setup}.json"
-    if not sp.exists():
-        return None
-    spec = json.loads(sp.read_text(encoding="utf-8"))
-    data = Path(_resolve(job.data_dir, base_dir)) if job.data_dir else dataset_dir()
-    ph = data / spec["phantom"]["file"]
-    return ph if ph.exists() else None
