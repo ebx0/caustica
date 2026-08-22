@@ -340,17 +340,62 @@ def test_cancel_file_stops_at_period_boundary_and_resume_is_bitwise_identical(tm
 
 
 def test_cancel_poll_is_one_stat_per_period_never_per_step(tmp_path, monkeypatch):
-    """The cost gate: a per-step poll would put a syscall between kernels."""
-    real_is_file = Path.is_file
-    polls: list[str] = []
+    """The cost gate: a per-step poll would put a syscall between kernels.
+
+    Counted TWO ways, because either one alone is a hole (mutation review,
+    2026-08-22). The runner asks through exactly ONE helper, so its call count
+    is the poll count whatever filesystem call that helper happens to use; and
+    every OTHER spelling of "does `cancel` exist?" is watched separately, so a
+    poll that bypassed the helper is caught too. Instrumenting `Path.is_file`
+    alone was not enough: the same regression written `os.path.exists(...)` is
+    `nt._path_exists` on Windows/py3.12 — a C shortcut that never reaches
+    `os.stat` — and 508 per-step polls went unseen with the whole suite green.
+    Zero polls is not green either: a stop button nobody asks about is broken.
+    """
+    import os.path
+
+    import caustica.runner as runner_mod
+
     boundaries: list[int] = []
+    polls: list[str] = []  # through the runner's one poll helper
+    bypass: list[str] = []  # any other filesystem question about `cancel`
+    inside = False
 
-    def counting_is_file(self, *a, **kw):
-        if self.name == CANCEL_FILE:
-            polls.append(str(self))
-        return real_is_file(self, *a, **kw)
+    real_poll = runner_mod._cancel_requested
 
-    monkeypatch.setattr(Path, "is_file", counting_is_file)
+    def counting_poll(path):
+        nonlocal inside
+        polls.append(str(path))
+        inside = True  # what the helper itself asks is not a bypass
+        try:
+            return real_poll(path)
+        finally:
+            inside = False
+
+    def names_the_cancel_file(arg) -> bool:
+        try:
+            return os.path.basename(os.fspath(arg)) == CANCEL_FILE
+        except TypeError:  # an open fd, not a path
+            return False
+
+    def watch(owner, attr: str) -> None:
+        real = getattr(owner, attr)
+
+        def wrapper(*a, **kw):
+            if not inside and a and names_the_cancel_file(a[0]):
+                bypass.append(f"{getattr(owner, '__name__', owner)}.{attr}")
+            return real(*a, **kw)
+
+        monkeypatch.setattr(owner, attr, wrapper)
+
+    monkeypatch.setattr(runner_mod, "_cancel_requested", counting_poll)
+    for attr in ("is_file", "is_dir", "exists", "stat"):
+        watch(Path, attr)
+    for attr in ("isfile", "isdir", "exists", "lexists"):
+        watch(os.path, attr)  # the C shortcuts a pathlib-only watch misses
+    for attr in ("stat", "lstat"):
+        watch(os, attr)
+
     out = tmp_path / "out"
     code = run_job_file(
         mini_job(tmp_path), opts(out=out, progress=lambda ev: boundaries.append(ev["period"]))
@@ -358,12 +403,16 @@ def test_cancel_poll_is_one_stat_per_period_never_per_step(tmp_path, monkeypatch
     assert code == EXIT_OK
     steps = json.loads((out / "run_meta.json").read_text(encoding="utf-8"))["actual"]["steps_total"]
     spp = json.loads((out / "plan.json").read_text(encoding="utf-8"))["spp"]
+
+    assert bypass == [], f"`{CANCEL_FILE}` is polled outside the one helper: {sorted(set(bypass))}"
+    total = len(polls) + len(bypass)
+    assert total > 0, "the cancel file was never polled at all"
     # One poll per period boundary (+ the one before the record window)...
-    assert len(polls) <= len(boundaries) + 1
+    assert total <= len(boundaries) + 1
     # ...which is one poll per spp STEPS. A per-step poll would make these
     # equal; here they differ by exactly the factor the boundary buys.
-    assert len(polls) < steps
-    assert len(polls) * spp <= steps + spp
+    assert total < steps
+    assert total * spp <= steps + spp
 
 
 def test_a_stale_cancel_file_does_not_cancel_the_next_run(tmp_path):
