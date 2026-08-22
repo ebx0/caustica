@@ -181,6 +181,25 @@ def _error_outdir(established: Path | None, opts: RunnerOptions) -> Path | None:
         return None
 
 
+def _cancel_requested(path: Path) -> bool:
+    """The ONE place the ``cancel`` file is polled — deliberately a function.
+
+    The poll's cost contract (one ``stat`` per acoustic period boundary, never
+    per step) is only TESTABLE if there is a single call site to count, and
+    counting a filesystem primitive instead is not enough: on Windows/py3.12
+    ``os.path.exists`` is ``nt._path_exists``, a C shortcut that never reaches
+    ``os.stat``, so a per-step poll written that way is invisible to a test
+    that instruments ``Path.exists`` or ``os.stat`` (mutation review,
+    2026-08-22). ``tests/test_runner.py`` counts calls to THIS function, and
+    separately watches every other spelling for a poll that bypassed it.
+
+    ``is_file``, not ``exists``: a *directory* named ``cancel`` can never be
+    unlinked, so treating it as a request would stop every run in that folder
+    at period 1 — ``--resume`` included, forever.
+    """
+    return path.is_file()
+
+
 def _clear_stale(path: Path) -> None:
     """Remove a leftover ``error.json``/``cancel`` from a previous attempt."""
     try:
@@ -855,8 +874,10 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
         # The cancel poll (M10l) is ONE stat, at the period boundary, which
         # is the only place this hook is called from — a per-step poll would
         # put a filesystem round-trip between GPU kernels and is exactly what
-        # the period-boundary discipline exists to prevent.
-        if cancel_path.is_file():
+        # the period-boundary discipline exists to prevent. It goes through
+        # `_cancel_requested` and nowhere else, so the cost claim can be
+        # counted rather than believed (see that helper).
+        if _cancel_requested(cancel_path):
             cancelled = True
             return True
         return deadline is not None and time.monotonic() >= deadline
