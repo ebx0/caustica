@@ -39,9 +39,10 @@ Cancel protocol (M10l — the GUI's "Stop" button, and the reason killing the
 process is not the only way out): create an (empty) file named ``cancel`` in
 the output folder. The next PERIOD BOUNDARY sees it — one ``stat`` per
 period, never per step — writes a checkpoint and exits 5. The runner then
-removes the file so that ``--resume`` continues instead of stopping again,
-and a run that completed with ``--resume`` is BIT-IDENTICAL to the
-uninterrupted one. Only the native engine takes checkpoints, so only native
+removes the file, so a stopped folder never advertises a stop nobody will
+honor; the ``--resume`` is carried by the separate clear at the start of
+every real run. A run that completed with ``--resume`` is BIT-IDENTICAL to
+the uninterrupted one. Only the native engine takes checkpoints, so only native
 solvers can be cancelled this way; a ``kwave`` job ignores the file, because
 stopping it would lose the whole run rather than pause it.
 
@@ -918,8 +919,17 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
     except RunInterrupted as exc:
         hb.write("interrupted", detail=str(exc))
         if cancelled:
-            # Consume the request: leaving it would cancel the --resume too,
-            # at its first period boundary, forever (M10l).
+            # Consume the request so a stopped folder does not advertise a
+            # stop nobody will honor: once this process exits, `cancel` is
+            # gone and a GUI polling the folder sees a settled state.
+            #
+            # This is BELT-AND-BRACES, not the load-bearing part, though the
+            # comment here used to claim otherwise ("leaving it would cancel
+            # the --resume too, forever"). That is false: the clear at the
+            # top of every real run above is what carries the resume, and
+            # with this line deleted the resume still completes bit-identical
+            # (measured, mutation review 2026-08-22). Both halves are pinned
+            # in tests/test_runner.py.
             _clear_stale(cancel_path)
             print(f"\nCANCELLED on request ({CANCEL_FILE} file): {exc}")
         else:

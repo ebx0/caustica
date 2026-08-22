@@ -242,13 +242,18 @@ involved.
   count is periods + 1.) The poll asks whether `cancel` is a *file*: a
   directory of that name is not a request and is ignored.
 - On seeing it the run writes a checkpoint, stops, and exits **5**.
-- The runner then **deletes** the file, so the `--resume` that follows is not
-  cancelled by it in turn. The resumed run finishes bit-identically to an
-  uninterrupted one.
+- The runner then **deletes** the file, so a stopped folder never advertises
+  a stop request nobody will honor: once the process has exited, `cancel` is
+  gone. This is belt-and-braces rather than the load-bearing part — the clear
+  at the start of every real run (next bullet) already carries the `--resume`
+  on its own, measured with the handler's delete removed — but a GUI may rely
+  on both. The resumed run finishes bit-identically to an uninterrupted one.
 - A `cancel` left behind by a process that was killed before it could honor it
   is cleared when the next attempt on that folder starts, rather than
-  cancelling every resume forever. The consequence is honest: `cancel` is a
-  signal to a run that is *already going*, not a way to pre-cancel one.
+  cancelling every resume forever. This clear is the one that matters, and it
+  is what makes `--resume` safe after any kind of death. The consequence is
+  honest: `cancel` is a signal to a run that is *already going*, not a way to
+  pre-cancel one.
 - Only the native solvers (`linear`, `westervelt`) can be cancelled, because
   only they take checkpoints. A `kwave` job says so on stdout and ignores the
   file — stopping it would lose the run rather than pause it, which is the
