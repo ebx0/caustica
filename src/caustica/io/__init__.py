@@ -23,6 +23,12 @@ from caustica.io.checkpoint import (
     load_checkpoint,
     write_checkpoint,
 )
+from caustica.io.medium_volume import (
+    MediumVolume,
+    MediumVolumeError,
+    load_medium_volume,
+    write_medium_volume,
+)
 from caustica.io.quantize import DEFAULT_MAX_NORM_ERR, Quantized, try_float16
 
 _STORE_NAMES = frozenset(
@@ -44,13 +50,17 @@ __all__ = [
     "DEFAULT_MAX_NORM_ERR",
     "CheckpointMismatch",
     "CheckpointSpec",
+    "MediumVolume",
+    "MediumVolumeError",
     "Quantized",
     "RunInterrupted",
     "atomic_write",
     "load_checkpoint",
+    "load_medium_volume",
     "sweep_temp_debris",
     "try_float16",
     "write_checkpoint",
+    "write_medium_volume",
     *sorted(_STORE_NAMES),
 ]
 

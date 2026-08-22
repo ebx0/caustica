@@ -238,11 +238,59 @@ class PhantomDatasetMediumConfig(CausticaModel):
         return PhantomAsset.load(path)
 
 
+class MediumVolumeConfig(CausticaModel):
+    """A caustica ``medium_volume`` file — the ONE door for volume media.
+
+    The grid comes FROM the file (shape + dx are the file's); only the PML
+    thickness is chosen here, so an explicit job cannot silently run a
+    resampled ghost of the data. (Same rule as the dataset kind it
+    generalizes — M10k/D16.)
+    """
+
+    kind: Literal["medium_volume"] = "medium_volume"
+    file: str = Field(..., description="Path to the medium-volume npz (absolute or job-relative)")
+    pml_mm: float = Field(5.0, ge=0.0)
+    linear: bool = Field(False, description="Zero the nonlinearity (volume.to_medium(linear=...))")
+    materials: dict[int, Material] | None = Field(
+        None,
+        description="Override the file's MaterialDB (labels are revalidated against it)",
+    )
+    water_label: int | None = Field(
+        0,
+        description="Label treated as coupling water for the focus-in-water refusal; "
+        "null disables the check (label 0 means water in caustica's own exports)",
+    )
+
+    def load_volume(self, base_dir: Path | None):
+        from caustica.io.medium_volume import (  # noqa: PLC0415 (keep import light)
+            MediumVolume,
+            load_medium_volume,
+        )
+
+        path = Path(self.file)
+        if base_dir is not None and not path.is_absolute():
+            path = base_dir / path
+        if not path.exists():
+            raise JobError(f"medium volume file not found: {path}")
+        vol = load_medium_volume(path)
+        if self.materials is not None:
+            vol = MediumVolume(
+                labels=vol.labels,
+                dx=vol.dx,
+                materials=MaterialDB(materials=self.materials),
+                origin=vol.origin,
+                properties=vol.properties,
+                meta=vol.meta,
+            )
+        return vol
+
+
 MediumConfig = Annotated[
     HomogeneousMediumConfig
     | SceneMediumConfig
     | VolumeImportMediumConfig
-    | PhantomDatasetMediumConfig,
+    | PhantomDatasetMediumConfig
+    | MediumVolumeConfig,
     Field(discriminator="kind"),
 ]
 
@@ -529,13 +577,14 @@ class ExplicitJobConfig(CausticaModel):
 
     @model_validator(mode="after")
     def _grid_rule(self) -> ExplicitJobConfig:
-        is_dataset = isinstance(self.medium, PhantomDatasetMediumConfig)
-        if is_dataset and self.grid is not None:
+        grid_from_file = isinstance(self.medium, (PhantomDatasetMediumConfig, MediumVolumeConfig))
+        if grid_from_file and self.grid is not None:
             raise ValueError(
-                "medium 'phantom_dataset' fixes the grid (shape + dx come from the file); "
-                "remove the job's grid section — only medium.pml_mm is yours to choose."
+                f"medium '{self.medium.kind}' fixes the grid (shape + dx come from the "
+                f"file); remove the job's grid section — only medium.pml_mm is yours "
+                f"to choose."
             )
-        if not is_dataset and self.grid is None:
+        if not grid_from_file and self.grid is None:
             raise ValueError(f"medium '{self.medium.kind}' requires a grid section")
         return self
 
@@ -736,7 +785,9 @@ def _build_explicit(job: ExplicitJobConfig, base_dir: Path | None, with_medium: 
     # The medium build is the EXPENSIVE part (GBs for a dataset phantom), so
     # every refusal that only needs geometry/labels runs first.
     labels = None
+    water_label: int | None = None
     asset = None
+    volume = None
     if isinstance(medium_cfg, PhantomDatasetMediumConfig):
         asset = medium_cfg.load_asset(base_dir)
         _check_dataset_f0(
@@ -748,7 +799,23 @@ def _build_explicit(job: ExplicitJobConfig, base_dir: Path | None, with_medium: 
             PMLSpec(thickness=medium_cfg.pml_mm * _MM) if medium_cfg.pml_mm > 0 else None
         )
         labels = asset.labels
+        water_label = 0
         c_min = min(m.c for m in asset.materials.materials.values())
+    elif isinstance(medium_cfg, MediumVolumeConfig):
+        volume = medium_cfg.load_volume(base_dir)
+        # The M6f protection generalizes: a file whose alpha was baked at a
+        # frequency refuses to run at another one.
+        _check_dataset_f0(
+            job.drive.f0_hz,
+            volume.meta.get("f0_mhz", volume.meta.get("dataset", {}).get("f0_mhz")),
+            "explicit medium_volume job",
+        )
+        grid = volume.grid(
+            PMLSpec(thickness=medium_cfg.pml_mm * _MM) if medium_cfg.pml_mm > 0 else None
+        )
+        labels = volume.labels
+        water_label = medium_cfg.water_label
+        c_min = volume.c_min()
     else:
         assert job.grid is not None  # enforced by the model validator
         grid = job.grid.to_grid()
@@ -757,16 +824,20 @@ def _build_explicit(job: ExplicitJobConfig, base_dir: Path | None, with_medium: 
     src, focus_vox, derived = job.source.build(grid, job.drive)
     check_source_clears_pml(grid, src)
 
-    if labels is not None and labels[focus_vox] == 0:
+    if labels is not None and water_label is not None and labels[focus_vox] == water_label:
         raise JobError(
-            f"the focus voxel {focus_vox} lands in the coupling water (dataset class 0), "
-            f"not in tissue — the run would characterize a water focus. Move the focus "
-            f"deeper or steer it into the breast."
+            f"the focus voxel {focus_vox} lands in the coupling water "
+            f"(label {water_label}), not in tissue — the run would characterize a "
+            f"water focus. Move the focus deeper, steer it into the target, or (for "
+            f"medium_volume) set water_label to null if label {water_label} is not water."
         )
 
     if asset is not None:
         medium = asset.to_medium(linear=medium_cfg.linear) if with_medium else None
         del asset
+    elif volume is not None:
+        medium = volume.to_medium(linear=medium_cfg.linear) if with_medium else None
+        del volume
     else:
         medium = medium_cfg.build(grid) if with_medium else None
 
@@ -870,7 +941,7 @@ def validate_job(path: str | Path, fast: bool = False) -> JobReport:
         return report
 
     heavy_medium = isinstance(job, StoredSetupJobConfig) or isinstance(
-        getattr(job, "medium", None), PhantomDatasetMediumConfig
+        getattr(job, "medium", None), (PhantomDatasetMediumConfig, MediumVolumeConfig)
     )
     with_medium = not fast and not heavy_medium
     try:

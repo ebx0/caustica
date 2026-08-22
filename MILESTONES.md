@@ -439,15 +439,20 @@ Colab notebook'u public repodan clone eder: token/secret yönetimi tamamen ortad
 Lisans riski ve kendi katmanlama kuralımızın ihlali aynı kökten geliyor: `config/job.py` bugün
 DÖRT yerden `uwcem_phantoms` import ediyor. Karar (PLAN.md K7–K10): kütüphane tamamen UWCEM'siz
 olur, UWCEM işleri ayrı repoya taşınır, yerine genel `medium_volume` kind'ı gelir.
-- [ ] `medium_volume` genel medium kind'ı: etiket haritası + malzeme db'si VEYA voxel-başına
-      özellik hacimleri (c, ρ, α, β); **grid dosyadan gelir** (explicit `grid` reddedilir — mevcut
-      `phantom_dataset` kuralı ve hata metni aynen taşınır). MEVCUT 4.5 GB dosyaları OLDUĞU GİBİ
-      okur (`caustica-phantom-dataset/2` + `hifusim-*` legacy alias) — yeniden üretim gerektiren
-      format değişikliği BAŞARISIZ sayılır
-- [ ] Format hem OKUNUR hem YAZILIR: `write_medium_volume(...)` public — numpy dizilerinden
-      (etiket haritası VEYA c/ρ/α/β hacimleri) + dx + origin ile dosya üretir. `uwcem-phantom`
-      repo'su da BU fonksiyonu çağırır (tek kaynak). Yazıcı olmadan "kendi hacmini getir" vaadi
-      çalışmaz — dışarıdan gelen kullanıcının tek giriş kapısı budur
+- [x] (W0a, 2026-08-22) `medium_volume` genel medium kind'ı: `caustica.io.medium_volume` —
+      etiket haritası + malzeme db'si VEYA voxel-başına özellik hacimleri; **grid dosyadan
+      gelir** (explicit `grid` "fixes the grid" hata metniyle reddedilir — testli). MEVCUT
+      dosyaları OLDUĞU GİBİ okur: dosya-içi etiketler `caustica-phantom/1` + `hifusim-phantom/1`
+      legacy alias kabul (plan metnindeki `*-dataset/2` adları manifest etiketiydi; dosya
+      etiketi ground-truth'tan düzeltildi). KANIT: gerçek 560×700×480 dataset dosyasında
+      `medium_volume` → Medium, PhantomAsset yolununkiyle sha256-düzeyinde BİT-AYNI
+      (4 özellik hacmi + id_map; `test_existing_dataset_file_gives_bit_identical_medium`, 25 sn).
+      M6f f0-alpha koruması ve su-odak reddi medium_volume'a genelleşti (`water_label`
+      alanıyla kapatılabilir; ikisi de testli)
+- [x] (W0a, 2026-08-22) Format hem OKUNUR hem YAZILIR: `write_medium_volume(...)` public —
+      numpy dizilerinden (etiket VEYA c/ρ/α/β) + dx + origin; yeni dosyalar
+      `caustica-medium-volume/1` etiketi taşır. Round-trip bit-aynı Medium (label + continuous
+      modda testli); `uwcem-phantom` repo'su W0d'de bu fonksiyona bağlanacak
 - [ ] `geometry/volumes.py::load_breast_phantom()` taşınır: UWCEM üretim fantomunun şekli
       (310×355×253, 0.5 mm) ve `breast_phantom_mapping` kaynağa özgüdür. `load_labels_txt`
       GENELDİR (mapping callable'ı kaynağa özgü kısmı dışarıda tutuyor) — o KALIR
