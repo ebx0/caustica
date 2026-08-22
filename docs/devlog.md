@@ -2045,3 +2045,77 @@ XML'den 447 passed / 2 skipped) · GPU kutusunun CPU kanıtıyla işaretlenmemi�
   okuyan bir `except` önce `SimulationError`'ı yakalamalı.
 - **`_fetch` boyut sınırı yok.** Bir job JSON'u; keyfi bir üst sınır uydurmak politika icat etmek
   olurdu. Atomik yazıma geçirildi (yarım inen ama yine ayrıştırılabilen bir job daha kötü).
+
+---
+
+## 2026-08-22 — M10l sertleştirme turu: mutasyon-doğrulayıcısının dört test boşluğu + bir yanlış nesir
+
+M10l'in mutasyon-doğrulayıcısı davranış hatası bulmadı — **kapsama borcu** buldu: dört yerde
+test, iddia ettiği şeyi ölçmüyordu. Bu tur onları kapattı. Her boşluk için doğrulayıcının
+mutasyonu **izole worktree'de** yeniden koşuldu; aşağıdaki "önce yeşil / sonra N kırmızı"
+sayıları ölçümdür, tahmin değil. Süit **460 → 465** (463 passed, 2 skipped).
+
+**B1 — cancel yoklama sayacı yanlış şeyi sayıyordu.** `test_cancel_poll_is_one_stat_per_period`
+yalnız `Path.is_file`'ı enstrümante ediyordu. Aynı regresyon `os.path.isfile(cancel_path)` diye
+yazılıp adım döngüsüne taşındığında runner süitinin **36/36'sı yeşil kaldı** (ölçüldü: sözleşmenin
+~16'ya izin verdiği yerde 77 yoklama). Sebep Windows/py3.12'ye özgü: `os.path.exists`/`isfile`
+orada `nt._path_exists`/`nt._path_isfile`, yani `os.stat`'a hiç inmeyen C kısayolları — primitifi
+izlemek yetmiyor. Çözüm: yoklama runner'da **tek bir fonksiyona** toplandı (`_cancel_requested`)
+ve test o fonksiyonun çağrı sayısını sayıyor (hangi primitifi kullandığından bağımsız), ayrıca
+`Path.is_file/is_dir/exists/stat`, `os.path.isfile/isdir/exists/lexists` ve `os.stat/lstat`'ı
+"helper'ı atlayan yoklama" için ayrı izliyor. `polls > 0` da eklendi: eski `assert len(polls) <=
+boundaries + 1` sıfırda BOŞLUKTA-DOĞRUYDU, yani hiç yoklamayan bir stop butonu da yeşildi.
+Mutasyon yeniden koşuldu → **1 kırmızı** (77 bypass yoklaması adlarıyla raporlanıyor).
+
+**B2 — boş `advice` görünmüyordu.** `assert all(isinstance(a, str) ... for a in advice)` boş
+listede boşlukta-doğru. Yazım noktasında tüm advice demetlerini boşaltmak HEAD'de **36/36 yeşil**
+bıraktı. Artık on hata sınıfından dokuzu listenin BOŞ OLMADIĞINI iddia ediyor; onuncusu
+(checkpoint'siz solver çökmesi) söyleyecek eyleme dönük bir şeyi olmadığı için BİLEREK boş iddia
+ediyor — oraya cümle uydurmak sessizlikten kötü olurdu. Ayrı bir test iki kapının stderr
+render'ını da çiviledi: `Refusal.lines`'tan `  -> ` satırlarını silmek eskiden görünmezdi; test
+artık basılan satırların ve `error.json`'daki `advice[]`'in **aynı liste** olduğunu doğruluyor
+(dosya için tutulan bir kopya sürüklenen bir kopyadır). → **11 kırmızı** + **2 kırmızı**.
+
+**B3 — çıkış kodu sabitlerinin gerçek değerleri çivisiz.** `EXIT_OOM = 6` yapmak
+`tests/test_runner.py`'de hiçbir şey kırmıyordu, çünkü her assert sabiti kendisiyle
+karşılaştırıyordu. (Sayfa testi yakalardı; dosyanın kendi kendine yetmemesi asıl borçtu.) Beş kod
+artık literal sayıya çivili, artı ayrıklık, artı 1'in kümede OLMAMASI ("sınıflandırmadan kaçan
+istisna" için ayrılmış), artı çıkış kodu sayı olarak karşılaştırılan iki gerçek koşu. →
+**1 kırmızı**.
+
+**B4 — yanlış nesir, ama kod gereksiz DEĞİL.** `RunInterrupted` handler'ındaki
+`_clear_stale(cancel_path)` yorumu "leaving it would cancel the --resume too... forever" diyordu;
+aynı cümle `docs/gui_contract.md`'deydi. GÜNCEL koda karşı (d3da3f1 sonrası) yeniden ölçüldü:
+satır silindiğinde iptal 5 veriyor, resume 0 veriyor ve sonuç **bit-aynı** — iddia YANLIŞ; resume'u
+kurtaran şey her gerçek koşunun BAŞINDAKİ temizlik. Ama satır **tutuldu**, çünkü başka ve gerçek
+bir işi var (sayfanın zaten söz verdiği bir iş): süreç çıkar çıkmaz durmuş bir klasör, kimsenin
+yerine getirmeyeceği bir durdurma isteğini ilan etmiyor; klasörü yoklayan bir GUI yerleşmiş bir
+durum görüyor. Yorum ve sayfa artık hangisinin yük taşıdığını (baştaki) hangisinin kemer-üstü-askı
+olduğunu (handler'ınki) söylüyor, ve **iki yarı da testle** sabit: handler'ın temizliği silinince
+→ 1 kırmızı; baştaki temizlik silinince → 2 kırmızı (yeni test iptal sonrası `cancel` dosyasını
+GERİ koyup resume'un yine de bit-aynı bitmesini şart koşuyor — eski yorumun ters çevirdiği iddia).
+
+**B5 — sayfa nesri sözleşme değil, artık öyle diyor.** `docs/gui_contract.md`'deki her liste,
+tablo ve literal koda karşı test ediliyor; aradaki nesir hiç edilmiyordu ve sayfa bunu
+söylemiyordu — yani bir cümle, bir tablo satırıyla aynı ağırlıkta bir söz gibi okunuyordu. M10l
+incelemesinin TÜM bulguları ve bu turun B4'ü birer cümleydi. Sayfa artık kapsamını başta beyan
+ediyor ve beraberlik bozucuyu adlandırıyor: **nesir ile liste çelişirse sözleşme listedir.**
+
+### Yan bulgu: M10f'ten kalma test-izolasyon hatası
+`pytest tests/test_gui_contract.py` **tek başına 28996ac'de KIRMIZIYDI**:
+`test_every_caustica_name_on_the_page_actually_exists` `hasattr(caustica, "colab")` kullanıyor,
+ama bir ALT MODÜL ancak biri onu import ettikten sonra paketin attribute'u olur. Tam koşuda
+yeşildi çünkü `tests/test_colab.py` önce çalışıp import ediyordu. Attribute olmayan adlar artık
+import edilerek çözümleniyor.
+
+### Süreç: mutasyon-doğrulayıcı olayı ve yeni kural
+Eşzamanlı mutasyon testi sırasında bir mutasyon ana ağaçta kalıp **`02069c2`'ye süpürüldü**;
+**`2b42e3f`** geri aldı. HEAD bayt-doğru (iki bağımsız doğrulama). **UYARI: bu iki commit
+tarihçede ayrılamaz** — bu dal squash edilirse sorun yok, ama seçmeli rebase / cherry-pick
+YAPILMAZ.
+
+**Yeni kural (bu turda uygulandı):** mutasyon-doğrulayıcılar baştan **İZOLE worktree'de** çalışır;
+ana ağaçta mutasyon yasak. Uygulaması ucuz: `git worktree add <scratch>/mut HEAD`, sonra
+`PYTHONPATH=<scratch>/mut/src ./.venv/Scripts/python.exe -m pytest` — editable kurulum düz bir
+`.pth` olduğu için PYTHONPATH onu geçersiz kılıyor, yani ana ağaç hiç dokunulmadan mutasyon
+koşuyor. Bu turdaki altı mutasyonun hepsi orada koştu.
