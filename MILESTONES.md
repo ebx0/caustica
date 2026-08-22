@@ -810,31 +810,66 @@ M10k'dan SONRA geldi (o kapandı; `stored_setup` yokken tek kind var, facade şe
         medium kurulduktan SONRA yakalanan backend yazım hatası, `options=` ile verilen
         `out`'un sessizce düşürülmesi, klasörsüz anlamsız seçeneklerin sessizce yok sayılması
 
-### M10l — GUI sözleşmesinin dondurulması `[ ]` — GUI kodu YOK
+### M10l — GUI sözleşmesinin dondurulması `[x]` (2026-08-22) — GUI kodu YOK
 GUI ayrı repoda olacak ve teknolojisi seçilmedi (PLAN.md K13). Bu milestone yalnızca GUI'nin
 üstüne oturacağı yüzeyi yazıya döker ve katmanlamayı testle kilitler.
-- [ ] `docs/gui_contract.md`: `caustica-job/1` + `validate`, runner çıkış kodları, `status.json`
-      alanları, `caustica-preview/1`, `caustica-result/1`, `env_report()`, ilerleme payload'u.
-      Listelenmeyen hiçbir şey sözleşme değildir
-- [ ] `tests/test_import_direction.py`: `src/caustica` altındaki her modül AST ile taranır;
-      `apps` / `uwcem_phantoms` / `caustica_gui*` importu YASAK
-- [ ] **İPTAL SİNYALİ** (bugün YOK — `grep -rn "cancel" src/caustica` boş): çıktı klasöründe bir
-      `cancel` dosyası görülürse koşu periyot sınırında temiz durur, checkpoint yazar ve çıkış
-      kodu 5 (interrupted-resumable) ile çıkar. `stop_when` kancası zaten orada — eksik olan
-      dosya yoklaması. GUI'nin "Durdur" düğmesinin yazacağı yer budur; süreci öldürmek tek yol
-      olarak kalmamalı
-- [ ] **YAPILANDIRILMIŞ HATA** (bugün YOK): koşu başlamadan oluşan hatalar (bozuk job, OOM reddi,
-      checkpoint çakışması) `hb` yaratılmadan `return EXIT_CONFIG` ile çıkıyor — `status.json` hiç
-      oluşmuyor, GUI'ye stderr metnini ayrıştırmak kalıyor. Çıktı klasörüne `error.json` yazılsın:
-      `{stage, exit_code, error_class, message, advice[]}`. Planner zaten `est.advice` üretiyor;
-      şu an yalnızca ekrana basılıyor
+- [x] `docs/gui_contract.md`: `caustica-job/1` + `validate` + `caustica schema`, runner çıkış
+      kodları (0/2/3/4/5), `status.json` alanları, `error.json` şeması, `cancel` protokolü,
+      `--dry-run`/`plan.json`, `caustica-preview/1`, `caustica-result/1`, `metrics.json`,
+      `run_meta.json`, `env_report()`, ilerleme payload'u (dokuz serileştirilebilir anahtar +
+      `snapshot`). Başta "Listelenmeyen hiçbir şey sözleşme değildir" + girdi=TEK job dosyası /
+      çıktı=TANIMLI klasör; sonda "sözleşme OLMAYANLAR" bölümü (modül düzeni, stdout nesri,
+      `checkpoint.npz` içi, log metinleri, herhangi bir IPC)
+- [x] Alan listeleri elle kopyalanıp çürümeye bırakılmadı: `tests/test_gui_contract.py` DÖRT
+      gerçek koşu üretir (başarılı / kesilmiş / VRAM-reddi / store-çökmesi) ve her listeyi tarif
+      ettiği şeyle karşılaştırır — klasör listesi gerçek klasörle, `status.json` alanları ÜÇ
+      gerçek status'un kesişimiyle (durum-bağımlı ekler farkla türetilir), ilerleme anahtarları
+      gerçek payload'la, `plan.json`/`run_meta.json`/`metrics.json` gerçek dosyalarla, çıkış
+      kodları ve format etiketleri koddaki sabitlerle; sayfadaki CLI satırları gerçek
+      argparse'tan geçirilir (`test_documented_*`, `test_the_cli_lines_on_the_page_actually_parse`)
+- [x] `tests/test_import_direction.py`: M10k'da yazıldı, o tarihten beri YEŞİL — bu milestone
+      onu yalnızca kanıtla işaretler: `test_caustica_never_imports_upward` (AST ile her modül;
+      `apps`/`uwcem_phantoms`/`caustica_gui*` YASAK) + `test_no_uwcem_reference_survives_in_source_text`
+- [x] **İPTAL SİNYALİ**: `stop_when` kancasına dosya yoklaması eklendi — `cancel` görülünce
+      checkpoint yazılır ve çıkış 5. Dosya TÜKETİLİR (bırakılsa `--resume` ilk periyot sınırında
+      kendini iptal ederdi) ve öldürülmüş bir süreçten kalan bayat `cancel` bir sonraki denemenin
+      başında temizlenir. Kabul edilen sonuç, sayfada da yazılı: `cancel` KOŞAN bir işe sinyaldir,
+      ön-iptal aracı değildir
+- [x] **YAPILANDIRILMIŞ HATA**: `error.json` = `{format, stage, exit_code, error_class, message,
+      advice[], written_at}`; altı `stage` — config/plan/gate/checkpoint/solve/store. Planner'ın
+      `est.advice`'i artık ekrana VE dosyaya gider (`Refusal` advice'i liste olarak tutuyor, iki
+      kopya yok). Kesinti (çıkış 5) error.json YAZMAZ: durmak başarısızlık değildir
 - Başarı kriterleri:
-  - Import-yönü testi yeşil (M10k inmeden yeşile dönemez — kasıtlı)
-  - Hiçbir GUI bağımlılığı veya `gui` extra'sı eklenmemiş
-  - Koşan bir işe `cancel` dosyası atılınca: periyot sınırında durur, checkpoint bırakır, çıkış 5;
-    `--resume` ile tamamlanır ve sonuç kesintisiz koşuyla BİT-AYNI olur
-  - Yedi hata sınıfının her biri (M10b'nin `validate` sınıfları + OOM + checkpoint çakışması)
-    `error.json` üretir; hiçbir GUI yolu stderr ayrıştırmak zorunda kalmaz
+  - [x] Import-yönü testi yeşil — `test_caustica_never_imports_upward` (M10k'dan beri)
+  - [x] Hiçbir GUI bağımlılığı veya `gui` extra'sı eklenmemiş; yeni runtime bağımlılığı yok —
+        `test_freezing_the_contract_added_no_gui_dependency` (`grep -i gui pyproject.toml` boş)
+  - [x] Koşan bir işe `cancel` atılınca: periyot sınırında durur (`periods_done == 3`, mid-periyot
+        değil), checkpoint bırakır, `result.h5` yazmaz, çıkış 5; `--resume` ile tamamlanır ve
+        phasor/p_max/steps_total kesintisiz koşuyla BİT-AYNI —
+        `test_cancel_file_stops_at_period_boundary_and_resume_is_bitwise_identical`
+  - [x] Yoklama adım maliyetine SIZMADI: periyot sınırı başına bir stat (`polls <= boundaries+1`
+        ve `polls*spp <= steps+spp`) — `test_cancel_poll_is_one_stat_per_period_never_per_step`;
+        bayat `cancel` bir sonraki koşuyu iptal etmez — `test_a_stale_cancel_file_does_not_cancel_the_next_run`
+  - [x] Yedi hata sınıfının her biri şemaya uyan `error.json` üretir — on senaryo, yedi ayrı
+        `error_class` (ValidationError · JobError · JSONDecodeError · ValueError · VramRefusal ·
+        CpuTimeRefusal · CheckpointConflict) ve altı `stage`'in hepsi:
+        `test_every_failure_class_writes_a_conformant_error_json` (parametrik) +
+        `test_the_error_table_covers_at_least_seven_distinct_classes`. Hiçbir GUI yolu stderr
+        ayrıştırmak zorunda değil: `advice[]` gerçek komutları adlandırıyor
+        (`test_config_error_advice_points_at_commands_the_page_documents`)
+  - [x] Başarılı koşu error.json ÜRETMEZ ve bayat dosyayı SİLER —
+        `test_a_successful_run_writes_no_error_json_and_clears_a_stale_one`; job hiç
+        ayrıştırılamasa bile `--out` verildiyse dosya düşer (GUI'nin hali) —
+        `test_error_json_lands_even_when_the_job_never_parsed`
+  - [x] Mevcut hata sözleşmesi DEĞİŞMEDİ: çıkış kodları, stderr metinleri, `status.json` alanları
+        ve `run_meta`/checkpoint parmak izi aynı; error.json yazılamazsa koşu AYNI kodla ve AYNI
+        mesajla biter, yalnızca bir uyarı loglanır —
+        `test_a_write_failure_for_error_json_changes_nothing`
+  - [x] kwave cancel'ı desteklemiyor ve bunu dürüstçe SÖYLÜYOR (checkpoint yok → durulacak sınır
+        yok; öldürmek dosyanın var oluş sebebinin tersi) —
+        `test_a_non_native_solver_says_cancel_does_nothing`
+  - [x] Süit 379 → 411 (409 passed / 2 skipped / 0 failed); `ruff check .` + `ruff format --check`
+        temiz; `git status --porcelain data/setups/` boş — dokuz kurulum dosyası + manifest bayt-aynı
 
 ### M10f — Colab köprüsü: `caustica.colab` + değişmeyen notebook `[ ]` — Colab kapısı içerir
 "Değişmeyen dosya" şartı mantığın notebook'ta DEĞİL repoda yaşamasıyla sağlanır: notebook 4–5
