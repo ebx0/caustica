@@ -1946,4 +1946,102 @@ yerinde, `error.json` YOK) · `test_a_failed_run_raises_with_the_runners_own_exi
 - Üç kapının birlikte kapanması: M7 parite + tam boy OOM'suz koşu · M8 VRAM ±%10 ve kalibre süre
   ±%25 · bu E2E. Ölçüm altyapısı hazır: `run_meta.json` `planner` ve `actual`'ı yan yana taşıyor,
   `caustica.colab.summary()` ikisini tek satırda basıyor.
-- README'deki "Open in Colab" rozeti push'tan SONRA canlı olur (M10e ön koşulu).
+- README'deki "Open in Colab" rozeti ve notebook'un varsayılan URL'leri `library-first`
+  master'a MERGE edilene kadar 404 — aşağıdaki inceleme turu S6'ya bakın (M10e ön koşulu).
+
+### İnceleme turu (hafif review + şüpheci doğrulayıcı, 2026-08-22) — 16 bulgu, 13'ü düzeltildi
+
+İki ajan paralel koştu: biri "köprü alt katman sözleşmelerine sızdı mı / notebook şablonu gerçekten
+kilitli mi" merceğiyle, biri iddiaları ÇÜRÜTMEYE çalışarak. İkisi de aynı iki gerçek sızıntıyı
+buldu.
+
+**S1 — Mesaj var olmayan bir dosyayı işaret ediyordu.** `_failure_message` her ret için
+"error.json carries the same verdict" satırını basıyordu. Ama sözleşme İKİ durumda hiç
+`error.json` YAZMAdığını söylüyor: kesinti (durmak başarısızlık değil) ve `--dry-run` (prob deneme
+değil). Yani mesaj, sayfanın "olmayacak" dediği bir dosyaya yolluyordu — ve kendi testimiz
+(`assert not (out / ERROR_FILE).exists()`) bunu ispatlayıp yine de geçiyordu. Üstelik dry-run VRAM
+reddinde runner'ın asıl başlığı yalnızca stderr'e gidiyor, istisnaya hiç girmiyordu. Şimdi: kayıt
+VARSA `stage` ve `error_class` alıntılanıyor (sayfanın "bir program bunlara bakar" dediği iki
+alan), YOKSA neden yok olduğu söyleniyor ve `plan.json`'daki `advice` satırları çekiliyor.
+
+**S2 — Çıkış kodu 2'nin açıklaması uydurmaydı.** `_EXIT_MEANING[2]` "config error — the job would
+not load or build" diyordu; bu sayfadaki `stage: config` AÇIKLAMASI, çıkış kodunun anlamı değil.
+Sonuç: bir CPU-süre reddi (çıkış 2, ama `stage: gate`, `error_class: CpuTimeRefusal`) ekrana
+"job yüklenemedi" diye yazılıyordu — aynı blokta `error.json` bunun tersini söylerken. Şimdi
+metinler sayfanın tablosundan birebir alınıyor ve **test tabloyu ayrıştırıp karşılaştırıyor**
+(`test_the_exit_code_glosses_are_the_documented_ones`); eski metin bu testi geçemiyor (ölçüldü).
+
+**S3 — Job'un kendi `output.folder`'ı sessizce eziliyordu.** Köprü her zaman açık bir `out`
+geçtiği için runner'ın kuralı hiç devreye girmiyor; aynı job `caustica run` ile başka yere,
+köprüyle başka yere düşüyordu. Kuralı köprüde ÇOĞALTMAK (göreli yol çözümü dahil) daha kötü bir
+sızıntı olurdu, o yüzden karar: ezmeye devam ama SESSİZ DEĞİL — job bir klasör adı veriyorsa
+ekrana "bu job şunu istiyor, köprü şuraya yazıyor, `out=` ile kendin seç" notu düşüyor. JSON'a
+bakış tamamen savunmacı (`try/except: return`), yani ayrıştırılamayan job yine runner'dan düşüyor.
+
+**S4 — Hatalı bir keyword indirmeye mal oluyordu.** `_fetch` `RunnerOptions` doğrulamasından ÖNCE
+koşuyordu: `run_job(url, nonesuch=1)` dosyayı indirip sonra `TypeError` atıyordu. Modülün var
+oluş sebebi tam olarak bu sıra. Düzeltildi + testli (`test_a_bad_keyword_costs_no_download`).
+
+**S5 — Notebook kilidinin 9 deliği.** Bayt-bayt şablon karşılaştırması GERÇEKTİ (hücre ekleme,
+sıra değişimi, tek boşluk, CONFIG değişimi, markdown düzenlemesi hepsi yakalanıyordu). Ama
+şablonu "bilerek" güncelleyen biri için semantik testler çok zayıftı. En kötüsü: `!` içeren hücre
+TÜMÜYLE atlanıyordu, yani kurulum hücresi hiçbir AST kontrolünden geçmiyordu — oraya
+`os.environ['CAUSTICA_CPU_LIMIT_MIN'] = '9999'` (belgeli bir kapıyı sessizce kapatan satır),
+`import os`, döngü ve fazladan `!wget` konulabiliyordu ve altı kilit testi de geçiyordu. Ayrıca
+attribute çağrısı, lambda, ternary, comprehension "mantık" sayılmıyordu; çağrı ARGÜMANLARINA hiç
+bakılmıyordu (`run_job(CONFIG, allow_slow_cpu=True)` serbestti); notebook metadata'sı
+(`accelerator: GPU` silinebiliyordu) ve hücre metadata'sı (`cellView: form` — Colab'da hücre
+kaynağını GİZLER ama yine çalışır) tamamen serbestti.
+
+Hepsi kapatıldı: magic satırları atlanmıyor BOŞALTILIYOR (yani kurulum hücresinin geri kalanı
+ayrıştırılıyor), mantık düğüm listesi 20 tipe genişledi, argümanlar isim olmak zorunda, `!`
+satırı tektir ve `!pip install` ile başlar, notebook metadata'sı ve her hücrenin BOŞ metadata'sı
+çivilendi. Aynı 9 mutasyon yeniden koşuldu: **9/9 yakalanıyor**, değiştirilmemiş notebook geçiyor.
+
+**S6 — `master`'a bakan üç şey bugün kırık.** `origin/master` hâlâ f0bff2f'te, yani yeniden
+adlandırma öncesinde: rozet 404, varsayılan `CONFIG` ham URL'si 404 ve — en sinsisi — notebook'un
+`pip install git+https://github.com/ebx0/caustica` satırı VARSAYILAN dalı kurar, o dal hâlâ
+`hifusim` paketini taşır, dolayısıyla `from caustica.colab import run_job` ModuleNotFoundError
+verirdi. "Push" yetmez; `library-first` master'a MERGE olmalı. Colab kapısı bu yüzden bugün
+DENENEMEZ. MILESTONES'ta o madde `[x]` iken `[~]`e çekildi.
+
+**S7 — abartılar daraltıldı.** "prepares NOTHING" → "writes nothing to disk" (auto-fallback
+uyarısı, cupy prob önbelleği ve GPU'lu makinede CUDA context'i gerçek yan etkiler — runner da
+aynılarını yapıyor, ama iddia dar olmalı) · "The install command is still one line above it"
+Colab'da YANLIŞTI (env'in Colab mesajında çalıştırılabilir bir kurulum komutu yok; docstring
+düzeltildi ve bunun env politikasının işi olduğu yazıldı) · dönen klasör içeriği listesi
+`preview_only`/`dry_run`/`kwave` istisnalarıyla nitelendi · "an https URL" → `http(s)` ·
+`show()`'un `None` dönüşü artık üç ayrı sebebi de basıyor ve `caustica report`'un aynı hatada
+çıkış 2 verdiğini söylüyor · MILESTONES'taki "testli" (Drive mount hikâyesi) daraltıldı: test
+yalnızca "açık `out=` kazanır"ı kanıtlıyor, geçici bir dizinle — mount değil.
+
+**S8 — `require_gpu_here` ile `env.require_gpu` arasındaki metin ikizi çivilendi.** Kurulum
+cümlesi artık tek bir sabit (`colab.INSTALL_ADVICE`) ve bir test env'in mesajının hâlâ onu
+içerdiğini doğruluyor.
+
+**S9 — sözleşme sayfası.** `docs/gui_contract.md`'nin "Explicitly not contract" listesine
+`caustica.colab` eklendi: köprü bilerek FİKİRLİ bir katman, bir GUI ona değil `caustica run` /
+`caustica.simulate` + sayfaya dayanmalı. Aynı yerde "Drive üzerinden senkronize olan Colab
+oturumu" cümlesi "KULLANICININ mount ettiği Drive klasörü; caustica kendisi mount etmez" diye
+netleştirildi. `docs/library_first_plan.md` W6'daki "planner VRAM tahmini — hiçbir şey
+hazırlanmadan reddet" cümlesi de düzeltildi: o yarı bilerek YAPILMADI (kapı runner'da tek kopya),
+ve runner'ın VRAM reddi medium kurulduktan sonra gelir.
+
+### ÇÜRÜTÜLEMEYEN iddialar (şüpheci ajan denedi, bulgu ÇIKMADI)
+"caustica hiçbir şey kurmaz" (tüm `src/caustica`'da tek shell çağrısı `git rev-parse`) · "Drive
+yok / `google.colab` import edilmez" (dolaylı yollar da tarandı: `__import__` yok, çalışma
+zamanında kurulan modül adı yok, subprocess ile mount yok) · dört ret mesajının gerçekten farklı
+olması · çıkış kodlarının yeniden eşlenmemesi · süit sayıları (bağımsızca 449 collected, JUnit
+XML'den 447 passed / 2 skipped) · GPU kutusunun CPU kanıtıyla işaretlenmemiş olması.
+
+### Düzeltilmeyenler (bilerek)
+- **Bozuk CUDA yığını olan GERÇEK bir Colab GPU runtime'ı** `env.require_gpu`'nun "runtime GPU
+  değil, Runtime menüsünden GPU seç" mesajını alır — yani zaten üstünde olduğu şeye geçmesi
+  söylenir. Doğru düzeltme env.py'de (M10i) ve bu milestone'un işi değil; köprüye tahmine dayalı
+  ÜÇÜNCÜ bir mesaj eklemek daha kötü olurdu. Docstring'e ve buraya yazıldı.
+- **GPU reddi `RuntimeError`, `SimulationError` değil.** Hiçbir şey koşmadı, yani sınıflandırılacak
+  bir koşu yok — ve `require_gpu`'nun tipini yeniden etiketlemek env sözleşmesine dokunmak olurdu.
+  Tuzak belgelendi: `SimulationError` zaten `RuntimeError`'ın alt sınıfı, o yüzden `.exit_code`
+  okuyan bir `except` önce `SimulationError`'ı yakalamalı.
+- **`_fetch` boyut sınırı yok.** Bir job JSON'u; keyfi bir üst sınır uydurmak politika icat etmek
+  olurdu. Atomik yazıma geçirildi (yarım inen ama yine ayrıştırılabilen bir job daha kötü).

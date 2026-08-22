@@ -384,9 +384,16 @@ Three notes that outlived the plan:
 
 **Files:** new `src/caustica/colab.py`, new `notebooks/colab_run.ipynb`.
 
-- `caustica.colab.run_job(...)`: environment check (`env_report()` + `require_gpu()` + planner VRAM
-  estimate vs free VRAM — refuse *before* staging anything), then `run_job_file`, output under
-  `/content`.
+- `caustica.colab.run_job(...)`: environment check (`env_report()` + `require_gpu()`), then
+  `run_job_file`, output under `/content`.
+  **Revised while building it (2026-08-22):** the "planner VRAM estimate vs free VRAM" half was
+  NOT added here. That gate already exists exactly once, in `runner.check_gates`, where it runs
+  plan-first against *free* device VRAM; a second copy in the bridge could only drift from it.
+  The honest scope of "refuse before staging anything" is therefore the GPU check — which is the
+  half the runner deliberately does not make, since `backend="auto"` falls back to numpy in
+  silence. The VRAM refusal still happens plan-first, but *after* `build_job` has built the medium
+  and created the output folder: that is the runner's long-standing behaviour, not a regression,
+  and pretending otherwise in the bridge's docs would be the overstatement.
 - **D22: the library never mounts or writes Drive.** No `drive.mount()`, no Drive paths, no
   Drive-aware retry logic. If the user wants persistence they mount Drive themselves and pass an
   `--out` under it — which the runner already supports. Delete the Drive clauses from the current

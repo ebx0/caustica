@@ -88,6 +88,33 @@ TEMPLATE: tuple[tuple[str, str], ...] = (
 )
 
 
+#: Anything that computes, branches, loops or defines. Deliberately broad: a
+#: lambda, a ternary and a comprehension are logic exactly as much as a `def`
+#: is, and a narrower list let all three through (review, 2026-08-22).
+LOGIC_NODES = (
+    ast.FunctionDef,
+    ast.AsyncFunctionDef,
+    ast.ClassDef,
+    ast.Lambda,
+    ast.For,
+    ast.AsyncFor,
+    ast.While,
+    ast.If,
+    ast.IfExp,
+    ast.With,
+    ast.AsyncWith,
+    ast.Try,
+    ast.ListComp,
+    ast.SetComp,
+    ast.DictComp,
+    ast.GeneratorExp,
+    ast.Subscript,
+    ast.BinOp,
+    ast.BoolOp,
+    ast.Compare,
+)
+
+
 def _notebook() -> dict:
     return json.loads(NOTEBOOK.read_text(encoding="utf-8"))
 
@@ -97,12 +124,36 @@ def _source(cell: dict) -> str:
 
 
 def _python_cells() -> list[str]:
-    """Code cells that are plain Python — the shell/magic cell is not parsable."""
+    """Every code cell, with its shell/magic lines blanked out.
+
+    Blanked, NOT skipped. Skipping a whole cell because one line starts with
+    ``!`` would leave the install cell — the only one that has such a line —
+    outside every structural check below, and that is exactly where hidden
+    logic would go (a stray ``import os``, an env var that disables a
+    documented gate, an extra ``!wget``). The magic line itself is not
+    Python and cannot be parsed, so it is replaced by a bare comment;
+    everything around it still is.
+    """
+    cells = []
+    for cell in _notebook()["cells"]:
+        if cell["cell_type"] != "code":
+            continue
+        lines = [
+            "#" if line.lstrip().startswith(("!", "%")) else line
+            for line in _source(cell).splitlines()
+        ]
+        cells.append("\n".join(lines))
+    return cells
+
+
+def _shell_lines() -> list[str]:
+    """The magic/shell lines the AST cannot see, so they are checked as text."""
     return [
-        _source(c)
-        for c in _notebook()["cells"]
-        if c["cell_type"] == "code"
-        and not any(line.lstrip().startswith(("!", "%")) for line in _source(c).splitlines())
+        line.strip()
+        for cell in _notebook()["cells"]
+        if cell["cell_type"] == "code"
+        for line in _source(cell).splitlines()
+        if line.lstrip().startswith(("!", "%"))
     ]
 
 
@@ -125,6 +176,34 @@ def test_notebook_cells_match_the_frozen_template():
         assert _source(cell) == text, f"cell {i} content drifted from the template"
 
 
+def test_notebook_document_metadata_is_frozen_too():
+    """The parts of a notebook that are not cells still change how it runs.
+
+    ``accelerator: GPU`` is the one piece of Colab metadata this milestone is
+    actually about — dropping it changes which runtime the file asks for,
+    while every cell stays byte-identical. The kernel and the format version
+    are pinned for the same reason.
+    """
+    nb = _notebook()
+    assert nb["metadata"] == {
+        "accelerator": "GPU",
+        "colab": {"name": "caustica — run a job on a Colab GPU", "provenance": []},
+        "kernelspec": {"display_name": "Python 3", "name": "python3"},
+        "language_info": {"name": "python"},
+    }
+    assert nb["nbformat_minor"] == 0
+
+
+def test_no_cell_carries_metadata():
+    """``cellView: form`` hides a cell's source in Colab while it still runs.
+
+    In a file whose whole premise is "what you see is what runs", every cell
+    metadata dict stays empty.
+    """
+    for i, cell in enumerate(_notebook()["cells"]):
+        assert cell["metadata"] == {}, f"cell {i} grew metadata: {cell['metadata']}"
+
+
 def test_notebook_carries_no_outputs_and_no_execution_counts():
     """Stored outputs are how a notebook's diff stops being zero."""
     for cell in _notebook()["cells"]:
@@ -143,8 +222,12 @@ def test_notebook_has_exactly_one_editable_line():
     literal_assignments = []
     for source in _python_cells():
         for node in ast.parse(source).body:
-            if isinstance(node, ast.Assign) and isinstance(node.value, ast.Constant):
-                literal_assignments.append(node.targets[0].id)
+            if isinstance(node, ast.AnnAssign):  # CONFIG: str = "..." is one too
+                literal_assignments.append(ast.dump(node.target))
+            elif isinstance(node, ast.Assign) and isinstance(node.value, ast.Constant):
+                literal_assignments += [
+                    t.id if isinstance(t, ast.Name) else ast.dump(t) for t in node.targets
+                ]
     assert literal_assignments == ["CONFIG"]
 
 
@@ -156,7 +239,7 @@ def test_notebook_holds_no_logic_beyond_the_two_bridge_calls():
     """
     imported: set[str] = set()
     called: set[str] = set()
-    defined = 0
+    logic: list[str] = []
     for source in _python_cells():
         for node in ast.walk(ast.parse(source)):
             if isinstance(node, ast.ImportFrom):
@@ -164,13 +247,31 @@ def test_notebook_holds_no_logic_beyond_the_two_bridge_calls():
                 imported |= {a.name for a in node.names}
             elif isinstance(node, ast.Import):
                 raise AssertionError("plain imports keep logic in the notebook")
-            elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            elif isinstance(node, ast.Call):
+                # An Attribute call (outdir.rename(...), run_job.__globals__[...])
+                # is logic hiding behind a dot: only bare names are allowed.
+                assert isinstance(node.func, ast.Name), f"not a plain call: {ast.dump(node.func)}"
                 called.add(node.func.id)
-            elif isinstance(node, (ast.FunctionDef, ast.ClassDef, ast.For, ast.While, ast.If)):
-                defined += 1
+                # Arguments are names too: run_job(CONFIG, allow_slow_cpu=True)
+                # would move a real decision out of the package.
+                for arg in [*node.args, *(k.value for k in node.keywords)]:
+                    assert isinstance(arg, ast.Name), f"computed argument: {ast.dump(arg)}"
+            elif isinstance(node, LOGIC_NODES):
+                logic.append(type(node).__name__)
     assert imported == {"run_job", "show"}
     assert called == {"run_job", "show"}
-    assert defined == 0
+    assert logic == [], f"the notebook grew logic: {logic}"
+
+
+def test_the_shell_lines_do_exactly_one_thing():
+    """The AST cannot see ``!`` lines, so they are checked as text.
+
+    One shell line, and it installs caustica. A second ``!pip``/``!wget``/
+    ``!cp`` is the other way logic sneaks into a notebook that reads frozen.
+    """
+    shell = _shell_lines()
+    assert len(shell) == 1, f"expected exactly one shell line, found {shell}"
+    assert shell[0].startswith("!pip install")
 
 
 def test_notebook_never_mounts_anything():
@@ -182,10 +283,11 @@ def test_notebook_never_mounts_anything():
 
 def test_notebook_installs_from_the_public_repo_and_never_a_gpu_extra():
     """Colab ships cupy; installing a GPU extra there is wasted minutes (K6)."""
-    install = _source(_notebook()["cells"][1])
-    assert "pip install" in install and "git+https://github.com/ebx0/caustica" in install
+    install = _shell_lines()[0]
+    assert install.startswith("!pip install")
+    assert "git+https://github.com/ebx0/caustica" in install
     assert "[gpu]" not in install
-    assert "cupy" not in install.split("!pip", 1)[1]  # only the comment may say cupy
+    assert "cupy" not in install  # the whole command, not just the part after !pip
 
 
 # ------------------------------------------------ the library carries no Drive
@@ -196,8 +298,11 @@ def test_the_library_has_no_drive_code_and_never_imports_google_colab():
 
     Two separate rules, because they are two separate risks:
 
-    * **Google Drive**: zero occurrences anywhere under ``src/caustica``. Not
-      a mount, not a path, not a retry loop (PLAN K12).
+    * **Google Drive**: zero matches for ``drive.mount`` and ``/content/drive``
+      anywhere under ``src/caustica`` — the mount call and the mount point,
+      which is what "the library does not know about Drive" reduces to in
+      code (PLAN K12). It is a pattern match, not a proof of absence: a
+      third-party Drive client under another name would pass it.
     * **``google.colab``**: may be *probed* (is it already in ``sys.modules``?)
       but never imported, and only in the modules that legitimately answer
       "where am I": the environment policy, the progress renderer, and the
@@ -536,3 +641,148 @@ def test_show_can_skip_figures_entirely(gpu_present, tmp_path, capsys):
     out = colab.run_job(mini_job(tmp_path), out=tmp_path / "o", measure=False, progress=None)
     assert colab.show(out, figures=False) is None
     assert "peak" in capsys.readouterr().out
+
+
+# ---------------------------------------- the copies that could drift, pinned
+
+
+def test_the_exit_code_glosses_are_the_documented_ones():
+    """``_EXIT_MEANING`` is a second copy of a frozen table — pin it.
+
+    The bridge prints a one-line gloss per exit code. Those numbers are the
+    queue's API and their meanings live in ``docs/gui_contract.md``; a copy
+    nothing compares is a copy that drifts, and this one did on the day it
+    was written (it described the ``config`` *stage* instead of the exit
+    code, so a CPU-time refusal printed "the job would not load or build"
+    over an ``error.json`` that said ``stage: gate``).
+    """
+    page = (REPO / "docs" / "gui_contract.md").read_text(encoding="utf-8")
+    documented = {
+        int(m.group(1)): m.group(2).strip()
+        for m in re.finditer(r"^\| `(\d)` \| `EXIT_\w+` \| (.+?) \|$", page, re.MULTILINE)
+    }
+    assert documented, "the exit-code table moved; this test cannot see it any more"
+    for code, gloss in colab._EXIT_MEANING.items():
+        assert code in documented, f"exit {code} is not in the documented table"
+        assert gloss == documented[code], (
+            f"exit {code} gloss drifted from docs/gui_contract.md:\n"
+            f"  bridge: {gloss}\n  page:   {documented[code]}"
+        )
+    assert set(colab._EXIT_MEANING) == set(documented) - {0}  # every failure, no invention
+
+
+def test_the_install_advice_is_env_policys_own_sentence(not_colab, cupy_but_no_device):
+    """One install sentence, used by two modules, asserted to still be one.
+
+    ``caustica.env`` cannot tell "cupy is missing" from "no device", so the
+    bridge writes the first message itself — but it must not word the fix
+    differently from the module that owns environment policy.
+    """
+    with pytest.raises(RuntimeError) as exc:
+        colab.require_gpu_here()
+    assert colab.INSTALL_ADVICE in str(exc.value)  # env.require_gpu's own wording
+
+
+# ------------------------------------ the failure message tells the truth about
+# ------------------------------------ files the contract says will not be there
+
+
+def test_an_interrupted_run_is_not_pointed_at_an_error_json(gpu_present, tmp_path):
+    """Exit 5 writes no failure record — so the message must not name one."""
+    out = tmp_path / "o"
+
+    def press_stop_at_period_3(event):
+        if event["period"] >= 3:
+            (out / CANCEL_FILE).touch()
+
+    with pytest.raises(SimulationError) as exc:
+        colab.run_job(mini_job(tmp_path), out=out, measure=False, progress=press_stop_at_period_3)
+    message = str(exc.value)
+    assert not (out / ERROR_FILE).exists()
+    assert "no error.json here, by contract" in message
+    assert "error.json says" not in message
+
+
+def test_a_dry_run_refusal_says_where_the_diagnosis_went(gpu_present, tmp_path, capsys):
+    """A dry run is a probe: exit 3, and deliberately no ``error.json``.
+
+    The runner's headline goes to stderr in that case and nowhere else, so
+    the exception has to say so instead of sending the reader to a file the
+    contract promises will be absent.
+    """
+    out = tmp_path / "o"
+    with pytest.raises(SimulationError) as exc:
+        colab.run_job(mini_job(tmp_path), out=out, measure=False, dry_run=True, vram_limit_gib=1e-6)
+    message = str(exc.value)
+    assert exc.value.exit_code == 3
+    assert not (out / ERROR_FILE).exists()
+    assert "no error.json here, by contract" in message
+    assert "printed its full diagnosis to stderr" in message
+    assert "REFUSED before solving" in capsys.readouterr().err  # and it really is there
+
+
+def test_a_failed_run_message_quotes_stage_and_error_class(gpu_present, tmp_path):
+    """The two fields ``docs/gui_contract.md`` says a program routes on."""
+    bad = tmp_path / "bad.json"
+    bad.write_text('{"format": "caustica-job/1", "kind": "explicit"}', encoding="utf-8")
+    out = tmp_path / "o"
+    with pytest.raises(SimulationError) as exc:
+        colab.run_job(bad, out=out)
+    record = json.loads((out / ERROR_FILE).read_text(encoding="utf-8"))
+    message = str(exc.value)
+    assert f"stage={record['stage']!r}" in message
+    assert f"error_class={record['error_class']!r}" in message
+    # ...and the gloss is the exit code's, not the stage's (they differ).
+    assert "config error: bad job, unknown backend/GPU" in message
+
+
+# ------------------------------------------------- nothing silent, nothing early
+
+
+def test_a_job_that_names_its_own_output_folder_is_told_it_was_overridden(
+    gpu_present, not_colab, tmp_path, monkeypatch, capsys
+):
+    """The bridge always passes an explicit ``out`` — so say so, don't swallow it.
+
+    Without this note the same job lands in one place through ``caustica
+    run`` and another through the bridge, with nothing on screen to explain
+    the difference.
+    """
+    monkeypatch.setattr(colab, "run_job_file", lambda job, opts: EXIT_OK)
+    monkeypatch.chdir(tmp_path)
+    job = mini_job(tmp_path, output={"folder": "job_says_here"})
+    out = colab.run_job(job)
+    printed = capsys.readouterr().out
+    assert out == tmp_path / "runs" / "mini"
+    assert "job_says_here" in printed and "Pass out=" in printed
+    # An explicit out= is the caller's own choice: no note.
+    colab.run_job(job, out=tmp_path / "mine")
+    assert "job_says_here" not in capsys.readouterr().out
+
+
+def test_a_bad_keyword_costs_no_download(gpu_present, not_colab, tmp_path, monkeypatch):
+    """Options are checked before the fetch, for the reason the module exists."""
+
+    def never(*args, **kwargs):  # pragma: no cover - must not be reached
+        raise AssertionError("the bridge downloaded before validating its keywords")
+
+    monkeypatch.setattr(colab, "_fetch", never)
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(TypeError, match="nonesuch"):
+        colab.run_job("https://example.invalid/mini.json", nonesuch=1)
+    assert not (tmp_path / colab.JOBS_DIRNAME).exists()
+
+
+# ------------------------------------------------------------ the rendered view
+
+
+def test_show_renders_the_report_and_hands_back_its_path(gpu_present, tmp_path, capsys):
+    """The success path of ``show``: the SAME renderer ``caustica report`` uses."""
+    out = colab.run_job(mini_job(tmp_path), out=tmp_path / "o", measure=False, progress=None)
+    html = colab.show(out)
+    assert html is not None and html.is_file() and html.suffix == ".html"
+    assert (out / "REPORT.md").is_file()  # the renderer's own products, not ours
+    assert list(out.glob("*.png"))
+    printed = capsys.readouterr().out
+    # No IPython in this environment, so the path is printed instead of drawn.
+    assert "peak" in printed and str(html) in printed
