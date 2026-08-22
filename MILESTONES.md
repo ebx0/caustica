@@ -411,7 +411,7 @@ Tam alan dosyası (0.5–0.8 GB) inmeden "koşu başarılı mı" sorusuna 10 san
 - Kanıt: tam suite **393 test yeşil** (383 + 10 yeni `tests\test_report.py`), ruff temiz
   (devlog 2026-08-21)
 
-### M10e — Public'leşme `[~]` (isim + rename + tarama tamam 2026-08-21; commit/push bekliyor)
+### M10e — Public'leşme `[x]` (2026-08-22 — merge `ef837bf` ile kapandı)
 Colab notebook'u public repodan clone eder: token/secret yönetimi tamamen ortadan kalkar.
 `v0.1` tag'i M11'de KALIR; bu milestone yalnız repoyu görünür yapar.
 - [x] İsim kararı (2026-08-21, kullanıcı): **caustica** — ilk tercih "kymata" PyPI'da doluydu
@@ -427,10 +427,12 @@ Colab notebook'u public repodan clone eder: token/secret yönetimi tamamen ortad
       eklendi (pip kurulumunda planner çökerdi — düzeltildi, wheel'den canlı doğrulandı)
 - Başarı kriterleri:
   - [x] Geçmişte > 5 MB dosya yok, secret yok (tarama çıktısı devlog 2026-08-21)
-  - [ ] Repo public (✓ — zaten public'ti, adı değişti); CI public repoda yeşil + temiz ortamda
-        `pip install git+https://github.com/ebx0/caustica` → **commit/push bekliyor**
-        (commit kuralı: kullanıcı istemeden atılmaz; wheel içeriği lokalde doğrulandı)
-  - [ ] UWCEM atıf yükümlülüğü README'de ve export'larda korunuyor (push sonrası son kontrol).
+  - [x] Repo public; `library-first` → `master` merge edildi (PR #1, normal merge, `ef837bf`;
+        kullanıcı onayı 2026-08-22). master CI YEŞİL; temiz venv'de
+        `pip install "caustica @ git+https://github.com/ebx0/caustica"` → import + `caustica
+        --version` + `from caustica.colab import run_job` ÇALIŞIYOR; CONFIG raw URL 200
+        (operatör doğrulaması 2026-08-22)
+  - [x] UWCEM atıf yükümlülüğü M10k ile `uwcem-phantom` repo'suna taşındı (docs/uwcem.md).
         Not: M10k ile bu yükümlülük `uwcem-phantom` repo'suna taşınıyor
   - [ ] **`CITATION.cff`** (bugün YOK): public bir araştırma kütüphanesi alıntılanabilir olmalı.
         v0.1 tag'inde Zenodo DOI'si alınır ve README'ye "How to cite" bölümü eklenir
