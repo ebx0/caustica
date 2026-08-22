@@ -1303,3 +1303,29 @@ eksik 2 boyut (motor-checkpoint, job-config/steering) elle tarandı.
   artık koşuda görünür uyarı üretiyor — bilinçli.
 - Plan'a "expected result.h5 size: ~X MB" satırı (quantize-farkında); `--preview-only`
   (varsayılan değişmedi; preview-only modda preview yazımı FATAL — çıktının kendisi o).
+
+### M10i hafif adversarial tur (tek mercek: "mevcut davranış sessizce bozuldu mu?")
+- Bulucu ajan 5 bulgu üretti; şüpheci doğrulayıcılar oturum limitine takıldı → beşi de
+  ELLE doğrulandı, beşi de GERÇEKti, beşi de düzeltildi (`57b9eed`):
+  1. **CRITICAL — boş VRAM prob SONRASI okunuyordu:** measure probu cupy havuzunu koşunun
+     kendi ayak izi kadar doldurur ve havuz blokları cihaza dönmez → boş-VRAM kapısı ~yarım
+     VRAM üstü işleri (40 GiB A100'de 25 GiB'lik M10 sınıfı!) yanlış reddederdi. GPU ortamı
+     artık plan'dan ÖNCE anlık görüntüleniyor; çağrı sırası testle sabit. Kendi boş-VRAM
+     düzeltmemin yan etkisiydi — mercek tam bunun için kurulmuştu.
+  2. **MAJOR (repro'lu) — kapı resume'u reddediyordu:** kapı-öncesi başlatılmış ya da %95
+     bitmiş bir CPU koşusu `--resume` ile tamamlanamaz, checkpoint yetim kalırdı. Mevcut
+     checkpoint'e açık `--resume` kapıyı uyarıyla atlar (batık emek + açık niyet); uçtan uca
+     test (kesinti → bayraksız resume → bit-devam).
+  3. **MAJOR — prob "auto" backend'de ölçüyordu:** GPU'lu makinede `--backend numpy` işinde
+     kapı cuFFT süresine "measured" etiketiyle güvenirdi. `estimate(measure_backend=...)`
+     eklendi, runner çözümlenen backend'i geçiriyor (testli). Yerelde repro edilemez (GPU yok)
+     ama kod yolu net — Colab oturumunda canlı doğrulanacak.
+  4. **MINOR — dry-run sözleşmesi:** kapının dry-run'ı reddetmesi (benim kararımdı) exit-0'a
+     bağlı betikleri ve "Colab işini CPU'da planla" akışını kırıyordu. Geri alındı: dry-run'da
+     kapı "would be refused" NOTU basar, exit 0 kalır. VRAM reddi dry-run'da reddetmeye devam
+     ediyor (M10c'den beri mevcut sözleşme — tutarsızlık bilinçli ve belgeli).
+  5. **MINOR — damga/loglama:** `environment["numpy"]` yine `np.__version__` (importlib.metadata
+     egzotik kurulumda None dönebilirdi); CLI loglaması root yerine `caustica` logger'ına
+     kapsandı (main() çağıran notebook üçüncü-parti INFO seline maruz kalmasın).
+- Ders: 1. bulgu bu milestone'da eklenen boş-VRAM düzeltmesinin etkileşim hatası — "düzeltme
+  de bir değişikliktir" merceği kendini kanıtladı.
