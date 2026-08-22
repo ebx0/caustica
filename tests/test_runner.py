@@ -358,7 +358,8 @@ def test_cancel_file_stops_at_period_boundary_and_resume_is_bitwise_identical(tm
     status = json.loads((out_b / "status.json").read_text(encoding="utf-8"))
     assert status["state"] == "interrupted"
     assert status["periods_done"] == 3  # it stopped at a BOUNDARY, not mid-period
-    # The request is consumed: otherwise every --resume would cancel itself.
+    # The request is consumed, so a stopped folder does not advertise a stop
+    # nobody will honor. (Not what saves the --resume — see the next test.)
     assert not (out_b / CANCEL_FILE).exists()
     # Cancelling is not failing — no failure record is left behind.
     assert not (out_b / ERROR_FILE).exists()
@@ -445,6 +446,39 @@ def test_cancel_poll_is_one_stat_per_period_never_per_step(tmp_path, monkeypatch
     # equal; here they differ by exactly the factor the boundary buys.
     assert total < steps
     assert total * spp <= steps + spp
+
+
+def test_the_startup_clear_alone_would_carry_a_resume(tmp_path):
+    """Which of the two `cancel` clears is load-bearing — measured, not assumed.
+
+    The runner clears `cancel` twice: at the start of every real run, and
+    again in the interrupt handler. The handler's comment used to claim IT
+    was what stopped a `--resume` from cancelling itself "forever"; deleting
+    that line and rerunning showed the resume completing bit-identically
+    anyway (mutation review, 2026-08-22). The startup clear is the safety
+    net, and this is the test that says so: the file is put BACK after the
+    cancelled run, exactly as if the handler had never consumed it.
+
+    The handler's delete stays as belt-and-braces for a different and real
+    reason — a stopped folder must not advertise a stop nobody will honor —
+    which `test_cancel_file_stops_at_period_boundary...` above pins.
+    """
+    job = mini_job(tmp_path)
+    out_a, out_b = tmp_path / "a", tmp_path / "b"
+    assert run_job_file(job, opts(out=out_a)) == EXIT_OK  # uninterrupted baseline
+
+    def press_stop_at_period_3(ev):
+        if ev["period"] >= 3:
+            (out_b / CANCEL_FILE).touch()
+
+    assert run_job_file(job, opts(out=out_b, progress=press_stop_at_period_3)) == EXIT_INTERRUPTED
+    (out_b / CANCEL_FILE).touch()  # as if the handler had never run
+
+    assert run_job_file(job, opts(out=out_b, resume=True)) == EXIT_OK
+    assert not (out_b / CANCEL_FILE).exists()  # the STARTUP clear took it
+    a, b = load_result(out_a / "result.h5"), load_result(out_b / "result.h5")
+    np.testing.assert_array_equal(a.phasor, b.phasor)
+    np.testing.assert_array_equal(a.p_max, b.p_max)
 
 
 def test_a_stale_cancel_file_does_not_cancel_the_next_run(tmp_path):
