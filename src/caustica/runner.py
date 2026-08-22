@@ -62,6 +62,7 @@ import warnings
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from statistics import median
 from typing import Any
 
 import numpy as np
@@ -230,6 +231,67 @@ def _vram_pool_peak_gib(backend_name: str) -> float | None:
         return round(cupy.get_default_memory_pool().total_bytes() / 2**30, 3)
     except Exception:
         return None
+
+
+class _StepTiming:
+    """Split a solve's wall time into one-time warmup and steady per-step cost.
+
+    ``t_step_measured_s`` (``elapsed / steps``) is honest arithmetic and a
+    misleading number. On the first real GPU session (A100-SXM4-40GB, Colab,
+    2026-08-22) it read 26.6 ms/step against a 1.03 ms/step probe — a 25.9x
+    "miss" that was almost entirely a ~2.7 s one-time CUDA/JIT/cuFFT-plan cost
+    smeared over a 104-step, 2.77 s run. The SAME job on the CPU came out at
+    0.96x. The accounting was right; the scale hid a constant.
+
+    So this consumes the engine's period-boundary payload — no new
+    instrumentation, no extra device sync, nothing the solve can feel — and
+    reads the pairs ``(step, elapsed_s)`` it already carries. The steady cost
+    is the MEDIAN of the per-step rates BETWEEN boundaries; the interval from
+    the solve's start to the first boundary is never one of them, because that
+    is exactly the interval that pays for warmup. Warmup is then what the
+    total does not explain.
+
+    Deliberately conservative: fewer than three boundaries means fewer than
+    two intervals to take a median over, and the answer is ``None`` — a stamp
+    that says "not measured" beats one that says a number it cannot support.
+    The historical keys are untouched; these are ADDITIONS (M8's Colab gates
+    and ``docs/gui_contract.md`` read the old ones).
+    """
+
+    def __init__(self) -> None:
+        self.samples: list[tuple[int, float]] = []
+
+    def __call__(self, ev: dict) -> None:
+        try:
+            self.samples.append((int(ev["step"]), float(ev["elapsed_s"])))
+        except Exception:  # noqa: BLE001 - telemetry must never fail a solve
+            pass
+
+    def steady_step_s(self) -> float | None:
+        """Median seconds/step between period boundaries, or None."""
+        if len(self.samples) < 3:
+            return None
+        rates = [
+            (t1 - t0) / (s1 - s0)
+            for (s0, t0), (s1, t1) in zip(self.samples, self.samples[1:], strict=False)
+            # The settle->record transition emits at the SAME step count as
+            # the boundary before it; a zero-step interval is not a rate.
+            if s1 > s0 and t1 > t0
+        ]
+        if len(rates) < 2:
+            return None
+        return float(median(rates))
+
+    def split(self, elapsed_s: float, session_steps: int) -> dict:
+        """``{warmup_s, t_step_steady_s, steady_samples}`` for the stamp."""
+        steady = self.steady_step_s()
+        return {
+            "warmup_s": (
+                None if steady is None else round(max(0.0, elapsed_s - session_steps * steady), 3)
+            ),
+            "t_step_steady_s": None if steady is None else round(steady, 6),
+            "steady_samples": len(self.samples),
+        }
 
 
 class _Heartbeat:
@@ -430,6 +492,10 @@ def _plan(built: BuiltJob, backend_name: str, opts: RunnerOptions):
         "spp": est_here.spp,
         "dt_s": est_here.dt,
         "t_step_s": est_here.t_step_s,
+        # One-time, NOT per step (fix A2): t_expected_s = warmup_s +
+        # steps_expected * t_step_s. Reported separately so a caller can tell
+        # a slow device from a short run that is mostly warmup.
+        "warmup_s": round(est_here.warmup_s, 3),
         "steps_expected": est_here.steps_expected,
         "steps_worst": est_here.steps_worst,
         "t_expected_s": round(est_here.t_expected_s, 1),
@@ -881,6 +947,7 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
         harmonics=built.harmonics,
     )
     display = None
+    timing = _StepTiming()
     if native:
         # backend=, checkpoint= and progress= are NATIVE-engine options; the
         # kwave adapter rejects unknown kwargs by contract, so passing them
@@ -897,7 +964,9 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
             keep_on_success=True,
         )
         display = progress_resolve(opts.progress, label=built.name)
-        run_kwargs["progress"] = progress_chain(hb, display)
+        # The timer is NOT a display: it is attached whether or not progress
+        # output is enabled, because the warmup split is part of the stamp.
+        run_kwargs["progress"] = progress_chain(hb, timing, display)
 
     import caustica.solvers as solvers  # noqa: PLC0415
 
@@ -1027,11 +1096,20 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
         except Exception as exc:
             log.warning("preview package failed (the result itself is safe): %s", exc)
 
+    # This session's steps: a --resume run's elapsed_solve covers only what
+    # THIS process did, so charging it with the resumed run's total steps
+    # would report a negative warmup.
+    prior_steps = offset_periods * est.spp if (est is not None and offset_periods) else 0
+    session_steps = max(result.steps_total - prior_steps, 1)
     actual = {
         "elapsed_solve_s": round(elapsed_solve, 2),
         "elapsed_total_s": round(time.perf_counter() - t_start, 2),
         "steps_total": result.steps_total,
+        # Kept verbatim: M8's Colab gates and the GUI contract read it. It
+        # bundles the one-time warmup into a per-step average, which is what
+        # the three keys below take apart (fix A2).
         "t_step_measured_s": round(elapsed_solve / max(result.steps_total, 1), 6),
+        **timing.split(elapsed_solve, session_steps),
         "converged_period": result.converged_period,
         "settle_capped": result.settle_capped,
         "resumed_from_period": offset_periods or None,

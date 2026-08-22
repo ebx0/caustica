@@ -11,6 +11,7 @@ import h5py
 import numpy as np
 import pytest
 
+import caustica.runner as runner_mod
 from caustica.config.job import JOB_FORMAT
 from caustica.io.store import load_result, validate_result_file
 from caustica.runner import (
@@ -749,3 +750,85 @@ def test_the_skip_guard_clears_the_stale_error_but_not_a_cancel(tmp_path):
     assert run_job_file(job, opts(out=out)) == EXIT_OK  # skip-guard
     assert not (out / ERROR_FILE).exists()
     assert (out / CANCEL_FILE).exists()
+
+
+# ------------------------------------------------- warmup vs steady cost (A2)
+
+
+def test_step_timing_takes_the_median_between_boundaries_never_the_first():
+    """The interval that pays for warmup must never enter the steady rate.
+
+    Synthetic payloads, so the arithmetic is checkable: the solve reaches its
+    first boundary at t=5.0 s (a 4.5 s warmup plus 8 steps of real work) and
+    then runs at a flat 0.0625 s/step. The steady answer must be the LATER
+    rate, not the average that includes the first interval.
+    """
+    timing = runner_mod._StepTiming()
+    for i, (step, elapsed) in enumerate([(8, 5.0), (16, 5.5), (24, 6.0), (32, 6.5)]):
+        timing({"step": step, "elapsed_s": elapsed, "period": i + 1, "stage": "settle"})
+    assert timing.steady_step_s() == pytest.approx(0.5 / 8)
+
+    split = timing.split(elapsed_s=6.5, session_steps=32)
+    assert split["t_step_steady_s"] == pytest.approx(0.0625)
+    assert split["warmup_s"] == pytest.approx(4.5, abs=1e-3)
+    assert split["steady_samples"] == 4
+
+
+def test_step_timing_reports_nothing_it_cannot_support():
+    """Fewer than two usable intervals -> None, not a number nobody can back."""
+    timing = runner_mod._StepTiming()
+    assert timing.steady_step_s() is None
+    timing({"step": 8, "elapsed_s": 1.0})
+    timing({"step": 16, "elapsed_s": 2.0})
+    assert timing.steady_step_s() is None  # one interval is not a median
+
+    # The settle->record emission repeats the same step count: a zero-step
+    # interval is not a rate, and letting it through would divide by zero.
+    timing({"step": 16, "elapsed_s": 2.1})
+    timing({"step": 24, "elapsed_s": 3.0})
+    timing({"step": 32, "elapsed_s": 4.0})
+    assert timing.steady_step_s() == pytest.approx(1.0 / 8)
+
+    split = timing.split(elapsed_s=4.0, session_steps=32)
+    assert split["warmup_s"] == 0.0  # negative warmup is not a thing
+
+
+def test_the_stamp_separates_warmup_from_the_steady_step_cost(tmp_path):
+    """A real run's stamp carries the split, and the OLD keys are untouched.
+
+    Fix A2: on the first Colab session ``t_step_measured_s`` read 25.9x the
+    planner's per-step probe because a ~2.7 s one-time cost was averaged over
+    104 steps. The bundled number stays (M8's gates and the GUI contract read
+    it); what is new is the ability to see what it bundles.
+    """
+    out = tmp_path / "out"
+    assert run_job_file(mini_job(tmp_path), opts(out=out)) == EXIT_OK
+    actual = json.loads((out / "run_meta.json").read_text(encoding="utf-8"))["actual"]
+
+    for legacy in ("elapsed_solve_s", "elapsed_total_s", "steps_total", "t_step_measured_s"):
+        assert legacy in actual, "an existing run_meta.actual key disappeared"
+
+    assert actual["steady_samples"] >= 3
+    assert actual["t_step_steady_s"] > 0.0
+    assert actual["warmup_s"] >= 0.0
+    # The split is exact by construction, so assert the identity rather than
+    # a tolerance on a sub-second CPU micro-run: either the steady rate does
+    # not explain the whole elapsed time and warmup is the remainder, or it
+    # over-explains it and warmup is floored at zero.
+    steady_part = actual["t_step_steady_s"] * actual["steps_total"]
+    if actual["warmup_s"] > 0.0:
+        assert actual["warmup_s"] + steady_part == pytest.approx(
+            actual["elapsed_solve_s"], abs=0.02
+        )
+    else:
+        assert steady_part >= actual["elapsed_solve_s"] - 0.02
+
+
+def test_the_plan_reports_warmup_separately_from_the_per_step_cost(tmp_path):
+    out = tmp_path / "out"
+    assert run_job_file(mini_job(tmp_path), opts(out=out, dry_run=True)) == EXIT_OK
+    plan = json.loads((out / "plan.json").read_text(encoding="utf-8"))
+    assert plan["warmup_s"] >= 0.0
+    assert plan["t_expected_s"] == pytest.approx(
+        plan["warmup_s"] + plan["t_step_s"] * plan["steps_expected"], rel=0.02, abs=0.05
+    )

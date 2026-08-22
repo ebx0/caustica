@@ -203,3 +203,68 @@ def test_compare_is_sorted_and_prints():
     assert times == sorted(times)
     table = str(comp)
     assert "H100-SXM" in table and "db" in table
+
+
+# ----------------------------------------------------- warmup as its own term
+
+
+def test_expected_time_is_warmup_plus_steps_times_step_cost():
+    """Fix A2: a GPU solve pays a one-time cost, and the model has to say so.
+
+    The first real Colab session measured 26.6 ms/step against a 1.03 ms/step
+    probe on the SAME shape in the SAME process — 2.66 s of cuFFT-plan and
+    kernel-compilation cost that no per-step coefficient can absorb. The CPU
+    control run came out at 0.96x, which is what makes it a missing constant
+    rather than a broken model.
+    """
+    grid, med, src = tiny_setup()
+    est = planner.estimate(grid, med, src, gpu="A100")
+    assert est.warmup_s == model.GPU_WARMUP_S > 0.0
+    assert est.t_expected_s == pytest.approx(est.warmup_s + est.t_step_s * est.steps_expected)
+    assert est.t_worst_s == pytest.approx(est.warmup_s + est.t_step_s * est.steps_worst)
+    assert "warmup" in est.summary()
+
+
+def test_calibration_measures_a_warmup_and_the_estimate_uses_it(tmp_path):
+    calfile = tmp_path / "calibration.json"
+    entry = planner.calibrate(shapes=((16, 16), (24, 24)), backend="numpy", n_steps=4, path=calfile)
+    assert entry["warmup_s"] >= 0.0
+    assert entry["warmup_source"] == "probe"
+
+    # The stored number is what an estimate against that device then uses,
+    # instead of the datasheet constant.
+    data = json.loads(calfile.read_text())
+    data["devices"]["NVIDIA A100-SXM4-40GB"] = {**entry, "a": 1e-9, "b": 2e-10, "warmup_s": 7.5}
+    calfile.write_text(json.dumps(data))
+    grid, med, src = tiny_setup()
+    est = planner.estimate(grid, med, src, gpu="A100", calibration_path=calfile)
+    assert est.source == "calibrated"
+    assert est.warmup_s == pytest.approx(7.5)
+
+
+def test_a_pre_A2_calibration_entry_still_gets_the_constant(tmp_path):
+    """Entries written before this fix carry no warmup key. Reading that as
+    zero would silently reintroduce exactly the bug — a GPU entry without a
+    measured warmup falls back to the datasheet constant."""
+    calfile = tmp_path / "calibration.json"
+    old_entry = {"a": 1e-9, "b": 2e-10, "backend": "cupy", "samples": [], "shapes": []}
+    calfile.write_text(json.dumps({"version": 1, "devices": {"NVIDIA A100-SXM4-40GB": old_entry}}))
+    grid, med, src = tiny_setup()
+    est = planner.estimate(grid, med, src, gpu="A100", calibration_path=calfile)
+    assert est.source == "calibrated"
+    assert est.warmup_s == model.GPU_WARMUP_S
+
+
+def test_record_warmup_writes_back_what_a_real_run_paid(tmp_path):
+    """The probe replays the step composition, not a whole solve: it never
+    builds the property maps or the source scatter, so it under-counts. The
+    validation suite measures the real thing and writes it back here."""
+    calfile = tmp_path / "calibration.json"
+    planner.calibrate(shapes=((16, 16), (24, 24)), backend="numpy", n_steps=4, path=calfile)
+
+    assert cal.record_warmup("no-such-device", 4.0, path=calfile) is None  # nothing to attach to
+    updated = cal.record_warmup("cpu", 4.25, path=calfile)
+    assert updated["warmup_s"] == pytest.approx(4.25)
+    assert updated["warmup_source"] == "measured"
+    assert cal.find_calibration_for("cpu", calfile)["warmup_s"] == pytest.approx(4.25)
+    assert cal.record_warmup("cpu", -1.0, path=calfile)["warmup_s"] == 0.0  # never negative
