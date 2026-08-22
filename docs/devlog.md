@@ -1493,6 +1493,13 @@ okunarak:
    tepe basınç `678863.1 Pa` (ikisinde de, son haneye kadar), aynı voxel, aynı `derived`,
    aynı 995 kaynak voxeli. Yeni kapı doğrulanmış kapıyla bit-aynı alan üretiyor.
 
+**Provanın yan etkisi (dikkat):** `pip install <checkout>` checkout'ta
+`build/` klasörünü YENİDEN oluşturdu - 2026-08-22'de silinen, M10h'de wheel testini
+maskeleyen artefaktın ta kendisi. Silindi. `test_packaging.py`'nin wheel fixture'ı zaten
+pristine bir kopyadan kurduğu için süit bağışık, ama checkout'u pip ile kuran herkes bu
+klasörü geri getiriyor: kurulum sonrası `rm -rf build` alışkanlık olmalı (git-ignore'lu
+olduğu için `git status` uyarmıyor).
+
 **Kaynak koda inmem gerekmedi.** Tek eksik nokta: pozitif kontrolde `TransducerArray.positions`
 / `.elem_radius` alanlarını okumak istedim, bu ikisi hiçbir dokümanda yazılı değildi (API
 şeklinden çıkardım) — `job_reference.md`'nin `elements` bölümüne bir satır eklendi.
