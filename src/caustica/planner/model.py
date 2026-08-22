@@ -38,6 +38,21 @@ FFT_FLOP_EFF = 0.10
 #: kernels (reads+writes of large float32 volumes).
 BW_EFF = 0.75
 
+#: One-time GPU warmup per solve [s] — cuFFT plan creation for the engine's
+#: padded shape, kernel compilation for its specific fusions, and the first
+#: device allocations. It is NOT per-step work, so a run that pays it is not
+#: "slower per step"; a model without it is simply missing a constant.
+#:
+#: The number comes from the first real GPU session (A100-SXM4-40GB, Colab,
+#: 2026-08-22): a 104-step solve took 2.77 s while the planner's own probe
+#: measured 1.03 ms/step on the same shape in the same process — 2.66 s that
+#: no per-step model can explain, and which the same job on the CPU (0.96x
+#: predicted) does not pay. Rounded up to 3.0 as a single-device default;
+#: :func:`caustica.planner.calibrate` overwrites it with a measured value on
+#: the target device, and ``caustica.validation`` writes back what real runs
+#: actually paid.
+GPU_WARMUP_S = 3.0
+
 _F32 = 4
 _C64 = 8
 

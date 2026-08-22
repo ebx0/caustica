@@ -17,6 +17,13 @@ Three estimate sources, always labeled on the result (M8 gate):
 * ``"measured"`` — ``measure=True`` times the step composition on the
   CURRENT machine right now (~20 steps).
 
+Wall time is ``warmup + steps * t_step`` (fix A2). The constant term is the
+one-time cost a GPU solve pays for cuFFT plans, kernel compilation and the
+first allocations — dropping it made the first real Colab session look like a
+25.9x miss when the per-step accounting was in fact correct (see
+``model.GPU_WARMUP_S``). ``t_expected_s`` therefore INCLUDES the warmup, and
+``Estimate.warmup_s`` says how much of it that is.
+
 VRAM comes from a byte-level inventory of the engine's buffers
 (:mod:`caustica.planner.model`); when it does not fit, ``advice`` carries
 actionable fixes (coarser dx / smaller record AOI / linear solver / larger
@@ -39,6 +46,7 @@ from caustica.planner.calibration import (
     default_calibration_path,
     find_calibration_for,
     measure_step_time,
+    record_warmup,
 )
 from caustica.solvers.base import CWRunSpec
 from caustica.solvers.kspace.engine import (
@@ -59,6 +67,7 @@ __all__ = [
     "list_gpus",
     "load_gpu_db",
     "measure_step_time",
+    "record_warmup",
 ]
 
 _GIB = 2**30
@@ -121,6 +130,7 @@ class Estimate:
     dt: float
     spp: int
     t_step_s: float
+    warmup_s: float
     steps_expected: int
     steps_worst: int
     t_expected_s: float
@@ -138,6 +148,7 @@ class Estimate:
             f"{'FITS' if self.fits else 'DOES NOT FIT'} "
             f"({self.vram_gib:.2f} GiB needed / {self.vram_usable_bytes / _GIB:.2f} GiB usable)",
             f"  t_step={self.t_step_s * 1e3:.2f} ms, spp={self.spp}, "
+            f"warmup={self.warmup_s:.1f} s (one-time), "
             f"expected={_fmt_t(self.t_expected_s)} ({self.steps_expected} steps), "
             f"worst-case={_fmt_t(self.t_worst_s)}",
         ]
@@ -212,6 +223,7 @@ def estimate(
             grid.shape, nonlinear=nonlinear, backend=measure_backend, n_steps=20
         )
         t_step = run["t_step_s"]
+        warmup_s = float(run.get("warmup_s", 0.0))
         src_label = "measured"
         if run["backend"] == "numpy":
             warnings.append(
@@ -221,12 +233,17 @@ def estimate(
         entry = find_calibration_for(gpu_spec.key, calibration_path)
         if entry is not None:
             t_step = model.step_time(entry["a"], entry["b"], p_elems)
+            # Entries written before fix A2 carry no warmup at all; a GPU
+            # entry without one gets the constant rather than a silent zero,
+            # which is the term the whole fix exists to stop dropping.
+            warmup_s = float(entry.get("warmup_s", model.GPU_WARMUP_S))
             src_label = "calibrated"
         else:
             a, b = model.db_time_coeffs(
                 gpu_spec.fp32_tflops, gpu_spec.mem_bw_gbs, grid.ndim, nonlinear
             )
             t_step = model.step_time(a, b, p_elems)
+            warmup_s = model.GPU_WARMUP_S
             src_label = "db"
             warnings.append(
                 "db estimate is datasheet-coarse (~2x); run planner.calibrate() on the "
@@ -292,10 +309,14 @@ def estimate(
         dt=dt,
         spp=spp,
         t_step_s=t_step,
+        warmup_s=warmup_s,
         steps_expected=steps_expected,
         steps_worst=steps_worst,
-        t_expected_s=t_step * steps_expected,
-        t_worst_s=t_step * steps_worst,
+        # A GPU run pays its plan/JIT/allocation cost ONCE, not per step; a
+        # model without the constant term under-predicts every short run and
+        # is what made the first Colab session look like a 25.9x miss (A2).
+        t_expected_s=warmup_s + t_step * steps_expected,
+        t_worst_s=warmup_s + t_step * steps_worst,
         warnings=tuple(warnings),
         advice=tuple(advice),
     )

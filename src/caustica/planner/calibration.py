@@ -53,10 +53,22 @@ def measure_step_time(
     """Median per-step wall time (and mempool footprint) on THIS device.
 
     Returns ``{"device", "backend", "shape", "p_elems", "t_step_s",
-    "vram_peak_bytes"}`` — ``vram_peak_bytes`` is the cupy mempool
-    high-water mark (``total_bytes``, i.e. what nvidia-smi attributes to the
-    process) and ``None`` on the numpy backend.
+    "warmup_s", "vram_peak_bytes"}`` — ``vram_peak_bytes`` is the cupy
+    mempool high-water mark (``total_bytes``, i.e. what nvidia-smi attributes
+    to the process) and ``None`` on the numpy backend.
+
+    ``warmup_s`` (fix A2) is the ONE-TIME cost this measurement pays before
+    the per-step clock is meaningful: device allocation, CUDA context and
+    module load on a cold process, cuFFT plan creation and kernel compilation
+    for this op mix. It is measured as *everything up to the end of the
+    warmup iterations, minus what those iterations should have cost at the
+    steady rate* — so a second call in the same process honestly reports
+    almost nothing, and the first one carries the cold start. Without this
+    term, ``elapsed / steps`` on a short GPU run reads ~26x the steady cost
+    and the planner looks broken when it is merely incomplete (measured,
+    first Colab session 2026-08-22).
     """
+    t_cold0 = time.perf_counter()
     b = get_backend(backend)
     xp, fft = b.xp, b.fft
     padded, p_elems, _ = fft_sizes(tuple(active_shape))
@@ -113,6 +125,7 @@ def measure_step_time(
     for _ in range(warmup):
         one_step()
     sync()
+    t_cold = time.perf_counter() - t_cold0
     times = []
     for _ in range(n_steps):
         t0 = time.perf_counter()
@@ -120,12 +133,14 @@ def measure_step_time(
         sync()
         times.append(time.perf_counter() - t0)
 
+    t_step = float(median(times))
     return {
         "device": device_name(backend),
         "backend": b.name,
         "shape": tuple(active_shape),
         "p_elems": p_elems,
-        "t_step_s": float(median(times)),
+        "t_step_s": t_step,
+        "warmup_s": max(0.0, t_cold - warmup * t_step),
         "vram_peak_bytes": int(pool.total_bytes()) if pool is not None else None,
     }
 
@@ -170,6 +185,13 @@ def calibrate(
     entry = {
         "a": a,
         "b": b,
+        # The COLD start, i.e. the largest warmup any of the shapes paid: the
+        # first measurement carries the context/module load, the ones after it
+        # in the same process do not, and it is the first that a fresh solve
+        # looks like (fix A2). record_warmup() replaces this with what a real
+        # run actually paid once the validation suite has measured one.
+        "warmup_s": max(float(r["warmup_s"]) for r in runs),
+        "warmup_source": "probe",
         "backend": runs[0]["backend"],
         "n_steps": n_steps,
         "nonlinear": nonlinear,
@@ -184,6 +206,40 @@ def calibrate(
     target.parent.mkdir(parents=True, exist_ok=True)
     data = json.loads(target.read_text()) if target.exists() else {"version": 1, "devices": {}}
     data["devices"][runs[0]["device"]] = entry
+    target.write_text(json.dumps(data, indent=2))
+    return entry
+
+
+def record_warmup(
+    device: str,
+    warmup_s: float,
+    *,
+    source: str = "measured",
+    path: str | Path | None = None,
+) -> dict | None:
+    """Teach the calibration what a REAL run's warmup cost on this device.
+
+    The probe in :func:`measure_step_time` replays the step composition, not
+    a whole solve: it never builds the medium's property maps, never touches
+    the source scatter, and so it under-counts the one-time cost of a real
+    run. ``caustica.validation``'s GPU-gate suite measures that number from
+    an actual stamped run and calls this to write it back — which is what
+    "the warmup is measured on the device and stored in the calibration"
+    means in practice (fix A2).
+
+    Returns the updated entry, or None when the device has no calibration
+    yet (there is nothing to attach to, and inventing one would let the
+    planner label a datasheet guess "calibrated").
+    """
+    target = Path(path) if path is not None else default_calibration_path()
+    data = load_calibration(target)
+    entry = data.get("devices", {}).get(device)
+    if entry is None:
+        return None
+    entry["warmup_s"] = max(0.0, float(warmup_s))
+    entry["warmup_source"] = source
+    entry["warmup_recorded_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
+    target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(data, indent=2))
     return entry
 
