@@ -63,6 +63,7 @@ def read_element_file(path: str | Path) -> tuple[np.ndarray, np.ndarray | None]:
         return pos, nrm
     if suffix == ".csv":
         rows: list[list[float]] = []
+        header_used = False
         for lineno, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
             line = raw.split("#", 1)[0].strip()
             if not line:
@@ -71,8 +72,11 @@ def read_element_file(path: str | Path) -> tuple[np.ndarray, np.ndarray | None]:
             try:
                 rows.append([float(p) for p in parts])
             except ValueError:
-                if not rows and lineno <= 2:
-                    continue  # a single header line is fine
+                # The first non-numeric line before any data is the header —
+                # however many comment/blank lines preceded it.
+                if not rows and not header_used:
+                    header_used = True
+                    continue
                 raise ValueError(
                     f"{path.name}:{lineno}: not a numeric element row: {raw.strip()!r}"
                 ) from None

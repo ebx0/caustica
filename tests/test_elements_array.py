@@ -110,6 +110,27 @@ def test_reader_refusals_are_actionable(tmp_path):
         read_element_file(tmp_path / "nope.npz")
 
 
+def test_csv_header_survives_leading_comments(tmp_path):
+    """A header does not have to be line 1 or 2 — comments may precede it."""
+    csv = tmp_path / "commented.csv"
+    csv.write_text(
+        "\n".join(
+            [
+                "# my array, exported 2026-08-22",
+                "# units: millimetres, apex frame",
+                "",
+                "x,y,z",
+                "4.0,0.0,0.69",
+                "0.0,4.0,0.69",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    pos, nrm = read_element_file(csv)
+    assert pos.shape == (2, 3)
+    assert nrm is None
+
+
 def test_missing_normals_aim_at_the_focus():
     pos = ring_positions_mm() * 1e-3
     arr = elements_array(positions=pos, elem_radius=1e-3, focal_length=ROC_MM * 1e-3)
