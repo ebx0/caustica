@@ -143,16 +143,16 @@ def _write_error_json(
     """
     if outdir is None:
         return
-    payload = {
-        "format": ERROR_FORMAT,
-        "stage": stage,
-        "exit_code": int(exit_code),
-        "error_class": error_class,
-        "message": message,
-        "advice": list(advice),
-        "written_at": _now_iso(),
-    }
     try:
+        payload = {
+            "format": ERROR_FORMAT,
+            "stage": stage,
+            "exit_code": int(exit_code),
+            "error_class": error_class,
+            "message": message,
+            "advice": list(advice),
+            "written_at": _now_iso(),
+        }
         _write_json(Path(outdir) / ERROR_FILE, payload)
     except Exception as exc:  # noqa: BLE001 - must never mask the real failure
         log.warning("error.json write failed: %s", exc)
@@ -172,9 +172,11 @@ def _error_outdir(established: Path | None, opts: RunnerOptions) -> Path | None:
     if opts.out is None:
         return None
     try:
-        d = Path(opts.out)
-        d.mkdir(parents=True, exist_ok=True)
-        return d if d.is_dir() else None
+        # Through ensure_dir_verified, like every other folder creation here:
+        # a bare mkdir is not proof on a Drive FUSE mount, and a phantom
+        # directory that the rest of the runner would have rejected is not
+        # something a failure path should leave behind (review, 2026-08-22).
+        return ensure_dir_verified(Path(opts.out))
     except Exception:  # noqa: BLE001 - an unwritable --out is not a new failure
         return None
 
@@ -638,6 +640,17 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
     t_start = time.perf_counter()
     outdir: Path | None = None
 
+    def record_failure(where: Path | None, **fields) -> None:
+        """Write ``error.json`` — unless this is a ``--dry-run``.
+
+        A dry run is a PROBE, not an attempt on the folder: it must not
+        erase the failure record a GUI is displaying, and it must not
+        invent one either. Its verdict is the exit code plus ``plan.json``,
+        which already carries the planner's advice (review, 2026-08-22).
+        """
+        if not opts.dry_run:
+            _write_error_json(where, **fields)
+
     # ---- everything before the solve is, by definition, a config problem ----
     try:
         # BEFORE the medium is built: `--backend` used to be an argparse
@@ -666,7 +679,7 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
         probe_writable(outdir)
     except Exception as exc:
         print(f"CONFIG ERROR: {type(exc).__name__}: {exc}", file=sys.stderr)
-        _write_error_json(
+        record_failure(
             _error_outdir(outdir, opts),
             stage="config",
             exit_code=EXIT_CONFIG,
@@ -683,16 +696,14 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
     ck_path = outdir / "checkpoint.npz"
     status_path = outdir / "status.json"
     cancel_path = outdir / CANCEL_FILE
-
-    # This attempt owns the folder from here on: a failure record and a stop
-    # request left by the PREVIOUS attempt are stale by definition. Clearing
-    # `cancel` also stops a process killed between "cancel seen" and "cancel
-    # honored" from cancelling every resume that follows, forever (M10l).
-    _clear_stale(outdir / ERROR_FILE)
-    _clear_stale(cancel_path)
+    error_path = outdir / ERROR_FILE
 
     # ---- file-level resume: a complete result is never produced twice ----
     if result_path.exists() and validate_result_file(result_path):
+        # A folder holding a complete result did not fail, so an old failure
+        # record is stale. `cancel` is deliberately NOT touched here: it may
+        # belong to a run still in flight in another process.
+        _clear_stale(error_path)
         print(f"already complete: {result_path} (skip-guard; delete it to regenerate)")
         return EXIT_OK
 
@@ -722,7 +733,7 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
                 tmp.write_text(plan_text, encoding="utf-8")
     except Exception as exc:
         print(f"CONFIG ERROR: {type(exc).__name__}: {exc}", file=sys.stderr)
-        _write_error_json(
+        record_failure(
             outdir,
             stage="plan",
             exit_code=EXIT_CONFIG,
@@ -749,7 +760,7 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
             else:
                 for line in refusal.lines:
                     print(line, file=sys.stderr)
-                _write_error_json(
+                record_failure(
                     outdir,
                     stage="gate",
                     exit_code=refusal.exit_code,
@@ -769,6 +780,13 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
         print("\n(dry run — nothing solved, nothing written beyond the plan)")
         return EXIT_OK
 
+    # From here a REAL run owns the folder: a failure record and a stop
+    # request left by the PREVIOUS attempt are stale by definition. Clearing
+    # `cancel` also stops a process killed between "cancel seen" and "cancel
+    # honored" from cancelling every resume that follows, forever (M10l).
+    _clear_stale(error_path)
+    _clear_stale(cancel_path)
+
     # ---- checkpoint policy: resuming is EXPLICIT ----
     offset_periods = 0
     if ck_path.exists():
@@ -778,7 +796,7 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
                 f"Rerun with --resume to continue it, or delete the checkpoint to restart.",
                 file=sys.stderr,
             )
-            _write_error_json(
+            record_failure(
                 outdir,
                 stage="checkpoint",
                 exit_code=EXIT_CONFIG,
@@ -838,7 +856,7 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
         # is the only place this hook is called from — a per-step poll would
         # put a filesystem round-trip between GPU kernels and is exactly what
         # the period-boundary discipline exists to prevent.
-        if cancel_path.exists():
+        if cancel_path.is_file():
             cancelled = True
             return True
         return deadline is not None and time.monotonic() >= deadline
@@ -971,7 +989,7 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
                     f"--resume (checkpoint retained at {ck_path}); only the record "
                     f"window is redone",
                 )
-                if native
+                if native and ck_path.exists()
                 else ()
             ),
         )

@@ -341,16 +341,16 @@ def test_cancel_file_stops_at_period_boundary_and_resume_is_bitwise_identical(tm
 
 def test_cancel_poll_is_one_stat_per_period_never_per_step(tmp_path, monkeypatch):
     """The cost gate: a per-step poll would put a syscall between kernels."""
-    real_exists = Path.exists
+    real_is_file = Path.is_file
     polls: list[str] = []
     boundaries: list[int] = []
 
-    def counting_exists(self, *a, **kw):
+    def counting_is_file(self, *a, **kw):
         if self.name == CANCEL_FILE:
             polls.append(str(self))
-        return real_exists(self, *a, **kw)
+        return real_is_file(self, *a, **kw)
 
-    monkeypatch.setattr(Path, "exists", counting_exists)
+    monkeypatch.setattr(Path, "is_file", counting_is_file)
     out = tmp_path / "out"
     code = run_job_file(
         mini_job(tmp_path), opts(out=out, progress=lambda ev: boundaries.append(ev["period"]))
@@ -541,3 +541,64 @@ def test_a_write_failure_for_error_json_changes_nothing(tmp_path, monkeypatch, c
     assert code == EXIT_OOM
     assert not (out / ERROR_FILE).exists()
     assert any("error.json write failed" in r.message for r in caplog.records)
+
+
+def test_a_cancel_directory_cannot_livelock_the_folder(tmp_path):
+    """The poll asks `is_file`, not `exists`.
+
+    A directory named `cancel` can never be unlinked, so an `exists()` poll
+    would stop every run in that folder at period 1 — forever, `--resume`
+    included (review finding, 2026-08-22).
+    """
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / CANCEL_FILE).mkdir()
+    assert run_job_file(mini_job(tmp_path), opts(out=out)) == EXIT_OK
+    assert (out / CANCEL_FILE).is_dir()  # untouched: it was never a request
+
+
+# ------------------------------------------------ M10l: --dry-run is a PROBE
+
+
+def test_dry_run_never_touches_the_failure_record_or_the_cancel_file(tmp_path):
+    """A fit-check must not erase the diagnosis a GUI is displaying.
+
+    `--dry-run` answers "will this fit?" — it is not an attempt on the
+    folder. It must neither delete a real run's `error.json` nor write one
+    of its own, and it must not eat a stop request meant for a run that is
+    still going (review finding, 2026-08-22).
+    """
+    job, out = mini_job(tmp_path), tmp_path / "out"
+    assert run_job_file(job, opts(out=out, vram_limit_gib=1e-5)) == EXIT_OOM
+    real = (out / ERROR_FILE).read_text(encoding="utf-8")
+    (out / CANCEL_FILE).touch()  # as if a run in another process were going
+
+    assert run_job_file(job, opts(out=out, dry_run=True)) == EXIT_OK
+    assert (out / ERROR_FILE).read_text(encoding="utf-8") == real  # untouched
+    assert (out / CANCEL_FILE).exists()
+
+    # ...and a dry run that is itself refused writes no record either: its
+    # verdict is the exit code plus plan.json, which carries the advice.
+    (out / ERROR_FILE).unlink()
+    assert run_job_file(job, opts(out=out, dry_run=True, vram_limit_gib=1e-5)) == EXIT_OOM
+    assert not (out / ERROR_FILE).exists()
+    assert json.loads((out / "plan.json").read_text(encoding="utf-8"))["vram_gib"] >= 0.0
+
+
+def test_dry_run_of_a_broken_job_writes_no_error_json(tmp_path):
+    p = tmp_path / "broken.json"
+    p.write_text("{not json")
+    out = tmp_path / "out"
+    assert run_job_file(p, opts(out=out, dry_run=True)) == EXIT_CONFIG
+    assert not (out / ERROR_FILE).exists()
+
+
+def test_the_skip_guard_clears_the_stale_error_but_not_a_cancel(tmp_path):
+    """A complete folder did not fail — but `cancel` may belong to someone else."""
+    job, out = mini_job(tmp_path), tmp_path / "out"
+    assert run_job_file(job, opts(out=out)) == EXIT_OK
+    (out / ERROR_FILE).write_text('{"stale": true}', encoding="utf-8")
+    (out / CANCEL_FILE).touch()
+    assert run_job_file(job, opts(out=out)) == EXIT_OK  # skip-guard
+    assert not (out / ERROR_FILE).exists()
+    assert (out / CANCEL_FILE).exists()

@@ -1769,34 +1769,78 @@ listesi gerçek klasörle, `status.json` alanları ÜÇ gerçek status'un kesiş
 ekler farkla türetiliyor — elle sayılmıyor), ilerleme anahtarları gerçek payload'la, çıkış kodları
 ve format etiketleri koddaki sabitlerle. Sayfadaki CLI satırları gerçek argparse'tan geçiyor.
 
-### Review turu — bir gerçek bulgu, üç abartı
-1. **GERÇEK:** sayfa GUI'ye ön-koşu reddi için `caustica.SimulationRefused` yakalamasını söylüyordu.
-   Böyle bir sınıf YOK — facade hem kapılar hem çöken çözüm için `SimulationError(mesaj, exit_code)`
-   atıyor, sınıflandırma `.exit_code`'da. `runner.py`'deki `Refusal` docstring'i de aynı yanlış adı
-   taşıyordu (M10i'den beri duruyordu, ama M10l'in dokunduğu kod). İkisi de düzeltildi ve delik
-   kapatıldı: `test_every_caustica_name_on_the_page_actually_exists` sayfadaki her `caustica.AD`'ı
-   gerçek pakette çözüyor. Mutasyonla doğrulandı — yanlış ad geri konunca test kırmızı.
-2. **ABARTI:** "`--dry-run` job.json + plan.json + plan.txt yazar" NATIVE hal; native olmayan
-   çözücünün planlayacak şeyi yok, yalnız `job.json` yazıyor. Daraltıldı.
-3. **ABARTI:** "`preview.npz` + `metrics.json` birlikte ≤10 MB" — 10 MB bütçesi preview'un ve
-   yalnız onun sıkıştırılmış baytları üzerinde ÖLÇÜLÜYOR. Daraltıldı.
-4. **ÇÜRÜTÜLEN şüpheler** (araştırıldı, bulgu ÇIKMADI): (a) cancel yoklamasının adım maliyetine
-   sızması — `stop_when` yalnız `_period_boundary`'den (settle döngüsü + `t_end` doldurma döngüsü)
-   ve kayıt penceresi öncesi TEK yoklamadan çağrılıyor; `step()` içinde hiçbir çağrı yok, testi de
-   ölçüyor (`polls <= boundaries+1`, `polls*spp <= steps+spp`). (b) `Refusal` yeniden kurulumunun
-   stderr'i kaydırması — yukarıdaki bayt-aynı ölçümü çürüttü. (c) sayfadaki `caustica-result/1`
-   attr listesinin uydurma olması — gerçek `result.h5`'e karşı denetlendi, sayfanın adlandırdığı
-   her attr gerçekten var. (d) `_clear_stale`'in bir hata kodunu değiştirebilmesi — `OSError`
-   yakalanıp loglanıyor, akışa dokunmuyor.
+### Review turu — iki mercek, on bulgu
+Mercek: (1) cancel yoklaması adım maliyetine sızdı mı, (2) error.json mevcut hata sözleşmesini
+değiştirdi mi, (3) gui_contract gerçekle çelişiyor mu. Yanına bir de mutasyon turu.
+
+**Q1 — sızmadı.** `stop_when` yalnız `_period_boundary`'den (settle döngüsü + `t_end` doldurma
+döngüsü) ve kayıt penceresi öncesindeki TEK yoklamadan çağrılıyor; `step()` içinde hiçbir çağrı
+yok ve `engine.py` bu milestone'da hiç değişmedi. Ölçüm: 68 adım / 15 periyot → 16 stat, yani
+tam olarak `N+1`. Sayfa "periyot başına bir" diyordu; `+1` (kayıt penceresi öncesi) eklendi.
+
+**Q2 — değiştirmedi, ölçülerek.** Ana ağaçtaki `runner.py` geçici olarak ebeveyn commit'inkiyle
+(`96e6330`) değiştirilip yedi hata yolu iki kez koşturuldu: stdout ve stderr, geçici klasör adları
+ve `warnings.warn`'un satır numarası dışında BAYT-AYNI. `Refusal`'ın `lines` alanından
+`headline` + `advice`'e taşınması iki kapının da metnini kılına dokunmadan koruyor.
+
+**GERÇEK bulgular (hepsi onarıldı):**
+1. `docs/gui_contract.md` GUI'ye ön-koşu reddi için `caustica.SimulationRefused` yakalamasını
+   söylüyordu. Böyle bir sınıf YOK — facade hem kapılar hem çöken çözüm için
+   `SimulationError(mesaj, exit_code)` atıyor. `runner.py`'deki `Refusal` docstring'i de aynı
+   yanlış adı taşıyordu (M10i'den beri). Delik kapatıldı:
+   `test_every_caustica_name_on_the_page_actually_exists` sayfadaki her `caustica.AD`'ı ve noktalı
+   yolu gerçek pakette çözüyor; mutasyonla doğrulandı.
+2. **`--dry-run` önceki koşunun `error.json`'ını SİLİYORDU.** Klasörü temizleme skip-guard'dan ve
+   dry-run dönüşünden ÖNCE duruyordu, yani bir "sığar mı?" sorgusu GUI'nin gösterdiği teşhisi yok
+   ediyordu. Dry-run artık bir PROBE: `error.json`'a da `cancel`'a da hiçbir yönde dokunmuyor
+   (`record_failure` sarmalayıcısı + temizlemenin gerçek koşuya taşınması) —
+   `test_dry_run_never_touches_the_failure_record_or_the_cancel_file`,
+   `test_dry_run_of_a_broken_job_writes_no_error_json`.
+3. **skip-guard `cancel`'ı yiyordu.** Tamamlanmış bir klasörde ikinci bir süreç, birincisine
+   gönderilmiş Durdur isteğini siliyordu. Skip-guard artık yalnız `error.json` temizliyor —
+   `test_the_skip_guard_clears_the_stale_error_but_not_a_cancel`.
+4. **`cancel` bir DİZİN ise kilitlenme.** `unlink` dizinde `OSError` atıyor ve yutuluyor, `exists()`
+   sonsuza dek `True` → o klasördeki her koşu (resume dahil) periyot 1'de duruyordu. Yoklama artık
+   `is_file()` — `test_a_cancel_directory_cannot_livelock_the_folder`.
+5. **`_error_outdir` `ensure_dir_verified`'ı atlıyordu.** Hata yolu, dosyanın geri kalanının
+   kullandığı Drive-FUSE sertleştirmesi olmadan klasör yaratıyordu. Artık aynı yardımcıdan geçiyor.
+6. Ufaklar: `_now_iso()` "asla maskeleme" bloğunun DIŞINDAydı (içeri alındı); store-aşaması
+   advice'i `native`'e bakıp `ck_path.exists()`'e bakmıyordu (solve-aşamasıyla hizalandı).
+
+**ABARTILAR (hepsi daraltıldı):** "`--dry-run` çıkış 0" — VRAM reddi dry-run'da da 3 döndürüyor ve
+bu sorunun CEVABI, arıza değil (CPU kapısının bilinçli istisnası ayrıca yazıldı; ikisi de artık
+`test_the_documented_dry_run_exit_codes_are_the_real_ones` ile çivili) · "`error.json` ancak ve
+ancak son deneme başarısızsa vardır" — öldürülen süreç HİÇBİR ŞEY yazmaz, o yüzden yokluğu
+"sınıflandırılmış hata kaydedilmedi" demek, "koşu iyi" demek değil · `resolved_backend` "`auto`'nun
+seçeceği" değil, koşunun GERÇEKTEN çözdüğü backend · "preview + metrics birlikte ≤10 MB" — 10 MB
+bütçesi preview'un ve yalnız onun sıkıştırılmış baytları üzerinde ölçülüyor · "`--dry-run` yalnız
+job/plan yazar" NATIVE hal · çıkış kodu kümesi "kapalı" deniyordu ama sınıflandırmadan kaçan bir
+istisna hâlâ 1 döndürüyor — sayfaya yazıldı · preview paketinin içeriğinde `p_max` düzlemi eksikti.
+
+**ÇÜRÜTÜLEN şüpheler** (araştırıldı, bulgu ÇIKMADI): `Refusal`'ın `_CLASSES`'ı dataclass alanı
+olmuş olabilir (annotation yok, `@dataclass` görmüyor) · `_error_outdir` asıl hatayı maskeleyebilir
+(gövde tümüyle `try/except Exception -> None`) · error.json başarılı koşuda yazılabilir (başarı
+yolunda çağrı yok) · sayfadaki `caustica-result/1` attr listesi uydurma (gerçek `result.h5`'e karşı
+denetlendi; 18 kök attr + 6 damga + 2 nesir sözleşmesi tam) · "resume bit-aynı" abartı (tersine,
+ölçüldüğünden GÜÇLÜ: iptal → resume sonrası `result.h5` SHA-1'i kesintisiz koşununkiyle aynı) ·
+`env_report()` istisna atabilir (her olgu ayrı ayrı korumalı) · çıkış kodu anlamları
+(CPU reddi gerçekten 2, store çökmesi gerçekten 4) · sayfadaki dört CLI alt komutu ve bayrakları.
+
+**Süreç bulgusu.** Çürüme testi alan LİSTELERİNİ sıkı çiviliyor — ve hiçbir liste yanlış değildi.
+Turun BÜTÜN bulguları listelerin arasındaki NESİR cümlelerdeydi, yani liste karşılaştırmasının
+yapısal olarak ulaşamadığı sınıf. Ucuz olan nesir iddiaları (dry-run çıkış kodları, `caustica.AD`
+varlığı) artık kendi testlerini taşıyor.
 
 ### Bilerek yapılmayanlar
 - **Kesinti (çıkış 5) `error.json` YAZMAZ.** Durmak başarısızlık değildir; `status.json` "interrupted"
-  diyor ve kod 5. GUI için iptal ile çökme aynı dosyaya düşseydi ikisi karışırdı.
+  diyor ve kod 5. İptal ile çökme aynı dosyaya düşseydi ikisi karışırdı.
 - **kwave iptal edilemez** ve bunu stdout'ta SÖYLÜYOR. Checkpoint almıyor, yani durulacak sınır yok;
   onu "iptal etmek" öldürmek olurdu, ki dosyanın var oluş sebebinin tam tersi.
-- **`--dry-run` de klasörü sahipleniyor** (bayat `error.json`/`cancel` siliniyor). Aynı klasörde eşzamanlı
-  iki süreç zaten desteklenmiyor (checkpoint çakışması), bu yüzden kabul edildi.
+- **VRAM reddi `--dry-run`'da da 3 döndürüyor.** 0'a çevirmek çıkış kodu davranışını değiştirirdi
+  (M10l'in kuralı: kodlar donuk). Bunun yerine sayfaya yazıldı: 3 sorunun cevabıdır.
+- **Öldürülen sürecin kaydı YOK.** `status.json` "solving"de kalır. Bunu düzeltmek bir kalp atışı
+  zaman aşımı sözleşmesi ister (kuyruk işi, M10g) — burada uydurulmadı, sınır olarak yazıldı.
 - Altıncı çıkış kodu EKLENMEDİ: iptal, mevcut 5'i kullanıyor. Kod kümesi kuyruğun API'si.
 
-Süit 379 → **412 (410 passed / 2 skipped / 0 failed)**; `ruff check .` + `format --check` temiz;
+Süit 379 → **417 (415 passed / 2 skipped / 0 failed)**; `ruff check .` + `format --check` temiz;
 `git status --porcelain data/setups/` boş — dokuz kurulum dosyası + manifest bayt-aynı.
