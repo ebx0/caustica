@@ -274,13 +274,11 @@ düşen bir odak istiyor. Bu karar artık `data/setups/`ta yazılı (fantom baş
   - [x] OOM öngörüsünde eyleme geçirilebilir öneri metni (dx büyüt ×m hesaplı / AOI küçült / linear'a geç / daha büyük cihaz) — testli
 - Not: dt/spp ve time-of-flight türetimi motordan `cw_discretization`/`cw_tof_periods` fonksiyonlarına çıkarıldı (tek doğruluk kaynağı; planner==engine testli). VRAM envanteri engine.py tampon listesini birebir aynalar — motora yeni kalıcı tampon eklersen `test_memory_inventory_matches_hand_count` kırılır (bilerek).
 
-### M9 — KZK çözücüsü `[ ]`
-- [ ] Operator splitting: difraksiyon = angular spectrum (VERIFY: gemini2 önerisi; CN alternatifi karşılaştırılacak), absorpsiyon, nonlineerlik = zaman-uzayı Burgers (şok emniyeti); Rayleigh ile başlangıç düzlemi projeksiyonu; registry'de `kzk`
-- Başarı kriterleri:
-  - Lineer odaklı piston (paraksiyel, F-number ≥ 2): eksenel profil O'Neil'e r > 0.99
-  - Fubini düzlem-dalga limiti: A2/A1 < %5 sapma (σ ≤ 0.3)
-  - Çapraz doğrulama: zayıf odaklı su senaryosunda kzk vs westervelt fokal basınç farkı < %5, odak konumu < 1 voxel (paraksiyel geçerlilik bölgesinde)
-  - Süre: aynı senaryoda full-wave'e karşı ≥ 50× hız (beklenti ~100×; ölçülüp belgelenir)
+### M9 — KZK çözücüsü `[ERTELENDİ 2026-08-22]`
+Kullanıcı kararı: M15 (AS) öne geçti — AS, KZK'nın kullanım alanının çoğunu TAM fizikle
+kapatıyor ve GPU'da tam-dalga zaten hızlanacak. KZK native ailenin uzun-vade vizyonunda
+duruyor (kullanıcı 2026-08-22: "westervelt, AS, kzk vs."); talep/manzara değişirse eski
+kriterleriyle (git geçmişinde) geri döner. FDA HITU karşılaştırması o gün için not.
 
 ---
 
@@ -962,130 +960,152 @@ hücre, tek düzenlenen satır CONFIG yolu; gerisi `from caustica.colab import r
         ölçümleri zaten topluyor (`run_meta.json` → `planner` vs `actual`;
         `caustica.colab.summary()` ikisini yan yana basıyor)
 
-### M10g — Kuyruk: paylaşılan klasör `jobs/` protokolü `[ ]` — GUI'nin "Run in Colab" altyapısı
-Notebook tek job yerine klasör izler: lokalde job at → oturum açıkken kendiliğinden koşar.
-Protokol **paylaşılan bir klasör yolu** alır; Drive onun bir örneğidir ve kütüphane bunu bilmez
-(PLAN.md K12). Runner çıkış kodları kuyruğun API'sidir: DEĞİŞTİRİLMEZ, YENİSİ EKLENMEZ.
-- [ ] Protokol: `jobs/pending/` → claim (kilit dosyası: oturum id + zaman damgası, atomik rename) →
-      `jobs/running/` → `jobs/done/` | `jobs/failed/`; her job kendi çıktı klasörü + status.json
-- [ ] Ölü oturum devri: `running/`de kalıp kalp atışı eskiyen job, yeni oturumca `--resume` ile
-      devralınır (checkpoint M10'dan)
-- [ ] İzleme döngüsü: idle'da N sn'de bir yoklama; `--once` (mevcutları bitir, çık) ve `--watch` modları
-- Başarı kriterleri:
-  - Çift oturum simülasyonu (CPU, yerel klasör): aynı job İKİ KEZ KOŞMAZ (claim yarışı testli).
-    Yerel klasörle geçen testler ağ dosya sistemine güvenmeden ÖNCE koşulur — Drive'ın rename
-    semantiği POSIX'ten zayıftır
-  - Kill edilen oturumun job'ı ikinci oturumda resume ile tamamlanır; çift üretim yok
-  - 3 job'lık mini kuyruk sırayla biter; failed job kuyruğu TIKAMAZ (kenara alınır, log'lu)
-  - Colab kapısı: canlı oturumda 2 job'lık kuyruk uçtan uca
+### M10g — `[M29'A BİRLEŞTİ 2026-08-22]` Kuyruk
+Hiç başlanmamıştı; protokol ve kriterler AYNEN M29'a taşındı (müşterisi DatasetGenerator).
 
-### M11 — Study/Report + doğrulama harness'i `[ ]`
-- [ ] `study.Study`: config + koşu + sonuç + figürler; `report()` → Markdown (+JSON); ortam/GPU/git-hash damgası; `Study.sweep(...)`; analitik doğrulama süiti tek komutla rapor üretir
-- Başarı kriterleri:
-  - Tek komut: `python -m caustica.validation run-analytic` → damgalı JSON+MD rapor `benchmarks/reports/` altına düşer
-  - Rapor, planner tahmini vs gerçekleşen tablosunu içerir
-  - Sweep: 3-noktalı p0 taraması uçtan uca koşar, birleşik rapor üretir
-  - **v1 ön-etiketi**: M4–M11 kriterlerinin tamamı yeşil → `v0.1` tag (isim kararı + GitHub public M10e'ye öne çekildi, 2026-08-19)
+### M11 — `[TAŞINDI 2026-08-22]` → Faz Grubu D'deki yeni M11 bloğu
+Yeniden planla genişletildi: doğrulama + ÇOK-MOTOR harness (M12'yi yuttu). Eski v0.1 tetiği
+buradan kalktı — v0.1 artık M21 kapısında (K19).
 
-### M12 — k-Wave karşılaştırma harness'i (M4b adaptörünün üstünde) `[ ]`
-- [ ] M4b'deki `kwave` çözücüsünü kullanan sistematik harness; T0 sanity kapısı (homojen su — GPU binary'yi her ortamda önce bundan geçir; kalırsa "environment-broken" damgası); karşılaştırma metrikleri (relL2, Pearson, odak konum/amp, −6dB genişlikler, sidelobe)
-- Başarı kriterleri:
-  - Küçük grid lineer su çanağı: caustica vs k-Wave CPU → relL2 < %3, r > 0.99, odak konumu < 1 voxel
-  - Heterojen küçük fantom (2 doku): relL2 < %5, odak basınç farkı < %10 (ITRUSST koridoru)
-  - Nonlineer küçük senaryo: 2f0/f0 oranı farkı < %10
-  - Rapor damgalı; k-Wave sürümü/binary tipi (CPU/GPU) kayıtlı
-  - VERIFY: k-Wave GPU binary'nin Colab durumu yeniden test edilir (notebook v11 bulgusu + gemini "eski mimari desteği çekildi" iddiası)
+### M12 — `[M11'E BİRLEŞTİ 2026-08-22]` k-Wave karşılaştırma harness'i
+Kriterleri M11 (doğrulama + çok-motor harness) taşıyor.
 
-### M13 — Dataset pipeline (Katman C) `[ ]`
-- [ ] `pipelines.DatasetGenerator`: dondurulmuş LHS (seed→checksum), üretim döngüsü, background save, ETA (planner'dan), metadata/timing CSV, disk kontrolü — M10c runner + M10g kuyruk üzerine oturur
-- Başarı kriterleri:
-  - Mini dataset (N=3, küçük grid): iki ayrı koşuda AYNI checksum'lar (LHS dondurma değişmezi)
-  - Kesinti+resume testi: 2. örnekte kill → yeniden başlatma kaldığı yerden, çift üretim yok
-  - metadata.csv satır bütünlüğü (append-only, kolon şeması sabit)
-  - ETA log'ları planner modelini kullanır (start→start cadence ölçümü korunur)
+### M13 — `[M29'A BİRLEŞTİ 2026-08-22]` Dataset pipeline
+Kriterleri M29 (üretim vitrini) taşıyor; kullanıcı kararı: dataset vitrin, EN SONA.
 
-### M14 — Colab üretim doğrulaması `[ ]` — Colab oturumu gerektirir
-- [ ] Tam boy dx=0.30 senaryosu Colab A100'de `caustica run` job akışıyla (M10c/M10f) koşar; v12
-      referans SAYILARIYLA karşılaştırma (not 2026-08-22: kaynak notebook dosyası yalınlaştırmada
-      silindi — hedef, devlog'daki yayımlanmış v12 değerleridir: amp/p_max bandı, ~65 s/sample)
-- Başarı kriterleri:
-  - amp/p_max bandı [0.85, 0.95] içinde; focus_ratio ve fokal alan deseni notebook koşusuyla tutarlı (normalize r > 0.99 — bire-bir sayısal eşitlik ARANMAZ, karar #2)
-  - t_end > 110 µs kontratı korunur
-  - Cadence ≤ notebook v12 cadence'i (~65 s/sample A100) — kütüphaneleşme yavaşlatmadı kanıtı
-  - `examples/02_dataset_generation.ipynb` ince sürücüsü uçtan uca çalışır
+### M14 — `[M29'A BİRLEŞTİ 2026-08-22]` Colab üretim doğrulaması
+Kriterleri (v12 referans sayıları dahil) M29 taşıyor.
 
 ---
 
-## Faz Grubu D — Fizik genişlemesi
+## Faz Grubu D — Doğrulama çatısı ve HIFU fiziği (yeniden plan 2026-08-22, K18–K21)
 
-### M15 — Eksenel simetri (AS) çözücüsü `[ ]`
-- [ ] VERIFY ÖNCE: güncel CuPy'de `cupyx.scipy.fft.dct/dst` durumu (gemini2 "yok, ayna-FFT gerekir" diyor — sürüm notlarıyla doğrula). Yoksa ayna-genişletme (mirror+FFT) DTT katmanı; WSWA/WSWS şemaları (Treeby yaklaşımı)
-- Başarı kriterleri:
-  - Eksenel simetrik çanak: AS çözücü vs 3D full-wave → eksenel profil r > 0.995, odak basıncı < %3 fark
-  - Aynı fiziksel problemde ≥ 50× hızlanma (beklenti 100–300×; ölçülür)
-  - DTT katmanının birim testleri: DCT/DST kimlikleri (bilinen analitik çiftler) < 1e-10
+> Yeniden planlama: 24 kullanıcı sorusu + research/landscape_2026.md (+iki alt-rapor).
+> Kimlik: **sözleşmeli çok-motor çatı + native aile** — "bir API, N motor, damgalı/tekrarlanabilir
+> koşular". Landscape gerçeği: k-wave-python v0.6 (2026-03) saf CuPy çözücü yayınladı — "saf
+> Python" farkımız kapandı; savunulabilir konum yazılım sözleşmesi + çok-motor çapraz doğrulama.
+> HIFU-önce, doğruluk/kredibilite-önce; v0.1 = ITRUSST dokuzunun TÜMÜ (akustik-yalnız) + JOSS.
 
-### M16 — Power-law absorpsiyon (fractional Laplacian) `[ ]`
-- [ ] α(f)=α0·f^y (y∈[1,1.5]) + Kramers-Kronig dispersiyonu; k-uzayında |k|^y çarpanı; çözücülerde feature flag
+### M11 — Doğrulama + çok-motor harness `[ ]` (M12'yi yuttu — kullanıcı 2026-08-22)
+Tek çatı: analitik süit + N-motor çapraz karşılaştırma + damgalı rapor. Adaptörler (M25/M26)
+bu harness'in İÇİNE doğar.
+- [ ] `study.Study`: config + koşu(lar) + sonuç + figürler; `report()` → MD+JSON; ortam/GPU/git
+      damgası; `Study.sweep(...)`
+- [ ] `python -m caustica.validation run-analytic` → damgalı rapor `benchmarks/reports/`a
+- [ ] Çok-motor karşılaştırma: AYNI job N kayıtlı çözücüde → relL2 / r / fokal metrik tablosu.
+      Eski M12 kriterleri buraya: kwave T0 sanity kapısı, normalize karşılaştırma,
+      "environment-broken" damgası
 - Başarı kriterleri:
-  - Çok-frekanslı test: ölçülen α(f) eğrisi hedef güç yasasından < %2 sapar (f0, 2f0, 3f0 noktalarında)
-  - Dispersiyon: faz hızı farkı Kramers-Kronig öngörüsüyle < %1
-  - k-Wave power-law senaryosuyla çapraz test: relL2 < %5
-  - Kapalıyken (flag off) mevcut üstel model bit-değişmez
+  - Tek komutla analitik süit raporu; planner tahmin-vs-gerçek tablosu içinde
+  - Sweep: 3-noktalı p0 taraması uçtan uca, birleşik rapor
+  - Çok-motor: mevcut linear-vs-kwave çaprazları harness'ten yeniden üretilir (r>0.99)
 
-### M17 — Broadband zaman alanı `[ ]`
-- [ ] Keyfi kaynak sinyali (puls, tone-burst), `sensors.TimeSeries` genel kaydı, spektral çıkarım genellemesi
+### M18 — Termal modül: Pennes + CEM43 `[ ]` (öne çekildi — HIFU-önce, kullanıcı 2026-08-22)
+Ablasyon planlamanın çıktısı basınç değil DOZ. ITRUSST güvenlik konsensüsü (Brain Stim 2025)
+eşikleri rapora girer: ≤2 CEM43 beyin / ≤16 kemik / ≤21 deri; ΔT≤2°C.
+- [ ] `sensors.HeatingSource` (Q = 2·α·I; harmonik katkılar) → `thermal.PennesSolver` (GPU
+      difüzyon+perfüzyon) → CEM43 doz haritası; rapora doz/eşik özeti
 - Başarı kriterleri:
-  - Gaussian puls su içinde: varış zamanı TOF analitiğinden < dt; spektrum şekli korunur (r > 0.999)
-  - Tone-burst → CW limitine yakınsama: uzun burst fazoru CW fazoruyla < %1 fark
-  - Bellek: kayıt pencereli/decimated çalışır (tam alan × tüm adımlar tutulMAZ)
+  - Analitik nokta-kaynak/Gaussian difüzyon rel err < %2; perfüzyon kararlı-durum < %2
+  - Uçtan uca sonication → T(r,t) → CEM43; k-Wave `kWaveDiffusion` çaprazı < %5
+  - Tıbbi sorumluluk notu (araştırma amaçlı; klinik karar aracı değil)
 
-### M18 — Termal modül: Pennes + CEM43 `[ ]`
-- [ ] `sensors.HeatingSource` (Q = 2·α·I; harmonik katkılarıyla) → `thermal.PennesSolver` (GPU difüzyon+perfüzyon) → CEM43 doz haritası
-- Başarı kriterleri:
-  - Analitik nokta-kaynak/Gaussian ısı difüzyonu karşılaştırması: rel err < %2
-  - Perfüzyon terimi: bilinen kararlı-durum çözümüyle < %2
-  - Uçtan uca örnek: sonication → T(r,t) → CEM43 haritası; k-Wave `kWaveDiffusion` senaryosuyla çapraz test < %5
-  - Tıbbi sorumluluk notu dokümanda (araştırma amaçlı, klinik karar aracı değil)
+### M15 — Eksenel simetri (AS) çözücüsü `[ ]` (KZK'nın önüne geçti — kullanıcı 2026-08-22)
+- [ ] VERIFY: güncel CuPy'de DCT/DST; yoksa ayna-genişletme DTT katmanı; WSWA/WSWS
+- Başarı kriterleri (değişmedi): AS vs 3D full-wave eksenel r > 0.995, odak < %3;
+  ≥50× hızlanma (ölçülür); DTT birim testleri < 1e-10
+
+### M16 — Power-law absorpsiyon (fractional Laplacian) `[ ]` (yerinde — kullanıcı 2026-08-22)
+Kriterler değişmedi (α(f)=α0·f^y + KK dispersiyonu; flag-off bit-değişmez; k-Wave çaprazı <%5).
+Not: ITRUSST PH1 tek-frekans/lineer — M21 ön koşulu DEĞİL; doku gerçekçiliği/çok-harmonik için.
+
+### M25 — j-Wave adaptörü `[ ]` (YENİ — kullanıcı 2026-08-22, K18)
+- [ ] `caustica[jwave]` extra'sı; registry'ye `jwave` (JAX; Linux/Colab). DÜRÜST risk notu
+      (landscape 2026): j-Wave PyPI 23 aydır bayat, jaxdf pin'i eski — sürümler SABITLENIR,
+      adaptör değeri çapraz-kontrol + gradyan erişimi
+- Başarı kriterleri: kwave adaptörü kalıbı (kwarg reddi, caps); su+doku senaryosunda
+  native-vs-jwave normalize r > 0.99; extra'sız kurulum etkilenmez
+
+### M26 — Stride adaptörü `[ ]` (YENİ — kullanıcı 2026-08-22, K18)
+- [ ] `caustica[stride]` (Devito; FD ailesi = güçlü çapraz). Lisans notu: Stride AGPL —
+      adaptör opsiyonel extra olarak kalır, çekirdeğe AGPL bulaşmaz (import eden kullanıcıdır)
+- Başarı kriterleri: M25 kalıbı; en az bir ITRUSST BM'inde üç-motor tablo (native/kwave/stride)
+
+### M27 — Görüntü köprüsü: `caustica[imaging]` `[ ]` (YENİ; kapsam DARALTILDI — kullanıcı 2026-08-22)
+NIfTI/pseudo-CT → `medium_volume`. **Entegrasyon-önce**: kendi segmentasyon/haritalama AR-GE'si
+YOK — SimNIBS/k-Plan-türevi hazır çıktıları almak + 2–3 ADLANDIRILMIŞ literatür haritalaması
+(Li 2026 sınıflaması: voxel-linear / üç-katman / tek-katman) uygulamak. Landscape: üretim
+araçları tam bu haritalamada ayrışıyor (k-Plan vs BabelBrain) — çoğul-strateji karşılaştırma
+raporu ucuz fark alanı.
+- [ ] nibabel YALNIZ extra'da (lazy; çekirdek metadata temiz — K15 disiplini)
+- Başarı kriterleri: örnek public verisinden uçtan uca medium_volume + koşu; N strateji → N
+  medium + fark raporu; extra'sız import etkilenmez (testli)
 
 ---
 
-## Faz Grubu E — Performans ve ölçek
+## Faz Grubu E — Performans + ITRUSST → v0.1
 
-### M19 — GPU performans turu `[ ]`
-- [ ] cuFFT plan cache doğrulaması, RawKernel füzyonu (PML+absorpsiyon+nonlineerlik tek kernel), CUDA Graphs (VERIFY: CuPy'de graph capture API olgunluğu), TF32 güvenlik çalışması
-- Başarı kriterleri:
-  - M7 baseline'a göre adım süresi ≥ 1.5× iyileşme (A100'de; her teknik ayrı ölçülür ve raporlanır)
-  - Parite süiti değişmez: fp32 sonuçlarında rel fark < 1e-5 (TF32 ayrı raporlanır, default OFF)
-  - Planner katsayıları yeni backend'e göre yeniden kalibre edilir
+### M19 — GPU performans turu `[ ]` (ITRUSST'tan ÖNCE — kullanıcı 2026-08-22)
+Kriterler değişmedi (≥1.5× adım; parite korunur; planner rekalibre; TF32 default OFF).
+Backlog başlangıcı: research/gemini3_gpu.md §6. Referans nokta (landscape): k-wave-python
+native CuPy T4'te 256³/1000 adım = 382 s; C++ CUDA 51 s — ölçülüp yanına konulur.
 
-### M20 — Çoklu GPU / çok büyük problemler `[ ]`
-- [ ] VERIFY: cuFFT-Mp/NCCL slab decomposition fizibilitesi (spektral global FFT maliyeti); alternatif: domain-bölgeli hibrit veya out-of-core
-- Başarı kriterleri:
-  - 2×GPU'da weak-scaling verimi ≥ %60 VEYA fizibilite raporu "yapılmaz çünkü…" kararıyla kapatılır (negatif sonuç da geçerli çıktı)
-  - ≥ 1024³ problem tek H100'de (out-of-core/chunked) VEYA 2×A100'de çözülür
-
-### M21 — ITRUSST benchmark süiti `[ ]`
-- [ ] PH1-BM1…BM9 alt kümesi (düz piston + odaklı çanak; su, tek katman kemik, çok katman, tam kafatası ilerledikçe); sonuçlar yayınlanmış kod medyanlarıyla karşılaştırılır
-- Başarı kriterleri (ITRUSST koridorları):
-  - Odak basıncı: yayınlanan kodlar medyanından < %10 sapma
-  - Odak konumu: < 1 mm
-  - −6dB boyutları: literatür bandı içinde (0.2–0.6 mm toleranslar problem başına)
-  - Sonuçlar `benchmarks/reports/itrusst/` altında yayınlanır (repo'nun vitrin raporu)
+### M21 — ITRUSST PH1: DOKUZUN TÜMÜ, akustik-yalnız `[ ]` → **v0.1 kapısı** (kullanıcı 2026-08-22)
+Landscape (doğrulanmış): ekosistem BEKÇİSİZ ve self-serve — Zenodo 10.5281/zenodo.6020543
+(25.3 GB, CC-BY-4.0) + ucl-bug/transcranial-ultrasound-benchmarks (LGPL; 2022'den beri donmuş).
+Yol: 18 permütasyon (9 BM × bowl/piston, 500 kHz, LİNEER) → sonuçlar onların .mat düzeninde →
+compareTwo/processAll → KENDİ karşılaştırma makalen (şablon: Drainville/CIVA, JASA 2025).
+Kafataslı BM'ler AKUSTİK-YALNIZ (akışkan kemik — katılımcı normu); elastik v0.2 (M22).
+- [ ] 18 permütasyon `caustica run` akışıyla; .mat dönüştürücü (onların adlandırması)
+- Başarı kriterleri (2022 makalesinin GERÇEK koridorları; eski "0.2–0.6 mm −6dB" satırı
+  düzeltildi — ana metinde yok, doğrulanamadı):
+  - Fokal basınç: kod-medyanlarına fark < %10; fokal konum < 1 mm (tümü < 2.5 mm)
+  - FWHM: eksenel medyan < 0.6 mm, lateral < 0.2 mm bandı
+  - BM1–2 (su): FOCUS analitiğine L∞ < %1 hedefi
+  - Tam-alan L∞/L2 DÜRÜSTÇE raporlanır (ekosistemde %10–100 bandı — saklanmaz)
+  - `benchmarks/reports/itrusst/` + karşılaştırma makalesi taslağı
+- **v0.1 (M21 kapanınca):** tag + CITATION.cff + Zenodo DOI + **JOSS başvurusu** + PyPI (K2).
 
 ---
 
-## Faz Grubu F — "Piyasanın üstü" vizyonu
+## Faz Grubu F — İkinci faz (v0.1 sonrası)
 
-### M22 — Viskoelastik/kemik (kayma dalgaları) `[ ]`
-- Kafatası/kemik için elastik PSTD (Kelvin-Voigt); ITRUSST kafatası senaryolarında akustik-yalnız çözümden ölçülebilir iyileşme; k-Wave `pstdElastic` ile çapraz test.
+### M22 — Viskoelastik/kemik (kayma dalgaları) `[ ]` — v0.2 çekirdeği
+Kriterler değişmedi; M27 köprüsü + ITRUSST altyapısıyla BM7–9'un elastik tekrarına bağlanır.
+
+### M17 — Broadband zaman alanı `[ ]` (buraya — kullanıcı 2026-08-22)
+Kriterler değişmedi (puls/tone-burst, TOF < dt, CW limiti, pencereli kayıt).
+
+### M28 — Adjoint + ML köprüsü fizibilitesi `[ ]` (YENİ — kullanıcı 2026-08-22; ikinci fazda KALDI)
+Landscape: türevlenebilir NONLİNEER akustik + tam-çözücüden faz optimizasyonu İKİ BOŞ HÜCRE
+(j-Wave lineer+uykuda; herkes ray/surrogate'te). Kullanıcı kararı: v0.1 odağı bölünmez; bu
+niş v0.2 adayı olarak burada bekler.
+- [ ] Rapor + prototip: CW elle-adjoint; JAX backend'i plugin ekseninden (K15); M25 üzerinden
+      gradyan erişimi
+- Başarı kriteri: "yapılır/yapılmaz çünkü" kararı + tek prototip (faz optimizasyonu YA DA
+  basit aberasyon düzeltme)
+
+### M20 — Çoklu GPU / çok büyük problemler `[ ]` (fizibilite-önce — kullanıcı 2026-08-22)
+Önce fizibilite raporu (cuFFT-Mp/NCCL vs out-of-core); negatif sonuç geçerli çıktı.
 
 ### M23 — Tedavi planlama araçları `[ ]`
-- Faz optimizasyonu (time-reversal + kısıtlı optimizasyon), aberasyon düzeltme, hedef-fonksiyonlu planlama (odak basıncı maksimize / yan lob minimize). Kriter: heterojen fantomda düzeltme sonrası fokal basınç ≥ %20 artış (senaryo bazlı, raporlanır).
+Kriterler değişmedi; M28 sonucuna bağlanır (time-reversal + kısıtlı optimizasyon).
 
-### M24 — İleri entegrasyonlar `[ ]`
-- ML surrogate köprüsü (dataset pipeline'ın doğal devamı: eğitilmiş modelin çözücü yanında "tahminci" olarak servis edilmesi), belirsizlik miktarlama (doku özellik dağılımlarıyla MC), adjoint/türevlenebilirlik fizibilite raporu (j-Wave'e karşı konum), bulut orkestrasyonu (çoklu Colab/VM koşu yöneticisi).
-- Kriter: her biri ayrı fizibilite + prototip raporu; hangisinin v2 olacağına kullanıcı karar verir.
+---
+
+## Faz Grubu G — Vitrin (en son — kullanıcı 2026-08-22: "kütüphane asıl ürün, dataset sonlara")
+
+### M29 — Üretim vitrini: kuyruk + dataset + Colab üretimi `[ ]` (M10g+M13+M14 birleşti)
+- [ ] Kuyruk (eski M10g protokolü AYNEN: pending→claim→running→done/failed, ölü-oturum devri,
+      claim yarışı GERÇEK subprocess testli; çıkış kodları API) — müşterisi DatasetGenerator
+- [ ] `pipelines.DatasetGenerator`: dondurulmuş LHS (seed→checksum), background save, ETA
+      (planner), metadata/timing CSV, disk kontrolü
+- [ ] Colab tam-boy üretim (eski M14: amp/p_max [0.85,0.95], t_end>110µs, cadence ≤ v12 ~65 s)
+- [ ] Learned-Green's dataseti vitrine (landscape: pip'le kurulur ML-surrogate kütüphanesi NİŞİ
+      BOŞ; OpenBreastUS analojisi; lisans bilinçli — TFUScapes'in NC tuzağına düşülmez)
+
+### M24 — Backlog: UQ, bulut orkestrasyonu, kalanlar `[ ]`
+Her biri fizibilite+prototip raporu; v2 seçimi kullanıcının.
 
 ---
 
@@ -1140,13 +1160,13 @@ Protokol **paylaşılan bir klasör yolu** alır; Drive onun bir örneğidir ve 
   UWCEM'e dair her şey artık TEK dosyada: **docs/uwcem.md** — kalanları EN SON yapılacak.
   Yalınlaştırma turu #1 (2026-08-22): kök mtype.txt (123 MB) + labels.npz + _code_cells.py +
   kaynak notebook silindi (kullanıcı onayı; M14 notu güncellendi); bayat `build/` silindi.
-- **Şimdi (sıra):** **M10n** plugin mimarisi (K15: kalan iki eksen — backend + report renderer;
-  medium/array eksenleri M10m'de kapandı, `docs/extending.md` orada yazılacak) → **M10j** facade + ilerleme → **M10l** GUI sözleşmesi
-  (import-yönü testi ✅ erken kapandı; kalan: gui_contract.md + cancel dosyası + error.json) →
-  **M10f** Colab köprüsü → **ilk Colab oturumu tek seferde üç kapıyı kapatır** (M7 parite/tam-boy
-  + M8 VRAM ±%10 ve süre ±%25 + M10f E2E) → **M10g** kuyruk → **UWCEM kalanları** (docs/uwcem.md).
-  M14 bu akışın üstünden koşar. GPU paritesi (M7) o oturuma kadar DOĞRULANMAMIŞ kalır; README
-  GPU iddialarını "doğrulanmadı" işaretli tutar.
+- **Şimdi (sıra — yeniden plan 2026-08-22):** (0) **CANLI COLAB OTURUMU** (ilk iş, kullanıcı:
+  "plan biter bitmez"): M7 parite + M8 planner kapıları + M10f E2E tek oturumda; runbook
+  operatörden. → (1) **M11** doğrulama+çok-motor harness → (2) **M18** termal → (3) **M15** AS →
+  (4) **M16** power-law → (5) **M25** jwave + **M26** stride adaptörleri → (6) **M27** [imaging]
+  köprüsü → (7) **M19** GPU perf → (8) **M21 ITRUSST dokuzun tümü → v0.1 + JOSS + PyPI** →
+  İkinci faz (M22 elastik, M17 broadband, M28 adjoint fizibilite, M20, M23) → Vitrin (M29, M24).
+  Araştırma temeli: research/landscape_2026.md + iki alt-rapor (2026-08-22).
 - **Yalınlaştırma (kalan küçük işler; uygun milestone'a iliştirilir):** `data/` kökünün checkout
   dışına taşınması (env var kurulu, acele yok) · `janitor/` defterinin işlenmesi.
   (README'nin yeni kind'larla güncellenmesi M10m'de yapıldı.)
