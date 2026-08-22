@@ -290,8 +290,8 @@ Omurga (2026-08-21'de kütüphane-önce kararlarıyla revize edildi — ayrınt�
 docs/library_first_plan.md): lokalde `job.json` yaz → Colab'da değişmeyen notebook koşar →
 çıktı `/content` altına düşer → lokalde raporla. **Drive kütüphanenin işi değil** (K12).
 **M10 → M10b → M10c → M10d** (hepsi CPU'da yazılır ve testlenir, Colab beklemez) → **M10e**
-public → **M10h ✅ + M10i ✅ + M10k ✅ + M10m ✅** (2026-08-22 kapandı) → **M10n** plugin
-mimarisi → **M10j** facade + ilerleme → **M10l** GUI
+public → **M10h ✅ + M10i ✅ + M10k ✅ + M10m ✅ + M10n ✅** (2026-08-22 kapandı) → **M10j**
+facade + ilerleme → **M10l** GUI
 sözleşmesi → **M10f** Colab köprüsü → **ilk Colab oturumu** (M7 + M8 kapılarıyla birleşik) →
 **M10g** kuyruk → **UWCEM kalanları** (docs/uwcem.md, EN SON — kullanıcı 2026-08-22).
 M12–M14 bu omurganın üstünden koşar.
@@ -680,24 +680,58 @@ basılıyor, iki referans doküman testle taze tutuluyor. K15 gereği kind kapı
         (spiral bölümü yalnız 100 mm üretim dizisini gösteriyordu: şema-geçerli, odak grid
         dışında)
 
-### M10n — Plugin mimarisi: beş eksen entry-point `[ ]` (K15, kullanıcı 2026-08-22)
+### M10n — Plugin mimarisi: beş eksen entry-point `[x]` (K15, kullanıcı 2026-08-22)
 "Proje her kısmında modüler olabilmeli." Çözücülerdeki kalıp (registry + entry-point +
 yetenek deklarasyonu) kalan eksenlere genellenir. Erken-soyutlama riski kullanıcıya söylendi
 ve kabul edildi; panzehiri: her seam ÇEKİRDEKTEKİ implementasyonların kendisini de registry'den
 geçirmek (özel yol yok — çekirdek, kendi plugin API'sinin birinci müşterisidir).
-- [ ] Envanter: solver ✅ (var) · medium kind ✅ (M10m) · array kind ✅ (M10m) · **backend**
+- [x] Envanter: solver ✅ (var) · medium kind ✅ (M10m) · array kind ✅ (M10m) · **backend**
       (`get_backend` isim→fabrika kaydına döner; numpy/cupy kayıtlı varsayılanlar) · **report
       renderer** (figür/rapor üreticisi seam'i; matplotlib implementasyonu kayıtlı varsayılan)
-- [ ] `docs/extending.md`: her eksen için "kendi X'ini ekle" tarifi + çalışan iskelet örneği
-- [ ] Entry-point grubu adları sabitlenir (`caustica.solvers`, `caustica.medium_kinds`,
+- [x] Ortak seam TEK yerde: `src/caustica/registry.py` (`PluginRegistry` + `FactoryRegistry`) —
+      lazy tarama, reload'a dayanıklı çakışma kontrolü, ya-hep-ya-hiç kayıt, aksiyonlu arama
+      hatası. M10m'in `KindRegistry`'si, solver registry'si, backend ve report renderer bunun
+      üstünde; T9 gereği yeniden TÜRETİLMEDİ, genellendi
+- [x] Job şemasının `backend` alanı kapalı `Literal`'dan registry'nin doğruladığı `str`'e açıldı
+      (üçüncü taraf backend job dosyasından erişilemiyordu); `run --backend` argparse
+      `choices`'ı kalktı — aynı çıkış kodu (2), aksiyonlu mesaj
+- [x] `docs/extending.md`: her eksen için "kendi X'ini ekle" tarifi + çalışan iskelet örneği
+      (pyproject + tek modül, beş eksenin hepsini kuran kopyala-yapıştır paket)
+- [x] Entry-point grubu adları sabitlenir (`caustica.solvers`, `caustica.medium_kinds`,
       `caustica.array_kinds`, `caustica.backends`, `caustica.report_renderers`)
 - Başarı kriterleri:
-  - Sahte bir dış paket (test fixture'ı) beş eksenin HER BİRİNE entry-point ile bir uzantı
-    ekler ve uçtan uca kullanır (kayıt → keşif → çalıştırma testli)
-  - Çekirdek davranış bit-değişmez: mevcut süit yeşil, golden alanlar aynı
-  - `import caustica` süresi ölçülür ve registry keşfi onu yüzde 10'dan fazla YAVAŞLATMAZ
-    (entry-point taraması lazy)
-  - Kayıtlı olmayan kind/backend adı, kayıtlı adları listeleyen aksiyonlu hata verir
+  - [x] Sahte bir dış paket (test fixture'ı) beş eksenin HER BİRİNE entry-point ile bir uzantı
+    ekler ve uçtan uca kullanır (kayıt → keşif → çalıştırma testli) —
+    `test_entry_point_plugin_extends_all_five_axes`: M10m'in fixture'ı büyütüldü (ikinci fixture
+    YOK), iki mini koşu + bir render; her eksen ÇALIŞTIĞINI kendi sayacıyla kanıtlıyor
+    (job dosyasından yankılanan bir damga yeterli sayılmadı)
+  - [x] Çekirdek davranış bit-değişmez: süit **325 → 339** (337 passed + 2 skipped; +14 yeni test),
+    dokuz `data/setups/*.json` bayt-aynı (sha256 önce/sonra), `ruff check/format src tests` temiz.
+    `caustica report` çıktısı doğrulayıcı tarafından M10n ÖNCESİ CLI ile karşılaştırıldı:
+    REPORT.md + index.html + üç PNG **sha256 aynı**; M10n öncesi yazılmış bir checkpoint HEAD ile
+    kesintisiz resume ediliyor (parmak izi uyumlu)
+  - [x] `import caustica` süresi ölçülür ve registry keşfi onu yüzde 10'dan fazla YAVAŞLATMAZ:
+    medyan **257.5 ms → 258.8 ms** (15 taze alt-süreç; çıplak yorumlayıcı düşülünce 225.8 → 227.7 ms,
+    **+%0.8**). Bağımsız ölçüm (doğrulayıcı, `git worktree` ile M10n öncesi commit'e karşı,
+    13 serpiştirilmiş alt-süreç): **−%2.2** (HEAD daha hızlı) — yani gürültü seviyesinde.
+    Tarama lazy — `test_import_caustica_does_not_scan_entry_points` beş registry'yi de sınıyor,
+    doğrulayıcı `entry_points()` çağrısını casusladı: **sıfır**. GPU'suz makinede `import caustica`
+    cupy'ye DOKUNMUYOR (yola sahte bir `cupy` konup import edilmediği pozitif kontrolle gösterildi)
+  - [x] Kayıtlı olmayan kind/backend adı, kayıtlı adları listeleyen aksiyonlu hata verir —
+    `test_unregistered_names_are_actionable_on_every_axis` (beş eksen), backend adı için ayrıca
+    job seviyesinde: `test_a_job_naming_an_unregistered_backend_is_a_config_error`; soğuk
+    import'ta kind registry'leri de doğru cevap veriyor (`test_the_kind_registries_answer_from_a_cold_import`)
+- [x] Hafif review turu: bir mercek (adversaryal) + şüpheci doğrulayıcı. Yedi kapanış iddiasının
+      hepsi doğrulandı; **beş gerçek bulgu** onarıldı (CLI açılışı iki katına çıkmıştı; backend
+      fabrikası registry anahtarına bağlanmıyordu — koşuyu ve checkpoint parmak izini yanlış
+      etiketleyebilirdi; lambda'lar çakışma kontrolünü delip geçiyordu; solver çakışma metni bir
+      kelime kaybetmişti; `--backend` yazım hatası artık medium kurulmadan reddediliyor) +
+      doğrulayıcının beş boşluğu. Ayrıntı: devlog 2026-08-22 oturum M10n
+- BİLİNEN SINIR (belgelendi, düzeltilmedi — kapsam dışı): runner `backend=`/`checkpoint=` kwarg'ını
+  yalnız `_NATIVE_SOLVERS`'a geçiriyor (T3, kwave sözleşmesi), yani üçüncü taraf bir ÇÖZÜCÜ
+  varsayılan backend'de çözer ve checkpoint almaz; slow-CPU kapısı ve GPU raporu da `"numpy"` /
+  `"cupy"` isimlerine dallanıyor, üçüncü taraf bir backend ikisini de atlar. `docs/extending.md`
+  ikisini de yazıyor; yetenek sorusuna çevirmek ayrı bir iş
 
 ### M10j — Notebook ergonomisi: facade + ilerleme `[ ]`
 M10k'dan SONRA gelir: facade da job şemasına dokunur (`stored_setup` kalkmadan yazılırsa iki kez
