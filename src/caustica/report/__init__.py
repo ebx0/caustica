@@ -33,6 +33,8 @@ from caustica.report.preview import (
     DEFAULT_MAX_BYTES,
     PREVIEW_FORMAT,
     block_mean,
+    build_preview,
+    decode_preview,
     load_preview,
     write_preview,
 )
@@ -58,6 +60,8 @@ __all__ = [
     "DEFAULT_MAX_BYTES",
     "PREVIEW_FORMAT",
     "block_mean",
+    "build_preview",
+    "decode_preview",
     "load_preview",
     "write_preview",
     "DEFAULT_RENDERER",

@@ -72,8 +72,7 @@ def _put_quantized(arrays: dict, name: str, arr: np.ndarray) -> None:
     arrays[f"{name}_scale"] = np.asarray(q.scale, dtype=np.float64)
 
 
-def write_preview(
-    outdir: str | Path,
+def build_preview(
     result: SolverResult,
     *,
     dx: float,
@@ -81,11 +80,14 @@ def write_preview(
     pml_vox: int,
     apex_vox: tuple[int, int, int],
     focus_vox: tuple[int, int, int] | None,
-    metrics: dict,
     max_bytes: int = DEFAULT_MAX_BYTES,
-) -> Path:
-    """Write ``preview.npz`` + ``metrics.json`` into ``outdir`` (atomic)."""
-    outdir = Path(outdir)
+) -> bytes:
+    """The package as npz BYTES — the same package, not yet written anywhere.
+
+    Split out of :func:`write_preview` so ``simulate(out=None)`` can hand a
+    notebook the identical <=10 MB package without touching the disk. The
+    budget is still MEASURED here, on the compressed bytes, not estimated.
+    """
     amp = result.amp
     interior = interior_slices(result, grid_shape=grid_shape, pml_vox=pml_vox)
     pk = argmax_interior(amp, interior)
@@ -143,7 +145,32 @@ def write_preview(
             f"preview would be {len(payload)} bytes even at coarse step {step}; "
             f"budget is {max_bytes}"
         )
+    return payload
 
+
+def write_preview(
+    outdir: str | Path,
+    result: SolverResult,
+    *,
+    dx: float,
+    grid_shape: tuple[int, ...],
+    pml_vox: int,
+    apex_vox: tuple[int, int, int],
+    focus_vox: tuple[int, int, int] | None,
+    metrics: dict,
+    max_bytes: int = DEFAULT_MAX_BYTES,
+) -> Path:
+    """Write ``preview.npz`` + ``metrics.json`` into ``outdir`` (atomic)."""
+    outdir = Path(outdir)
+    payload = build_preview(
+        result,
+        dx=dx,
+        grid_shape=grid_shape,
+        pml_vox=pml_vox,
+        apex_vox=apex_vox,
+        focus_vox=focus_vox,
+        max_bytes=max_bytes,
+    )
     path = outdir / "preview.npz"
     with atomic_write(path) as tmp:
         tmp.write_bytes(payload)
@@ -152,19 +179,34 @@ def write_preview(
     return path
 
 
+def _decode(npz) -> dict:
+    """Arrays with their scales applied, plus the parsed ``meta``."""
+    out: dict = {}
+    names = set(npz.files)
+    for name in names:
+        if name.endswith("_scale") or name == "meta_json":
+            continue
+        arr = npz[name]
+        if f"{name}_scale" in names:
+            arr = restore(arr, npz[f"{name}_scale"])
+        out[name] = arr
+    out["meta"] = json.loads(str(npz["meta_json"]))
+    return out
+
+
 def load_preview(path: str | Path) -> dict:
     """Read a preview package back: scales applied, ``meta`` parsed."""
-    out: dict = {}
     with np.load(Path(path), allow_pickle=False) as npz:
-        names = set(npz.files)
-        for name in names:
-            if name.endswith("_scale") or name == "meta_json":
-                continue
-            arr = npz[name]
-            if f"{name}_scale" in names:
-                arr = restore(arr, npz[f"{name}_scale"])
-            out[name] = arr
-        out["meta"] = json.loads(str(npz["meta_json"]))
+        out = _decode(npz)
     if out["meta"].get("format") != PREVIEW_FORMAT:
         raise ValueError(f"{path}: not a {PREVIEW_FORMAT} package")
+    return out
+
+
+def decode_preview(payload: bytes) -> dict:
+    """Same as :func:`load_preview`, for a package that is only in memory."""
+    with np.load(io.BytesIO(payload), allow_pickle=False) as npz:
+        out = _decode(npz)
+    if out["meta"].get("format") != PREVIEW_FORMAT:
+        raise ValueError(f"not a {PREVIEW_FORMAT} package")
     return out
