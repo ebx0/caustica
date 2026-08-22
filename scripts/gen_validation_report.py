@@ -29,20 +29,20 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import LinearSegmentedColormap
 
-import hifusim.solvers as solvers
-from hifusim import Grid, Medium, PMLSpec
-from hifusim.analytic import (
+import caustica.solvers as solvers
+from caustica import Grid, Medium, PMLSpec
+from caustica.analytic import (
     axial_pressure,
     fubini_harmonic,
     rayleigh_pressure,
     shock_distance,
     spherical_cap_points,
 )
-from hifusim.arrays import archimedean_spiral
-from hifusim.materials import Material, water
-from hifusim.medium import Medium as Med
-from hifusim.solvers import CWRunSpec
-from hifusim.sources import CWSource, bowl_cw_source, plane_cw_source
+from caustica.arrays import archimedean_spiral
+from caustica.materials import Material, water
+from caustica.medium import Medium as Med
+from caustica.solvers import CWRunSpec
+from caustica.sources import CWSource, bowl_cw_source, plane_cw_source
 
 # ---------------------------------------------------------------------------
 # Style (validated reference palette; see docs/devlog.md session 5)
@@ -56,9 +56,9 @@ SEQ_RAMP = [
     "#5598e7", "#3987e5", "#2a78d6", "#256abf", "#1c5cab", "#184f95",
     "#104281", "#0d366b",
 ]
-CMAP_SEQ = LinearSegmentedColormap.from_list("hifusim_seq", SEQ_RAMP)
+CMAP_SEQ = LinearSegmentedColormap.from_list("caustica_seq", SEQ_RAMP)
 CMAP_DIV = LinearSegmentedColormap.from_list(
-    "hifusim_div", ["#2a78d6", "#f0efec", "#e34948"]
+    "caustica_div", ["#2a78d6", "#f0efec", "#e34948"]
 )
 
 plt.rcParams.update({
@@ -130,7 +130,7 @@ def _disc_source_2d(center, radius_vox, amplitude, f0=F0):
     )
 
 
-def _compare_panels(outdir, name, title, ours, kwave, dx_mm, inner, label_a="hifusim"):
+def _compare_panels(outdir, name, title, ours, kwave, dx_mm, inner, label_a="caustica"):
     """Three-panel |amp| comparison: ours | k-Wave | signed difference."""
     a = ours[inner] / ours[inner].max()
     b = kwave[inner] / kwave[inner].max()
@@ -163,7 +163,7 @@ def scenario_kwave2d_linear(outdir: Path) -> None:
     inner = (slice(26, 102), slice(26, 102))
     m = field_metrics(r_us.amp[inner], r_kw.amp[inner])
     _compare_panels(
-        outdir, "fig_kwave2d_linear", "2-D linear water: hifusim `linear` vs k-Wave (OMP)",
+        outdir, "fig_kwave2d_linear", "2-D linear water: caustica `linear` vs k-Wave (OMP)",
         r_us.amp, r_kw.amp, 0.5, inner,
     )
     save_fragment(outdir, "kwave2d_linear", m, time.perf_counter() - t0)
@@ -174,7 +174,7 @@ def scenario_kwave2d_hetero(outdir: Path) -> None:
     grid = Grid(shape=(128, 128), dx=0.5e-3, pml=PMLSpec(thickness=10e-3))
     id_map = np.zeros(grid.shape, dtype=np.uint8)
     id_map[:, 64:] = 1  # far half: fat-like slab
-    from hifusim.materials import MaterialDB
+    from caustica.materials import MaterialDB
 
     db = MaterialDB(
         materials={
@@ -191,7 +191,7 @@ def scenario_kwave2d_hetero(outdir: Path) -> None:
     m = field_metrics(r_us.amp[inner], r_kw.amp[inner])
     _compare_panels(
         outdir, "fig_kwave2d_hetero",
-        "2-D heterogeneous (water | fat slab, alpha=6 Np/m): hifusim vs k-Wave",
+        "2-D heterogeneous (water | fat slab, alpha=6 Np/m): caustica vs k-Wave",
         r_us.amp, r_kw.amp, 0.5, inner,
     )
     save_fragment(outdir, "kwave2d_hetero", m, time.perf_counter() - t0)
@@ -228,19 +228,19 @@ def scenario_kwave2d_nonlinear(outdir: Path) -> None:
     ratio_kw = float(a2_kw[inner].max() / r_kw.amp[inner].max())
     _compare_panels(
         outdir, "fig_kwave2d_nl_f0",
-        "2-D nonlinear water (beta=3.5), f0 field: hifusim `westervelt` vs k-Wave",
+        "2-D nonlinear water (beta=3.5), f0 field: caustica `westervelt` vs k-Wave",
         r_us.amp, r_kw.amp, 0.5, inner,
     )
     _compare_panels(
         outdir, "fig_kwave2d_nl_2f0",
-        "2-D nonlinear water, SECOND HARMONIC (2f0): hifusim vs k-Wave",
+        "2-D nonlinear water, SECOND HARMONIC (2f0): caustica vs k-Wave",
         a2_us, a2_kw, 0.5, inner,
     )
     save_fragment(
         outdir, "kwave2d_nonlinear",
         {
             "f0": m1, "second_harmonic": m2,
-            "a2_over_a1_hifusim": round(ratio_us, 4),
+            "a2_over_a1_caustica": round(ratio_us, 4),
             "a2_over_a1_kwave": round(ratio_kw, 4),
             "amplitude_match_scale": round(scale, 4),
         },
@@ -265,7 +265,7 @@ def scenario_kwave3d_bowl(outdir: Path) -> None:
     inner = (slice(16, 64), slice(16, 64), slice(24, 100))
     m = field_metrics(r_us.amp[inner], r_kw.amp[inner])
 
-    # Three-way axial overlay: hifusim, k-Wave, O'Neil closed form.
+    # Three-way axial overlay: caustica, k-Wave, O'Neil closed form.
     z_phys = (np.arange(120) - apex[2]) * dx
     sel = slice(28, 100)
     ax_us = r_us.amp[40, 40, sel]
@@ -273,7 +273,7 @@ def scenario_kwave3d_bowl(outdir: Path) -> None:
     ax_on = np.abs(axial_pressure(z_phys[sel], a, roc, F0, C0))
     fig, axes = plt.subplots(1, 2, figsize=(11.5, 3.8))
     z_mm = z_phys[sel] * 1e3
-    axes[0].plot(z_mm, ax_us / ax_us.max(), color=CAT[0], label="hifusim linear")
+    axes[0].plot(z_mm, ax_us / ax_us.max(), color=CAT[0], label="caustica linear")
     axes[0].plot(z_mm, ax_kw / ax_kw.max(), color=CAT[1], ls="--", label="k-Wave 3D (OMP)")
     axes[0].plot(z_mm, ax_on / ax_on.max(), color=INK2, ls=":", lw=1.6, label="O'Neil (analytic)")
     axes[0].set_xlabel("z from apex [mm]")
@@ -283,7 +283,7 @@ def scenario_kwave3d_bowl(outdir: Path) -> None:
     mid = imshow_mm(
         axes[1], r_us.amp[:, 40, :] / r_us.amp.max(), dx * 1e3, vmax=1.0
     )
-    axes[1].set_title("hifusim |p| mid-plane (x-z)")
+    axes[1].set_title("caustica |p| mid-plane (x-z)")
     fig.colorbar(mid, ax=axes[1], shrink=0.85, pad=0.02)
     savefig(fig, outdir, "fig_kwave3d_bowl")
 
@@ -321,13 +321,13 @@ def scenario_oneill3d(outdir: Path) -> None:
     ray = np.abs(rayleigh_pressure(pts, areas, 1.0, targets, k=2 * np.pi * F0 / C0, c=C0))
 
     fig, axes = plt.subplots(1, 2, figsize=(11.5, 3.8))
-    axes[0].plot(z_phys[sel] * 1e3, axial / axial.max(), color=CAT[0], label="hifusim linear")
+    axes[0].plot(z_phys[sel] * 1e3, axial / axial.max(), color=CAT[0], label="caustica linear")
     axes[0].plot(z_phys[sel] * 1e3, on / on.max(), color=INK2, ls=":", lw=1.6, label="O'Neil")
     axes[0].set_xlabel("z from apex [mm]")
     axes[0].set_ylabel("|p| / max")
     axes[0].set_title("Axial: solver vs O'Neil closed form")
     axes[0].legend(frameon=False)
-    axes[1].plot(x_phys * 1e3, lateral / lateral.max(), color=CAT[0], label="hifusim linear")
+    axes[1].plot(x_phys * 1e3, lateral / lateral.max(), color=CAT[0], label="caustica linear")
     axes[1].plot(x_phys * 1e3, ray / ray.max(), color=INK2, ls=":", lw=1.6, label="Rayleigh")
     axes[1].set_xlabel("x at focal plane [mm]")
     axes[1].set_title("Lateral: solver vs Rayleigh integral")
@@ -422,7 +422,7 @@ def scenario_planewave(outdir: Path) -> None:
     disp_err = abs(k_num - k0) / k0
 
     fig, ax = plt.subplots(figsize=(7.2, 4.0))
-    ax.semilogy(x * 1e3, amp / amp[0], color=CAT[0], label="hifusim linear |p|")
+    ax.semilogy(x * 1e3, amp / amp[0], color=CAT[0], label="caustica linear |p|")
     ax.semilogy(
         x * 1e3, np.exp(-alpha * (x - x[0])), color=INK2, ls=":", lw=1.6,
         label=f"exp(-{alpha:.0f} x) analytic",

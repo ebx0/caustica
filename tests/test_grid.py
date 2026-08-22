@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from hifusim import Grid, PMLSpec
+from caustica import Grid, PMLSpec
 
 
 def test_k_axis_matches_fftfreq_analytics():

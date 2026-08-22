@@ -3,11 +3,11 @@
 import numpy as np
 import pytest
 
-import hifusim.solvers as solvers
-from hifusim import Grid, Medium, PMLSpec
-from hifusim.arrays import archimedean_spiral, build_phase_maps, select_phase_map_size
-from hifusim.materials import water
-from hifusim.solvers import CWRunSpec
+import caustica.solvers as solvers
+from caustica import Grid, Medium, PMLSpec
+from caustica.arrays import archimedean_spiral, build_phase_maps, select_phase_map_size
+from caustica.materials import water
+from caustica.solvers import CWRunSpec
 
 F0, C0 = 1.0e6, 1500.0
 
@@ -127,7 +127,7 @@ def test_phase_map_size_selection_production(production_array):
     assert size == 64
     assert stats["n_collisions"] == 0
     assert stats["n_offset_offenders"] == 0
-    from hifusim.arrays.phasemaps import project_elements
+    from caustica.arrays.phasemaps import project_elements
 
     xi, yi, offsets_mm, _pitch = project_elements(production_array.positions, 32, 0.100)
     tol_mm = 0.25 * (0.100 / 31) * 1e3
@@ -139,7 +139,7 @@ def test_phase_maps_roundtrip(production_array):
     phases = rng.uniform(0, 2 * np.pi, production_array.n_elements).astype(np.float32)
     maps, phase_map = build_phase_maps(phases, production_array.positions, 32, 0.100)
     assert maps.shape == (2, 32, 32) and phase_map.shape == (32, 32)
-    from hifusim.arrays.phasemaps import project_elements
+    from caustica.arrays.phasemaps import project_elements
 
     xi, yi, _, _ = project_elements(production_array.positions, 32, 0.100)
     np.testing.assert_allclose(maps[0][xi, yi], np.sin(phases), atol=1e-6)
@@ -166,7 +166,7 @@ def test_spiral_solver_integration_focuses_at_geometric_focus(small_array):
     # Axial gate: between the O'Neil-predicted peak (full-bowl proximal
     # bound; the spiral's annular aperture pulls slightly distal of it)
     # and one voxel past the geometric focus.
-    from hifusim.analytic import axial_pressure
+    from caustica.analytic import axial_pressure
 
     z_fine = np.linspace(0.010, 0.045, 2001)
     z_oneill = z_fine[np.argmax(np.abs(axial_pressure(z_fine, 0.015, 0.030, F0, C0)))]

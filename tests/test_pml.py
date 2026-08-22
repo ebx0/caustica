@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from hifusim.core.pml import PMLSpec, sponge_profile_1d
+from caustica.core.pml import PMLSpec, sponge_profile_1d
 
 
 def test_spec_thickness_vox_rounding():
@@ -46,3 +46,27 @@ def test_profile_validation():
         sponge_profile_1d(16, -1)
     with pytest.raises(ValueError, match="does not fit"):
         sponge_profile_1d(16, 9)
+
+
+def test_missing_pml_warns_about_periodic_wraparound(caplog):
+    """The periodic-boundary footgun (devlog 2026-08-10) must stay loud."""
+    import numpy as np
+
+    from caustica import Grid, Medium
+    from caustica.materials import water
+    from caustica.solvers import CWRunSpec, get
+    from caustica.sources import CWSource
+
+    grid = Grid(shape=(48,), dx=0.5e-3, pml=None)
+    medium = Medium.homogeneous(grid.shape, water())
+    src = CWSource(
+        indices=np.array([[8]], dtype=np.int32),
+        phases=np.zeros(1, dtype=np.float32),
+        amplitude=1e4,
+        f0=1e6,
+    )
+    with caplog.at_level("WARNING", logger="caustica"):
+        get("linear")().run(
+            grid, medium, src, CWRunSpec(min_settle_periods=1, max_settle_periods=2)
+        )
+    assert any("PERIODIC" in r.message for r in caplog.records)

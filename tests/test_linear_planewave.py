@@ -7,11 +7,11 @@ and each asserts one isolated physical property from MILESTONES.md M4.
 import numpy as np
 import pytest
 
-import hifusim.solvers as solvers
-from hifusim import Grid, Medium, PMLSpec
-from hifusim.materials import water
-from hifusim.solvers import CWRunSpec
-from hifusim.sources import plane_cw_source
+import caustica.solvers as solvers
+from caustica import Grid, Medium, PMLSpec
+from caustica.materials import water
+from caustica.solvers import CWRunSpec
+from caustica.sources import plane_cw_source
 
 F0 = 1.0e6
 C0 = 1500.0
