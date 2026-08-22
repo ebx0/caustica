@@ -1,0 +1,71 @@
+{
+  "format": "caustica-metrics/1",
+  "job": "water_bowl_mini",
+  "generated": "2026-08-22T20:17:09+00:00",
+  "peak": {
+    "p_pa": 548525.7,
+    "p_mpa": 0.5485,
+    "voxel_grid": [
+      18,
+      18,
+      29
+    ],
+    "position_mm_from_apex": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 8.5
+    },
+    "gain_vs_source": 5.49,
+    "isppa_w_cm2": 10.0,
+    "p_max_time_domain_pa": 544292.6
+  },
+  "target": {
+    "voxel_grid": [
+      18,
+      18,
+      36
+    ],
+    "p_pa": 421359.1,
+    "hit_ratio": 0.7682,
+    "displacement_mm": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": -3.5
+    },
+    "displacement_norm_mm": 3.5
+  },
+  "focal_spot": {
+    "axial_6db": {
+      "left_mm": 4.828,
+      "right_mm": 15.177,
+      "width_mm": 10.348,
+      "truncated": false
+    },
+    "lateral_x_6db": {
+      "left_mm": -1.17,
+      "right_mm": 1.15,
+      "width_mm": 2.32,
+      "truncated": false
+    },
+    "lateral_y_6db": {
+      "left_mm": -1.143,
+      "right_mm": 1.16,
+      "width_mm": 2.302,
+      "truncated": false
+    },
+    "volume_above_6db_mm3": 36.625
+  },
+  "run": {
+    "solver": "linear",
+    "dt_s": 1.5625e-07,
+    "steps_per_period": 8,
+    "steps_total": 104,
+    "t_end_us": 16.25,
+    "tof_periods": 7,
+    "converged_period": 11,
+    "settle_capped": false,
+    "harmonics_recorded": [
+      1
+    ]
+  }
+}

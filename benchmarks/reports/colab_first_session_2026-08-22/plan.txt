@@ -1,0 +1,7 @@
+--- planner ------------------------------------------------------
+this machine [measured]: t_step=1.03 ms, expected 0 s (104-120 steps, spp=8)
+memory for this run: 0.01 GiB
+expected result.h5 size: ~0.4 MB (float16-quantized, 1 harmonic; --preview-only skips it)
+planner [db] linear on A100-40GB: FITS (0.01 GiB needed / 38.88 GiB usable)
+  t_step=0.02 ms, spp=8, expected=0.0 s (104 steps), worst-case=0.0 s
+  ! db estimate is datasheet-coarse (~2x); run planner.calibrate() on the target device for the ±25% path

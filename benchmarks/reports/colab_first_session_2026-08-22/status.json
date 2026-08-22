@@ -1,0 +1,16 @@
+{
+  "job": "water_bowl_mini",
+  "solver": "linear",
+  "backend": "cupy",
+  "pid": 2225,
+  "ppw_warnings": [],
+  "state": "done",
+  "periods_done": 12,
+  "steps_done": 96,
+  "steps_expected": 104,
+  "steps_worst": 120,
+  "eta_s": 0.2,
+  "elapsed_s": 2.8,
+  "written_at": "2026-08-22T20:17:09+00:00",
+  "result": "/content/runs/water_bowl_mini/result.h5"
+}
