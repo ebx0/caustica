@@ -9,10 +9,16 @@ from pathlib import Path
 
 import h5py
 import numpy as np
+import pytest
 
 from caustica.config.job import JOB_FORMAT
 from caustica.io.store import load_result, validate_result_file
 from caustica.runner import (
+    CANCEL_FILE,
+    ERROR_FILE,
+    ERROR_FORMAT,
+    ERROR_KEYS,
+    ERROR_STAGES,
     EXIT_CONFIG,
     EXIT_INTERRUPTED,
     EXIT_OK,
@@ -290,3 +296,248 @@ def test_preview_failure_does_not_fail_the_run(tmp_path, monkeypatch, caplog):
     assert not (out / "checkpoint.npz").exists()
     assert not (out / "preview.npz").exists()
     assert any("preview package failed" in r.message for r in caplog.records)
+
+
+# --------------------------------------------------------- M10l: cancel file
+
+
+def test_cancel_file_stops_at_period_boundary_and_resume_is_bitwise_identical(tmp_path):
+    """The GUI "Stop" button's contract: pause, do not lose.
+
+    A ``cancel`` file in the output folder stops the solve at the NEXT period
+    boundary with a checkpoint on disk and exit 5 — and the ``--resume`` that
+    finishes it reproduces the uninterrupted run bit for bit, which is the
+    whole reason a stop button may exist at all.
+    """
+    job = mini_job(tmp_path)
+    out_a, out_b = tmp_path / "a", tmp_path / "b"
+    assert run_job_file(job, opts(out=out_a)) == EXIT_OK  # uninterrupted baseline
+
+    # The progress hook plays the part of the outside actor that presses
+    # Stop, so the moment is deterministic instead of a sleep race.
+    def press_stop_at_period_3(ev):
+        if ev["period"] >= 3:
+            (out_b / CANCEL_FILE).touch()
+
+    code = run_job_file(job, opts(out=out_b, progress=press_stop_at_period_3))
+    assert code == EXIT_INTERRUPTED
+    assert (out_b / "checkpoint.npz").exists()
+    assert not (out_b / "result.h5").exists()  # no half-result
+    status = json.loads((out_b / "status.json").read_text(encoding="utf-8"))
+    assert status["state"] == "interrupted"
+    assert status["periods_done"] == 3  # it stopped at a BOUNDARY, not mid-period
+    # The request is consumed: otherwise every --resume would cancel itself.
+    assert not (out_b / CANCEL_FILE).exists()
+    # Cancelling is not failing — no failure record is left behind.
+    assert not (out_b / ERROR_FILE).exists()
+
+    assert run_job_file(job, opts(out=out_b, resume=True)) == EXIT_OK
+    assert not (out_b / "checkpoint.npz").exists()
+    a, b = load_result(out_a / "result.h5"), load_result(out_b / "result.h5")
+    np.testing.assert_array_equal(a.phasor, b.phasor)
+    np.testing.assert_array_equal(a.p_max, b.p_max)
+    assert a.steps_total == b.steps_total
+
+
+def test_cancel_poll_is_one_stat_per_period_never_per_step(tmp_path, monkeypatch):
+    """The cost gate: a per-step poll would put a syscall between kernels."""
+    real_exists = Path.exists
+    polls: list[str] = []
+    boundaries: list[int] = []
+
+    def counting_exists(self, *a, **kw):
+        if self.name == CANCEL_FILE:
+            polls.append(str(self))
+        return real_exists(self, *a, **kw)
+
+    monkeypatch.setattr(Path, "exists", counting_exists)
+    out = tmp_path / "out"
+    code = run_job_file(
+        mini_job(tmp_path), opts(out=out, progress=lambda ev: boundaries.append(ev["period"]))
+    )
+    assert code == EXIT_OK
+    steps = json.loads((out / "run_meta.json").read_text(encoding="utf-8"))["actual"]["steps_total"]
+    spp = json.loads((out / "plan.json").read_text(encoding="utf-8"))["spp"]
+    # One poll per period boundary (+ the one before the record window)...
+    assert len(polls) <= len(boundaries) + 1
+    # ...which is one poll per spp STEPS. A per-step poll would make these
+    # equal; here they differ by exactly the factor the boundary buys.
+    assert len(polls) < steps
+    assert len(polls) * spp <= steps + spp
+
+
+def test_a_stale_cancel_file_does_not_cancel_the_next_run(tmp_path):
+    """A process killed between "cancel seen" and "cancel honored" must not
+    poison every resume that follows."""
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / CANCEL_FILE).touch()  # leftover from a killed attempt
+    assert run_job_file(mini_job(tmp_path), opts(out=out)) == EXIT_OK
+    assert not (out / CANCEL_FILE).exists()
+
+
+def test_a_non_native_solver_says_cancel_does_nothing(tmp_path, monkeypatch, capsys):
+    """kwave takes no checkpoints, so it cannot be cancelled — say so."""
+    import caustica.solvers as solvers
+
+    orig_get = solvers.get
+
+    class FakeExternal:
+        name = "kwave"
+
+        def run(self, grid, medium, source, spec=None, **kwargs):
+            return orig_get("linear")().run(grid, medium, source, spec, backend="numpy", **kwargs)
+
+    monkeypatch.setattr(solvers, "get", lambda n: FakeExternal if n == "kwave" else orig_get(n))
+    out = tmp_path / "out"
+    assert run_job_file(mini_job(tmp_path, solver="kwave"), opts(out=out)) == EXIT_OK
+    assert f"a '{CANCEL_FILE}' file has no effect" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------- M10l: error.json
+
+
+def _bad_schema(tmp_path, monkeypatch):
+    p = tmp_path / "broken.json"
+    p.write_text('{"format": "caustica-job/1", "kind": "explicit", "nmae": "typo"}')
+    return p, opts(out=tmp_path / "out")
+
+
+def _wrong_format(tmp_path, monkeypatch):
+    return mini_job(tmp_path, format="caustica-job/9"), opts(out=tmp_path / "out")
+
+
+def _malformed_json(tmp_path, monkeypatch):
+    p = tmp_path / "notjson.json"
+    p.write_text("{not json")
+    return p, opts(out=tmp_path / "out")
+
+
+def _unknown_backend(tmp_path, monkeypatch):
+    return mini_job(tmp_path), opts(out=tmp_path / "out", backend="nope")
+
+
+def _unknown_gpu(tmp_path, monkeypatch):
+    return mini_job(tmp_path), opts(out=tmp_path / "out", gpu="H200X")
+
+
+def _vram_refusal(tmp_path, monkeypatch):
+    return mini_job(tmp_path), opts(out=tmp_path / "out", vram_limit_gib=1e-5)
+
+
+def _cpu_refusal(tmp_path, monkeypatch):
+    monkeypatch.setenv("CAUSTICA_CPU_LIMIT_MIN", "0")  # everything is "too slow"
+    return mini_job(tmp_path), opts(out=tmp_path / "out", measure=True)
+
+
+def _checkpoint_conflict(tmp_path, monkeypatch):
+    job, out = mini_job(tmp_path), tmp_path / "out"
+    assert run_job_file(job, opts(out=out, stop_after_periods=2)) == EXIT_INTERRUPTED
+    assert (out / "checkpoint.npz").exists()
+    return job, opts(out=out)  # no --resume: the conflict
+
+
+def _solver_crash(tmp_path, monkeypatch):
+    import caustica.solvers as solvers
+
+    class Exploding:
+        def run(self, *a, **kw):
+            raise ArithmeticError("synthetic solver crash")
+
+    monkeypatch.setattr(solvers, "get", lambda n: Exploding)
+    return mini_job(tmp_path), opts(out=tmp_path / "out")
+
+
+def _store_crash(tmp_path, monkeypatch):
+    import caustica.runner as runner_mod
+
+    def boom(*a, **kw):
+        raise OSError("Drive FUSE mount went stale")
+
+    monkeypatch.setattr(runner_mod, "save_result", boom)
+    return mini_job(tmp_path), opts(out=tmp_path / "out")
+
+
+#: (scenario, stage, exit code, error_class) — the failure classes a GUI must
+#: be able to route on WITHOUT parsing stderr (M10l). Nine of them, seven
+#: distinct classes; the table is asserted, not just enumerated.
+ERROR_SCENARIOS = [
+    (_bad_schema, "config", EXIT_CONFIG, "ValidationError"),
+    (_wrong_format, "config", EXIT_CONFIG, "JobError"),
+    (_malformed_json, "config", EXIT_CONFIG, "JSONDecodeError"),
+    (_unknown_backend, "config", EXIT_CONFIG, "ValueError"),
+    (_unknown_gpu, "plan", EXIT_CONFIG, "ValueError"),
+    (_vram_refusal, "gate", EXIT_OOM, "VramRefusal"),
+    (_cpu_refusal, "gate", EXIT_CONFIG, "CpuTimeRefusal"),
+    (_checkpoint_conflict, "checkpoint", EXIT_CONFIG, "CheckpointConflict"),
+    (_solver_crash, "solve", EXIT_SOLVER, "ArithmeticError"),
+    (_store_crash, "store", EXIT_SOLVER, "OSError"),
+]
+
+
+@pytest.mark.parametrize(
+    ("build", "stage", "code", "error_class"),
+    ERROR_SCENARIOS,
+    ids=[b.__name__.lstrip("_") for b, *_ in ERROR_SCENARIOS],
+)
+def test_every_failure_class_writes_a_conformant_error_json(
+    tmp_path, monkeypatch, build, stage, code, error_class
+):
+    job, options = build(tmp_path, monkeypatch)
+    assert run_job_file(job, options) == code  # the exit code is UNCHANGED
+    payload = json.loads((Path(options.out) / ERROR_FILE).read_text(encoding="utf-8"))
+    assert tuple(payload) == ERROR_KEYS  # exactly the contract's keys, in order
+    assert payload["format"] == ERROR_FORMAT
+    assert payload["stage"] == stage and payload["stage"] in ERROR_STAGES
+    assert payload["exit_code"] == code
+    assert payload["error_class"] == error_class
+    assert payload["message"].strip()
+    assert isinstance(payload["advice"], list)
+    assert all(isinstance(a, str) and a.strip() for a in payload["advice"])
+
+
+def test_the_error_table_covers_at_least_seven_distinct_classes():
+    """M10l's own criterion, asserted rather than counted by hand."""
+    assert len({cls for *_, cls in ERROR_SCENARIOS}) >= 7
+    assert {stage for _, stage, _, _ in ERROR_SCENARIOS} == set(ERROR_STAGES)
+
+
+def test_a_successful_run_writes_no_error_json_and_clears_a_stale_one(tmp_path):
+    """error.json means "this folder failed" — nothing weaker."""
+    job, out = mini_job(tmp_path), tmp_path / "out"
+    # A real failure first, so the stale file is a real one.
+    assert run_job_file(job, opts(out=out, vram_limit_gib=1e-5)) == EXIT_OOM
+    assert (out / ERROR_FILE).exists()
+    assert run_job_file(job, opts(out=out)) == EXIT_OK
+    assert not (out / ERROR_FILE).exists()
+
+
+def test_error_json_lands_even_when_the_job_never_parsed(tmp_path):
+    """The GUI case: --out names the folder, so a broken job still explains
+    itself in the folder the GUI is already watching."""
+    p = tmp_path / "broken.json"
+    p.write_text("{not json")
+    out = tmp_path / "does" / "not" / "exist" / "yet"
+    assert run_job_file(p, opts(out=out)) == EXIT_CONFIG
+    assert json.loads((out / ERROR_FILE).read_text(encoding="utf-8"))["stage"] == "config"
+
+
+def test_a_write_failure_for_error_json_changes_nothing(tmp_path, monkeypatch, caplog):
+    """error.json is an ADDITION to the failure contract, never a new way to
+    fail: if it cannot be written, the exit code and stderr are untouched."""
+    import caustica.runner as runner_mod
+
+    real_write = runner_mod._write_json
+
+    def boom(path, payload):
+        if Path(path).name == ERROR_FILE:
+            raise OSError("read-only filesystem")
+        return real_write(path, payload)
+
+    monkeypatch.setattr(runner_mod, "_write_json", boom)
+    out = tmp_path / "out"
+    with caplog.at_level("WARNING", logger="caustica"):
+        code = run_job_file(mini_job(tmp_path), opts(out=out, vram_limit_gib=1e-5))
+    assert code == EXIT_OOM
+    assert not (out / ERROR_FILE).exists()
+    assert any("error.json write failed" in r.message for r in caplog.records)

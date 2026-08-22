@@ -24,10 +24,29 @@ Output folder layout (deterministic — resume depends on it)::
       run_meta.json     the stamp: env + git + planner vs actual + derived
                         geometry (M8's two Colab gates measure themselves
                         from this file)
+      error.json        why a FAILED run failed (M10l): the structured twin
+                        of the stderr message, written even for failures
+                        that happen before solving starts
+      cancel            INPUT, not output (M10l): a caller creates this file
+                        to ask a running solve to stop; see below
 
 Exit codes are DISJOINT so a queue can react without parsing text:
 0 success (or already complete) · 2 config error · 3 OOM refusal ·
-4 solver error · 5 interrupted-but-resumable (``--max-hours`` stop).
+4 solver error · 5 interrupted-but-resumable (``--max-hours``, or a
+``cancel`` file).
+
+Cancel protocol (M10l — the GUI's "Stop" button, and the reason killing the
+process is not the only way out): create an (empty) file named ``cancel`` in
+the output folder. The next PERIOD BOUNDARY sees it — one ``stat`` per
+period, never per step — writes a checkpoint and exits 5. The runner then
+removes the file so that ``--resume`` continues instead of stopping again,
+and a run that completed with ``--resume`` is BIT-IDENTICAL to the
+uninterrupted one. Only the native engine takes checkpoints, so only native
+solvers can be cancelled this way; a ``kwave`` job ignores the file, because
+stopping it would lose the whole run rather than pause it.
+
+The whole surface a GUI may rely on — this folder, the exit codes,
+``error.json``, ``cancel`` — is written down in ``docs/gui_contract.md``.
 """
 
 from __future__ import annotations
@@ -71,6 +90,21 @@ EXIT_OOM = 3
 EXIT_SOLVER = 4
 EXIT_INTERRUPTED = 5
 
+#: Structured failure record (M10l). Every non-zero exit that has an output
+#: folder writes one; a successful run writes none and a new attempt deletes
+#: the previous one, so its presence always means "this folder failed".
+ERROR_FORMAT = "caustica-error/1"
+ERROR_FILE = "error.json"
+#: The keys of ``error.json`` — the contract, in the order written.
+ERROR_KEYS = ("format", "stage", "exit_code", "error_class", "message", "advice", "written_at")
+#: Where the failure happened. ``stage`` is coarse on purpose: a GUI routes
+#: on it (retry / edit the job / pick a bigger GPU), it does not parse it.
+ERROR_STAGES = ("config", "plan", "gate", "checkpoint", "solve", "store")
+
+#: Cancel request file (M10l). A caller creates it in the output folder; the
+#: solve polls for it ONCE PER PERIOD BOUNDARY and stops resumably (exit 5).
+CANCEL_FILE = "cancel"
+
 #: Solvers the planner models (the native k-space engine); anything else
 #: (e.g. the external k-Wave binary) runs without a plan or a checkpoint.
 _NATIVE_SOLVERS = ("linear", "westervelt")
@@ -83,6 +117,74 @@ def _now_iso() -> str:
 def _write_json(path: Path, payload: dict) -> None:
     with atomic_write(path) as tmp:
         tmp.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
+
+
+def _write_error_json(
+    outdir: Path | None,
+    *,
+    stage: str,
+    exit_code: int,
+    error_class: str,
+    message: str,
+    advice: tuple[str, ...] | list[str] = (),
+) -> None:
+    """Record WHY this run failed, as data instead of stderr prose (M10l).
+
+    Best effort by construction, and deliberately so: this is an ADDITION to
+    the existing failure contract, never a replacement. The exit code and the
+    stderr text are unchanged and stay authoritative — if the folder does not
+    exist, cannot be created, or the write fails, the run still exits with the
+    same code and the same message.
+
+    ``outdir`` is None exactly when there is nowhere honest to write: the run
+    failed before an output folder could be established (a job that would not
+    load AND no explicit ``--out``, so the folder's own name was never known),
+    or creating it is what failed. No path is invented in that case.
+    """
+    if outdir is None:
+        return
+    payload = {
+        "format": ERROR_FORMAT,
+        "stage": stage,
+        "exit_code": int(exit_code),
+        "error_class": error_class,
+        "message": message,
+        "advice": list(advice),
+        "written_at": _now_iso(),
+    }
+    try:
+        _write_json(Path(outdir) / ERROR_FILE, payload)
+    except Exception as exc:  # noqa: BLE001 - must never mask the real failure
+        log.warning("error.json write failed: %s", exc)
+
+
+def _error_outdir(established: Path | None, opts: RunnerOptions) -> Path | None:
+    """The folder ``error.json`` may go in when the run died before setup.
+
+    An explicit ``--out`` names the folder without reading the job, which is
+    the case a GUI always has — so a job that will not even parse still leaves
+    a machine-readable reason behind. Without ``--out`` the folder name comes
+    FROM the job (``output.folder`` or ``runs/<name>``), so a job that failed
+    to load leaves nowhere to write and this returns None rather than guessing.
+    """
+    if established is not None:
+        return established
+    if opts.out is None:
+        return None
+    try:
+        d = Path(opts.out)
+        d.mkdir(parents=True, exist_ok=True)
+        return d if d.is_dir() else None
+    except Exception:  # noqa: BLE001 - an unwritable --out is not a new failure
+        return None
+
+
+def _clear_stale(path: Path) -> None:
+    """Remove a leftover ``error.json``/``cancel`` from a previous attempt."""
+    try:
+        path.unlink(missing_ok=True)
+    except OSError as exc:  # pragma: no cover - locked file on Windows
+        log.warning("could not remove stale %s: %s", path.name, exc)
 
 
 def _git_commit() -> str:
@@ -354,16 +456,33 @@ class Refusal:
     same code. The gates themselves exist exactly ONCE — an in-memory run that
     skipped them would be the "works on my laptop, dies on Colab" bug the
     plan-first discipline exists to prevent.
+
+    Since M10l the advice is stored as a LIST, not baked into the printed
+    lines: the same strings feed ``error.json``'s ``advice[]``, and a copy
+    kept only for the file would drift from the one shown on screen.
     """
 
     kind: str  # "vram" | "cpu"
     exit_code: int
-    lines: tuple[str, ...]
+    headline: str
+    advice: tuple[str, ...] = ()
     note: str = ""  # what --dry-run prints instead of refusing
+
+    #: ``kind`` -> the name a GUI switches on in ``error.json``.
+    _CLASSES = {"vram": "VramRefusal", "cpu": "CpuTimeRefusal"}
+
+    @property
+    def lines(self) -> tuple[str, ...]:
+        """The stderr rendering: headline, then one indented arrow per advice."""
+        return (self.headline, *(f"  -> {a}" for a in self.advice))
 
     @property
     def message(self) -> str:
         return "\n".join(self.lines)
+
+    @property
+    def error_class(self) -> str:
+        return self._CLASSES.get(self.kind, "Refusal")
 
 
 def check_gates(
@@ -394,15 +513,20 @@ def check_gates(
             limit_gib = gpu_env.get("vram_total_gib")
             limit_label = f"total device VRAM ({gpu_name}; free VRAM unavailable)"
     if limit_gib is not None and est.vram_gib > limit_gib:
-        lines = [
-            f"REFUSED before solving: this run needs {est.vram_gib:.2f} GiB but "
-            f"{limit_label} is {limit_gib:.2f} GiB."
-        ]
-        for a in est.advice or (
-            "coarsen dx, shrink the record region, or switch to the linear solver",
-        ):
-            lines.append(f"  -> {a}")
-        return Refusal(kind="vram", exit_code=EXIT_OOM, lines=tuple(lines))
+        return Refusal(
+            kind="vram",
+            exit_code=EXIT_OOM,
+            headline=(
+                f"REFUSED before solving: this run needs {est.vram_gib:.2f} GiB but "
+                f"{limit_label} is {limit_gib:.2f} GiB."
+            ),
+            # The planner's own advice, verbatim — printed AND written to
+            # error.json (M10l), where it is the actionable part for a GUI.
+            advice=tuple(
+                est.advice
+                or ("coarsen dx, shrink the record region, or switch to the linear solver",)
+            ),
+        )
 
     # ---- CPU gate (M10i/D20): refuse an hours-long numpy run BEFORE
     # paying for it; the message names its own escapes. Reuses
@@ -435,12 +559,14 @@ def check_gates(
                 return Refusal(
                     kind="cpu",
                     exit_code=EXIT_CONFIG,
-                    lines=(
+                    headline=(
                         f"REFUSED before solving: estimated wall time on the numpy (CPU) "
                         f"backend is ~{t_cpu:.0f} s (~{t_cpu / 3600:.1f} h, estimate "
-                        f"source: {cpu_src}), over the {limit_min:g} min CPU limit.",
-                        "  -> run on a GPU backend (--backend cupy / backend='cupy'), or",
-                        "  -> accept the wait: --allow-slow-cpu (CLI) / "
+                        f"source: {cpu_src}), over the {limit_min:g} min CPU limit."
+                    ),
+                    advice=(
+                        "run on a GPU backend (--backend cupy / backend='cupy'), or",
+                        "accept the wait: --allow-slow-cpu (CLI) / "
                         "allow_slow_cpu=True; the threshold itself is "
                         "CAUSTICA_CPU_LIMIT_MIN (minutes).",
                     ),
@@ -509,6 +635,7 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
     """Execute one job file. Returns a disjoint exit code (module constants)."""
     opts = opts or RunnerOptions()
     t_start = time.perf_counter()
+    outdir: Path | None = None
 
     # ---- everything before the solve is, by definition, a config problem ----
     try:
@@ -538,11 +665,30 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
         probe_writable(outdir)
     except Exception as exc:
         print(f"CONFIG ERROR: {type(exc).__name__}: {exc}", file=sys.stderr)
+        _write_error_json(
+            _error_outdir(outdir, opts),
+            stage="config",
+            exit_code=EXIT_CONFIG,
+            error_class=type(exc).__name__,
+            message=f"{type(exc).__name__}: {exc}",
+            advice=(
+                f"run `caustica validate {job_path}` for the full list of problems",
+                "`caustica schema` prints the caustica-job/1 JSON Schema",
+            ),
+        )
         return EXIT_CONFIG
 
     result_path = outdir / "result.h5"
     ck_path = outdir / "checkpoint.npz"
     status_path = outdir / "status.json"
+    cancel_path = outdir / CANCEL_FILE
+
+    # This attempt owns the folder from here on: a failure record and a stop
+    # request left by the PREVIOUS attempt are stale by definition. Clearing
+    # `cancel` also stops a process killed between "cancel seen" and "cancel
+    # honored" from cancelling every resume that follows, forever (M10l).
+    _clear_stale(outdir / ERROR_FILE)
+    _clear_stale(cancel_path)
 
     # ---- file-level resume: a complete result is never produced twice ----
     if result_path.exists() and validate_result_file(result_path):
@@ -575,6 +721,14 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
                 tmp.write_text(plan_text, encoding="utf-8")
     except Exception as exc:
         print(f"CONFIG ERROR: {type(exc).__name__}: {exc}", file=sys.stderr)
+        _write_error_json(
+            outdir,
+            stage="plan",
+            exit_code=EXIT_CONFIG,
+            error_class=type(exc).__name__,
+            message=f"{type(exc).__name__}: {exc}",
+            advice=("re-run with --dry-run to see how far the plan gets",),
+        )
         return EXIT_CONFIG
     if ppw_warns:
         warnings.warn(
@@ -594,9 +748,21 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
             else:
                 for line in refusal.lines:
                     print(line, file=sys.stderr)
+                _write_error_json(
+                    outdir,
+                    stage="gate",
+                    exit_code=refusal.exit_code,
+                    error_class=refusal.error_class,
+                    message=refusal.headline,
+                    advice=refusal.advice,
+                )
                 return refusal.exit_code
     else:
         print(f"(planner models the native engine only; '{built.solver}' runs unplanned)")
+        # Honest about the gap rather than silently ignoring the file: no
+        # checkpoint means no period boundary to stop AT, so a cancel could
+        # only kill the run, which is what the file exists to avoid (M10l).
+        print(f"(no checkpoints for '{built.solver}': a '{CANCEL_FILE}' file has no effect)")
 
     if opts.dry_run:
         print("\n(dry run — nothing solved, nothing written beyond the plan)")
@@ -610,6 +776,17 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
                 f"CONFIG ERROR: {ck_path} exists — a previous run was interrupted. "
                 f"Rerun with --resume to continue it, or delete the checkpoint to restart.",
                 file=sys.stderr,
+            )
+            _write_error_json(
+                outdir,
+                stage="checkpoint",
+                exit_code=EXIT_CONFIG,
+                error_class="CheckpointConflict",
+                message=f"{ck_path} exists — a previous run was interrupted.",
+                advice=(
+                    "rerun with --resume to continue it, or",
+                    f"delete {ck_path} to restart this run from scratch",
+                ),
             )
             return EXIT_CONFIG
         try:
@@ -646,12 +823,22 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
     # at the first period boundary", which is a legitimate drain request.
     deadline = time.monotonic() + opts.max_hours * 3600.0 if opts.max_hours is not None else None
 
+    cancelled = False
+
     def stop_when() -> bool:
         # The heartbeat is no longer ticked HERE (M10j): it consumes the
         # engine's progress payload, which the boundary emits just before
         # this poll — same call site, same order, same counters, one
         # instrumentation instead of two.
+        nonlocal cancelled
         if opts.stop_after_periods is not None and hb.session_periods >= opts.stop_after_periods:
+            return True
+        # The cancel poll (M10l) is ONE stat, at the period boundary, which
+        # is the only place this hook is called from — a per-step poll would
+        # put a filesystem round-trip between GPU kernels and is exactly what
+        # the period-boundary discipline exists to prevent.
+        if cancel_path.exists():
+            cancelled = True
             return True
         return deadline is not None and time.monotonic() >= deadline
 
@@ -690,12 +877,32 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
         )
     except RunInterrupted as exc:
         hb.write("interrupted", detail=str(exc))
-        print(f"\nINTERRUPTED (resumable): {exc}")
+        if cancelled:
+            # Consume the request: leaving it would cancel the --resume too,
+            # at its first period boundary, forever (M10l).
+            _clear_stale(cancel_path)
+            print(f"\nCANCELLED on request ({CANCEL_FILE} file): {exc}")
+        else:
+            print(f"\nINTERRUPTED (resumable): {exc}")
         print(f"rerun with --resume to continue; state: {ck_path}")
+        # No error.json: an interruption is not a failure. status.json says
+        # "interrupted" and the exit code is 5 — that IS the contract.
         return EXIT_INTERRUPTED
     except Exception as exc:
         hb.write("failed", error=f"{type(exc).__name__}: {exc}")
         traceback.print_exc()
+        _write_error_json(
+            outdir,
+            stage="solve",
+            exit_code=EXIT_SOLVER,
+            error_class=type(exc).__name__,
+            message=f"{type(exc).__name__}: {exc}",
+            advice=(
+                (f"a checkpoint survives at {ck_path}: rerun with --resume",)
+                if ck_path.exists()
+                else ()
+            ),
+        )
         return EXIT_SOLVER
     finally:
         progress_close(display)  # a live tqdm bar must not outlive the solve
@@ -751,6 +958,22 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
                 f"window is redone.",
                 file=sys.stderr,
             )
+        _write_error_json(
+            outdir,
+            stage="store",
+            exit_code=EXIT_SOLVER,
+            error_class=type(exc).__name__,
+            message=f"store: {type(exc).__name__}: {exc}",
+            advice=(
+                (
+                    f"the solve is NOT lost: fix the storage problem and rerun with "
+                    f"--resume (checkpoint retained at {ck_path}); only the record "
+                    f"window is redone",
+                )
+                if native
+                else ()
+            ),
+        )
         return EXIT_SOLVER
 
     # ---- preview package (M10d): <=10 MB answer to "did the run work?" ----
