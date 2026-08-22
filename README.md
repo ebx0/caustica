@@ -62,9 +62,9 @@ res.amp, res.phase, res.p_max, res.harmonic_amp(2)
 
 ## Geometry (COMSOL-style CSG)
 
-Build media from primitives with boolean operators, import heterogeneous label
-volumes (e.g. the breast phantom's `mtype`-style text), and resample everything
-to YOUR `dx` with a selectable method:
+Build media from primitives with boolean operators, import heterogeneous
+label volumes, and resample everything to YOUR `dx` with a selectable
+method:
 
 ```python
 from caustica.geometry import Ball, Box, LabelVolume, Scene
@@ -82,149 +82,33 @@ medium = scene.to_medium(grid, breast_default(), supersample=3)
 scenes serialize to JSON (`SceneConfig`) with imported files kept as references
 (CSG trees, affine transforms and half-spaces included).
 
-## Anatomical phantoms (UWCEM breast repository)
+## Bring your own volume (`medium_volume`)
 
-The `uwcem_phantoms` package (repo root, next to `apps/` — a side package, not
-part of the `caustica` wheel) turns the [University of Wisconsin numerical breast
-phantom repository](https://uwcem.ece.wisc.edu/phantomRepository.html) — nine
-MRI-derived phantoms, 0.5 mm isotropic, ACR density classes 1–4 — into **one
-file the solvers import directly**:
-
-```python
-from uwcem_phantoms import PhantomSpec, build, load_phantom
-
-spec = PhantomSpec(
-    phantom_id="012304",                                   # ACR 4, very dense
-    f0_mhz=1.0,                                            # alpha power law evaluated here
-    simplify={"tissue_model": "detailed"},                 # 10 media numbers, or grouped/simple
-    resolution={"dx_mm": 0.3, "method": "smooth"},
-    crop={"mode": "breast", "margin_mm": 6},
-    domain={"standoff_mm": 15, "fft_friendly": True},      # transducer room + 2/3/5/7-smooth axes
-    heterogeneity={"use_pval": True, "noise_pct": 2.0,     # measured + synthetic texture
-                   "correlation_mm": 0.6, "seed": 7},
-)
-path = build(spec).save()                  # -> uwcem_phantoms/_data/exports/<name>.npz
-
-ph     = load_phantom(path)
-grid   = ph.grid(pml=hs.PMLSpec(thickness=5e-3))
-medium = ph.to_medium()                    # straight into any registry solver
-# medium = ph.to_medium(linear=True)       # beta zeroed, for the `linear` solver
-```
-
-The export is *also* a plain caustica label volume, so nothing that predates this
-module needs changing: `LabelVolume.load_npz(path)` reads the same file, and it
-drops into a `Scene` via `add_volume`.
-
-What the knobs actually do:
-
-| group | what it controls |
-|---|---|
-| tissue model | `detailed` (all 10 media numbers) · `grouped` (5) · `simple` (ids identical to `breast_default()`) |
-| resolution | any `dx`, resampled with the label-safe `nearest`/`smooth` rules |
-| crop | `breast` (the protruding cone), `tissue` (full box), `manual`, or none |
-| domain | coupling standoff / backing / lateral margin, and FFT-friendly padding |
-| simplify | drop skin or chest wall, dissolve islands, fill pockets, majority-smooth |
-| heterogeneity | the repository's per-voxel `pval`, plus seeded scatterer noise with a physical correlation length |
-
-Attenuation is stored as a power law and evaluated at `f0`, so a phantom is never
-silently pinned to the frequency it was built at. Builds that change the physics —
-a removed chest wall, a `dx` too coarse for the 1.5 mm skin layer, a `dx` that
-cannot carry a wave at `f0` at all — say so in `asset.meta["warnings"]`, which
-travels inside the file. `plan(spec)` sizes a build before paying for it, exactly
-when no label simplification is requested and as an upper bound when there is.
-
-Verified end to end: a 0.6 mm export of the ACR-4 phantom solved with `westervelt`
-puts the focus at z = 54.0 mm where the geometric focus in water would be 51.8 mm —
-the 2.2 mm deepening you expect from a beam crossing fat (c = 1475 m/s).
-
-```bash
-phantoms.bat                                  # menu launcher: no flags to remember
-python -m uwcem_phantoms list                 # the catalog and what is downloaded
-python -m uwcem_phantoms fetch --all          # ~179 MB, once
-python -m uwcem_phantoms tissues --f0 1.5     # the acoustic table, with sources
-python -m uwcem_phantoms build 012304 --dx 0.4 --standoff 15 --pval --noise 2
-python -m uwcem_phantoms dataset              # the standard dataset (below)
-python -m uwcem_phantoms setup                # nine run-ready setups -> data/setups/
-python -m apps.phantom_studio                 # the GUI (see apps/README.md)
-```
-
-`phantoms.bat` (`./phantoms.sh` elsewhere) is the shortest way in: it picks the
-project virtualenv, offers everything this module does, suggests a `dx` from
-the `f0` you chose, and shows the grid, voxel count and peak RAM from
-`plan(spec)` before it builds anything. Every wizard ends by printing the
-equivalent `python -m uwcem_phantoms build ...` line, so it teaches the flags
-rather than hiding them.
-
-### The standard dataset: nine breasts, one grid
-
-`python -m uwcem_phantoms dataset` builds `data/phantoms/` — every phantom at
-**0.25 mm** on **one common grid** (560×700×480 = 140×175×120 mm), so a
-transducer position, a focus, a slicing script written against one phantom is
-valid for all nine:
-
-* the skin front face sits at the same z-plane in every file, with **20 mm of
-  coupling water in front** (`--front-gap`) — one standoff fits all. That gap
-  is a *transducer budget*, not padding: the PML sponge sits inside the grid,
-  and a focused bowl needs room for its own shell in front of the apex. At
-  0.25 mm a typical PML is 20 voxels (5 mm) and the production 128-element
-  spiral is 11.6 mm deep apex-to-rim, so 20 mm leaves it ~3 mm of clearance;
-* the protruding breast's bounding-box centre is on the box centre in x/y
-  (±1 voxel — the chest-wall fat slab is excluded on purpose, else "centring"
-  would centre the crop window instead of the breast);
-* the propagation axis stops at **120 mm** (`--depth`, `0` disables), leaving
-  100 mm of tissue behind the 20 mm gap. The uncapped union is 171 mm deep and
-  the back of it is coupling water plus the flat chest-wall slab. This is a
-  destructive crop, so it is measured, not assumed: every phantom's
-  `alignment.truncated_tissue_vox` and `truncated_by_class` record exactly what
-  left the domain, `--dry-run` names the cost before the build, and the deeper
-  phantoms therefore END inside the body — a back-face PML absorbs into tissue
-  rather than water;
-* pval heterogeneity is ON (properties blended per media number between its
-  literature `lo`/`hi` at the repository's per-voxel `p`), noise OFF, tissue
-  model `detailed`, `f0` = 1 MHz;
-* each `.npz` is the normal export format: `load_phantom(...).to_medium()` or
-  `LabelVolume.load_npz(...)` both work, and `manifest.json` records the grid,
-  the per-phantom alignment actually achieved and the citation.
-
-`--verify` re-checks all of it from disk (shapes, alignment planes, the depth
-ceiling and its truncation record, water padding values, per-class property
-bounds — the "are the pvals right" test).
-
-### Stored setups: nine runs, ready to load
-
-The dataset is the medium and nothing else. A run also needs a transducer that
-fits, a boundary that does not swallow it, and a focus that lands in tissue —
-`python -m uwcem_phantoms setup` writes that decision down, one small JSON per
-phantom in `data/setups/` (in git; ~1.8 KB each):
+Volume media enter caustica through ONE door: a `medium_volume` `.npz`
+carrying a label map + a `MaterialDB` (or dense per-voxel `c`/`rho`/`alpha`/
+`beta` volumes), with the grid shape and `dx` fixed by the file. The library
+both reads and writes the format:
 
 ```python
-from uwcem_phantoms.setup import load_setup
-from caustica.solvers import registry
+from caustica.io import write_medium_volume, load_medium_volume
 
-s = load_setup("s1-012304")
-res = registry.get("westervelt")().run(
-    s.grid, s.medium, s.source, spec=s.run_spec,
-    record_region=s.record_region, reference_point=s.focus_vox,
-    harmonics=(1, 2), backend="cupy",
-)
+write_medium_volume("my_medium.npz", dx=0.5e-3, labels=labels, materials=db)
+vol = load_medium_volume("my_medium.npz")
+medium = vol.to_medium()                 # straight into any registry solver
 ```
 
-The standard set is a **64-element Archimedean spiral, 60 mm aperture, 60 mm
-ROC (F/1.0)**, apex fixed at `z = 5.50 mm` — two voxels clear of a 5 mm PML —
-focusing at its own geometric focus, `z = 65.50 mm`, with **every drive phase
-zero**: no steering, no grating-lobe question, and anatomy is the only thing
-that differs between the nine. The cost of a fixed apex is recorded per file:
-the on-axis water path runs 16.00–24.75 mm and the focus lands 35.25–44.00 mm
-below the skin.
+and a job references it without a `grid` section (the file fixes the grid):
 
-Nothing is baked. The element positions and the 23,283 source voxels are
-*derived* at load time and checked against the values the file recorded, so a
-change in the array construction fails loudly instead of quietly running a
-different transducer. `--verify` goes further and re-measures the shell-to-skin
-clearance (9.25–14.50 mm) and the tissue class at the focus from the phantom
-itself. Building a setup that would put the transducer inside the patient, or
-focus it in water, or drive at a frequency the dataset did not bake `alpha`
-for, is refused rather than written.
+```json
+{"medium": {"kind": "medium_volume", "file": "my_medium.npz", "pml_mm": 5.0}}
+```
+
+**Anatomical phantoms** (the UWCEM breast repository — nine MRI-derived
+phantoms, the aligned dataset, nine stored run setups and the Phantom Studio
+GUI) live in their own repository, **uwcem-phantom**, which *consumes*
+caustica and emits `medium_volume` files plus explicit `caustica-job/1`
+JSON. caustica itself carries no phantom-source-specific code — enforced by
+`tests/test_import_direction.py`.
 
 ## Planner (will it fit? how long will it take?)
 
@@ -276,15 +160,12 @@ src/caustica/
   planner/    # pre-run VRAM + wall-time estimates (db | calibrated | measured)
   solvers/    # registry + capability declarations; kspace engine; kwave adapter
   io/         # caustica-result/1 HDF5 contract, atomic writes, float16 quantization,
-              # in-run checkpoints, Drive-proof ResultStore
+              # in-run checkpoints, Drive-proof ResultStore, medium_volume format
   report/     # focal metrics (single source of truth), <=10 MB preview package,
               # figures + HTML report rendering
   runner.py   # plan-first job execution: disjoint exit codes, heartbeat, resume
   __main__.py # the CLI: python -m caustica {validate | run | report}
-uwcem_phantoms/  # UWCEM breast phantom import -> simulation-ready files (side package, not in the wheel)
-apps/            # phantom launcher, phantom studio GUI, focus study
-data/phantoms/   # the standard aligned dataset (generated; manifest.json in git)
-data/setups/     # nine stored, run-ready transducer placements (small JSON, in git)
+apps/            # focus study (library consumer; not in the wheel)
 tests/        # pytest; CPU-only by default; kwave/gpu tests auto-skip
 scripts/      # validation-report generator
 ```

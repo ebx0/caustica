@@ -1368,3 +1368,28 @@ eksik 2 boyut (motor-checkpoint, job-config/steering) elle tarandı.
   mapping fonksiyonuyla kaldı.
 - D26 penceresi AÇIK: dokuz yerel setup şu an `caustica run` ile koşamaz (stored_setup yok);
   `load_setup` çalışıyor. W0d kapatacak: load_setup explicit job üretecek.
+
+### W0d + W0e + W0f — yeni repo, veri kökü, lisans (2026-08-22)
+- **Yeni repo:** `C:\Users\bulbu\Desktop\uwcem-phantom` (yerel git, `45cf16b`; push YOK).
+  Taşınanlar: paket, phantom_launcher, phantom_studio (tamamı uwcem-bağımlıydı, 10+ import),
+  phantoms.bat/sh, test süiti. `setup_to_job()`/`emit_jobs()` + CLI `--emit-jobs`:
+  her stored setup, medium_volume kapısından giren SELF-CONTAINED explicit job üretiyor —
+  kalkan `stored_setup` kind'ının migrasyon yolu. `load_breast_phantom` → `legacy_import.py`.
+- **KAPANIŞ KAPISI (R11):** dokuz setupta `load_setup` ↔ emitted-job medyaları sha256 BİT-AYNI,
+  validate ok, dry-run exit 0 (5:04; test yeni repoda `slow` işaretli). Bonus: dry-run çıktısı
+  üretim ayarının 2f0 @ 2.85 ppw uyarısını gösterdi — D31/M10i entegrasyonunun canlı kanıtı.
+  Dürüst yorum kaydı: "uçtan uca" = boru hattı + bitwise medya paritesi; dokuz TAM çözüm
+  9×2.6 sa CPU (M10i kapısının reddettiği sınıf) — mini tam-çözüm kanıtı medium_volume
+  koşu testinde.
+- **W0e:** tek veri kökü (arg → CAUSTICA_PHANTOM_DATA → dolu checkout _data → kullanıcı
+  önbelleği; platformdirs YOK). dataset/setups aynı kökte. Yerel kök `hifusim\data`:
+  kullanıcı-düzeyi env kuruldu; `_data`'nın uwcem/cache/exports klasörleri aynı diskte
+  `data/` altına RENAME edildi (295 MB; indirme yok) — 4.5 GB dataset ve setuplar yerinden
+  OYNAMADI (plan sözü: "bugünkü gibi"). Taşınan süit + dokuzlu kapı ağsız geçti (T5 kanıtı).
+- **W0f:** UWCEM resmi lisans YOK; Instruction Manual'dan verbatim şart README'ye yazıldı
+  ("free of charge ... acknowledge the authors ... in any publication derived").
+  Muhafazakâr uygulama: git'te fantom baytı yok, türevleri biz dağıtmıyoruz, atıf metadata'da.
+- **hifusim temizliği:** taşınanlar git'ten silindi; data/setups + manifestler git'ten çıktı
+  (diskte duruyor); .gitignore `data/` bütününe indirgendi; apps/README ve README işaretçilere
+  döndü. Kullanıcı görünür değişiklik: `phantoms.bat` artık uwcem-phantom repo'sunda;
+  `CAUSTICA_PHANTOM_DATA=C:\Users\bulbu\Desktop\hifusim\data` kullanıcı env değişkeni kuruldu.

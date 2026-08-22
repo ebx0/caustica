@@ -74,48 +74,7 @@ apps/outputs/<scenario>-<timestamp>/
 
 ---
 
-## phantom_launcher — the menu in front of all of it
-
-```bash
-phantoms.bat                     # Windows: double-click it, or run it
-./phantoms.sh                    # POSIX
-python -m apps.phantom_launcher  # same thing, explicitly
-python -m apps.phantom_launcher build   # jump straight to one action
-```
-
-A stdlib menu over the whole package: launch the studio, build a phantom, build
-or verify the standard aligned dataset (`data/phantoms/`, all nine phantoms on
-one grid), print the catalog or the tissue table, inspect an export, download
-archives. The
-build wizard is the reason it exists — it suggests a `dx` from the chosen `f0`
-(the 4.4 points-per-wavelength design rule, and the 2 ppw floor below which no
-focus forms at all), then runs `plan(spec)` and shows the grid, voxel count and
-peak RAM *before* the build. It finishes by printing the equivalent
-`python -m uwcem_phantoms build ...` line; `tests/test_phantom_launcher.py`
-parses that line back through the real argument parser and requires it to
-reproduce the same spec, because a printed command that builds something else is
-worse than no command.
-
----
-
-## phantom_studio — build simulation-ready phantoms, and look at them
-
-A local web GUI over `uwcem_phantoms`. Left panel: every knob of a
-`PhantomSpec`. Right panel: an interactive WebGL2 volume rendering and three
-slider-driven cross-sections of the *same* build.
-
-```bash
-python -m apps.phantom_studio                     # opens http://127.0.0.1:8765/
-python -m apps.phantom_studio --port 9000 --no-browser
-python -m apps.phantom_studio --preview-mvox 20   # bigger interactive builds
-```
-
-Run it from the repository root with the project's virtualenv
-(`.venv/Scripts/python.exe -m apps.phantom_studio` on Windows). First run
-downloads whatever phantom you select (~20 MB each, or `python -m
-uwcem_phantoms fetch --all` for all nine up front).
-
-### What it shows
+## What it shows
 
 - **3-D** — a ray-cast volume with per-tissue visibility, opacity and shading,
   and a corner cutaway whose three exposed faces ARE the three slice planes
@@ -144,3 +103,6 @@ uwcem_phantoms fetch --all` for all nine up front).
   `uwcem_phantoms.tissue.DEFAULT_COLORS` — five family hues validated for
   colour-vision separation against this exact dark surface, with lightness
   ramps inside the two graded families.
+
+> The phantom launcher and Phantom Studio moved to the `uwcem-phantom`
+> repository at M10k, together with the `uwcem_phantoms` package.

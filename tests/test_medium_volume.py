@@ -70,10 +70,12 @@ def _tiny_labels() -> np.ndarray:
 def test_existing_dataset_file_gives_bit_identical_medium():
     """T7/R11: same .npz -> medium_volume Medium == PhantomAsset Medium,
     bitwise, full volume (hashed one medium at a time)."""
-    uw = pytest.importorskip("uwcem_phantoms")  # parity vs the pre-split reader
+    asset_mod = pytest.importorskip(
+        "uwcem_phantoms.asset"
+    )  # pre-split reader (skips after the split)
 
     npz = sorted(PHANTOMS.glob("*.npz"))[0]
-    ref = uw.asset.PhantomAsset.load(npz).to_medium()
+    ref = asset_mod.PhantomAsset.load(npz).to_medium()
     ref_digest = _medium_digest(ref)
     del ref
 
