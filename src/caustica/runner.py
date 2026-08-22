@@ -452,8 +452,9 @@ class Refusal:
 
     One object, two presentations: ``run_job_file`` prints ``lines`` to stderr
     and returns ``exit_code``; :func:`caustica.simulate` raises
-    :class:`~caustica.facade.SimulationRefused` carrying the same text and the
-    same code. The gates themselves exist exactly ONCE — an in-memory run that
+    :class:`~caustica.facade.SimulationError` carrying the same text and the
+    same code in ``.exit_code`` (there is no separate refusal class — the
+    number is the classification). The gates themselves exist exactly ONCE — an in-memory run that
     skipped them would be the "works on my laptop, dies on Colab" bug the
     plan-first discipline exists to prevent.
 
@@ -522,10 +523,7 @@ def check_gates(
             ),
             # The planner's own advice, verbatim — printed AND written to
             # error.json (M10l), where it is the actionable part for a GUI.
-            advice=tuple(
-                est.advice
-                or ("coarsen dx, shrink the record region, or switch to the linear solver",)
-            ),
+            advice=(),  # MUTATION: the vram refusal now hands a GUI nothing
         )
 
     # ---- CPU gate (M10i/D20): refuse an hours-long numpy run BEFORE
