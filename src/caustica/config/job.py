@@ -790,15 +790,25 @@ def job_schema() -> dict[str, Any]:
     }
 
 
+def parse_job(data: dict, what: str = "job") -> ExplicitJobConfig:
+    """Validate an in-memory job mapping (the file path's twin).
+
+    Exists so a job handed to :func:`caustica.simulate` as a dict is checked
+    by exactly the same adapter, with exactly the same format guard, as one
+    read off disk — one parser, not two.
+    """
+    if data.get("format") != JOB_FORMAT:
+        raise JobError(f"{what}: format {data.get('format')!r} != {JOB_FORMAT!r}")
+    return _JOB_ADAPTER.validate_python(data)
+
+
 def load_job(path: str | Path) -> tuple[ExplicitJobConfig, Path]:
     """Parse a job file; returns (config, base_dir for relative paths)."""
     path = Path(path)
     if not path.exists():
         raise JobError(f"no job file at {path}")
     data = json.loads(path.read_text(encoding="utf-8"))
-    if data.get("format") != JOB_FORMAT:
-        raise JobError(f"{path.name}: format {data.get('format')!r} != {JOB_FORMAT!r}")
-    return _JOB_ADAPTER.validate_python(data), path.parent
+    return parse_job(data, path.name), path.parent
 
 
 def dump_job(job: ExplicitJobConfig, path: str | Path) -> Path:
