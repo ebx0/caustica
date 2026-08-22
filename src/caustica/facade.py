@@ -45,7 +45,7 @@ import os
 import sys
 import tempfile
 import warnings
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -60,7 +60,7 @@ from caustica.config.job import (
     load_job,
     parse_job,
 )
-from caustica.core.backend import CausticaWarning, get_backend
+from caustica.core.backend import CausticaWarning, check_backend_name, get_backend
 from caustica.env import gpu_environment
 from caustica.progress import close as progress_close
 from caustica.progress import resolve as progress_resolve
@@ -68,6 +68,7 @@ from caustica.runner import (
     _NATIVE_SOLVERS,
     EXIT_CONFIG,
     EXIT_OK,
+    EXIT_SOLVER,
     RunnerOptions,
     _now_iso,
     _plan,
@@ -86,6 +87,28 @@ SETUP_FORMS = (
     "an ExplicitJobConfig",
     "a BuiltJob (what caustica.config.job.build_job returns)",
 )
+
+
+#: Sentinel for "the caller did not mention this argument", so a value set
+#: only through ``options=`` is not overwritten by the default.
+_KEEP = object()
+
+#: RunnerOptions that need an output folder to mean anything. Refused rather
+#: than ignored: a notebook that asks for a 2-hour budget and silently gets
+#: none is the failure mode PLAN section 8 opens with.
+_NEEDS_A_FOLDER = ("resume", "max_hours", "stop_after_periods", "preview_only", "dry_run")
+
+
+def _refuse_options_without_a_folder(opts: RunnerOptions) -> None:
+    default = RunnerOptions()
+    named = [n for n in _NEEDS_A_FOLDER if getattr(opts, n) != getattr(default, n)]
+    if named:
+        raise ValueError(
+            f"simulate(out=None) runs in memory, so {named} cannot do anything: "
+            f"resuming, a checkpointed time budget, a deterministic stop, a "
+            f"preview-only artifact and a plan-only run all need an output "
+            f"folder. Pass out=<path>, or drop these options."
+        )
 
 
 class SimulationError(RuntimeError):
@@ -277,9 +300,12 @@ def _as_job(setup: Any) -> tuple[ExplicitJobConfig, Path | None, Path | None, Bu
     """``(job, base_dir, job_path, built)`` for every accepted setup form."""
     if isinstance(setup, BuiltJob):
         # Already through build_job — the caller did that half themselves.
-        # Its paths were resolved during the build, so there is no base_dir
-        # left to inherit.
-        return setup.job, None, None, setup
+        # `setup.job` is the ORIGINAL config, relative paths and all (the
+        # build resolves into local copies), so the base directory has to
+        # come off the BuiltJob or T4 breaks: a re-dump would resolve the
+        # medium file against a temp directory, or a rebuild against the CWD
+        # (adversarial review, 2026-08-22 — reproduced both).
+        return setup.job, setup.base_dir, None, setup
     if isinstance(setup, ExplicitJobConfig):
         return setup, Path.cwd(), None, None
     if isinstance(setup, Mapping):
@@ -351,7 +377,7 @@ def simulate(
     backend: str | None = None,
     harmonics: tuple[int, ...] | None = None,
     out: str | Path | None = None,
-    progress: str | Callable[[dict], None] | None = "auto",
+    progress: Any = _KEEP,
     allow_slow_cpu: bool = False,
     options: RunnerOptions | None = None,
 ) -> SimulationRun:
@@ -369,9 +395,10 @@ def simulate(
         ``None`` writes nothing at all; a path gets the full runner output
         folder (job copy, plan, status, result, preview, stamp).
     progress:
-        ``"auto"`` (default) prints a progress line per acoustic period and a
-        coarse focal preview every 8 periods on stderr; ``"plain"`` never uses
-        a tqdm bar; ``None`` is silent; a callable receives the raw payload.
+        ``"auto"`` (the default when neither this nor ``options.progress`` is
+        given) prints a progress line per acoustic period and a coarse focal
+        preview every 8 periods on stderr; ``"plain"`` never uses a tqdm bar;
+        ``None`` is silent; a callable receives the raw payload.
     allow_slow_cpu:
         Accept a numpy run the planner expects to take longer than the
         5-minute CPU limit (``CAUSTICA_CPU_LIMIT_MIN``).
@@ -388,14 +415,26 @@ def simulate(
         built = None  # overrides invalidate a caller-built job; rebuild below
 
     opts = RunnerOptions(**vars(options)) if options is not None else RunnerOptions()
-    opts.out = out
-    opts.progress = progress
+    # A named argument wins, but an option set ONLY through `options=` must
+    # still be honoured -- silently dropping a requested output folder (or a
+    # requested renderer) is the exact "looks fine, does something else"
+    # failure the environment policy exists to prevent.
+    if out is not None:
+        opts.out = out
+    if progress is not _KEEP:
+        opts.progress = progress  # includes an explicit progress=None (silence)
+    elif opts.progress is None:
+        # D21/K11: the FACADE's default is progress on, while the library-level
+        # RunnerOptions default stays silent. An `options=` that names a
+        # renderer keeps it.
+        opts.progress = "auto"
     opts.allow_slow_cpu = allow_slow_cpu or opts.allow_slow_cpu
     if backend is not None:
         opts.backend = backend
 
-    if out is not None:
+    if opts.out is not None:
         return _run_via_runner(job, job_path, base_dir, opts)
+    _refuse_options_without_a_folder(opts)
     return _run_in_memory(job, base_dir, built, opts)
 
 
@@ -407,20 +446,27 @@ def _run_via_runner(
 ) -> SimulationRun:
     """Delegate to ``run_job_file`` — output, stamp and resume live there."""
     outdir = Path(opts.out)  # type: ignore[arg-type]
-    with tempfile.TemporaryDirectory(prefix="caustica-job-") as tmp:
-        if job_path is None:
-            # A job that was never a file has no file to resolve against, so
-            # its relative paths are pinned to the CWD *before* it is handed
-            # over — the runner's own rule (T4) then applies to a job whose
-            # paths no longer depend on where the file sits.
-            job = job.model_copy(
-                update={
-                    "medium": job.medium.resolve_paths(base_dir),
-                    "source": job.source.resolve_paths(base_dir),
-                }
-            )
-            job_path = dump_job(job, Path(tmp) / "job.json")
+    if job_path is not None:
+        # The user's own file goes to the runner untouched, so T4 applies to
+        # it exactly as it does for `caustica run`.
         code = run_job_file(job_path, opts)
+        base_after = Path(job_path).parent
+    else:
+        # A job that was never a file has no file to resolve against, so its
+        # relative paths are pinned to `base_dir` *before* it is handed over.
+        # Afterwards every path in it is absolute, which is why the run object
+        # gets base_dir=None: the temp directory is gone by then, and handing
+        # out a path that no longer exists is how a lazily-resolved field
+        # would later resolve against nothing (review, 2026-08-22).
+        job = job.model_copy(
+            update={
+                "medium": job.medium.resolve_paths(base_dir),
+                "source": job.source.resolve_paths(base_dir),
+            }
+        )
+        with tempfile.TemporaryDirectory(prefix="caustica-job-") as tmp:
+            code = run_job_file(dump_job(job, Path(tmp) / "job.json"), opts)
+        base_after = None
     if code != EXIT_OK:
         raise SimulationError(
             f"caustica run exited {code} (0 ok, 2 config, 3 OOM, 4 solver, "
@@ -437,7 +483,7 @@ def _run_via_runner(
         exit_code=code,
         plan=plan,
         warnings=tuple(meta.get("ppw_warnings", ())),
-        _base_dir=None if job_path is None else Path(job_path).parent,
+        _base_dir=base_after,
     )
 
 
@@ -450,9 +496,23 @@ def _run_in_memory(
     """Plan, gate, solve — writing nothing. Same helpers as ``run_job_file``."""
     import caustica.solvers as solvers  # noqa: PLC0415
 
-    if built is None:
-        built = build_job(job, base_dir=base_dir, with_medium=True)
-    backend_name = get_backend(opts.backend or built.backend).name
+    # Everything before the solve is, by definition, a config problem -- the
+    # same classification `run_job_file` applies when it turns a preflight
+    # exception into EXIT_CONFIG. Without this the two output modes would
+    # report the SAME broken job differently: exit code 2 through a folder,
+    # a bare JobError in memory (adversarial review, 2026-08-22). The cause
+    # is chained, so the original message and type are still right there.
+    try:
+        # BEFORE the medium is built, for the reason runner.run_job_file gives
+        # at its own copy of this line: a misspelled backend must not cost a
+        # multi-GB medium build first.
+        if opts.backend is not None:
+            check_backend_name(opts.backend)
+        if built is None:
+            built = build_job(job, base_dir=base_dir, with_medium=True)
+        backend_name = get_backend(opts.backend or built.backend).name
+    except Exception as exc:
+        raise SimulationError(f"{type(exc).__name__}: {exc}", EXIT_CONFIG) from exc
     native = built.solver in _NATIVE_SOLVERS
     ppw_warns = _ppw_warnings_for(built)
     # Snapshot GPU facts BEFORE the measure probe fills the cupy pool — the
@@ -461,10 +521,16 @@ def _run_in_memory(
 
     est = plan_payload = None
     if native:
-        est, plan_payload, plan_text = _plan(built, backend_name, opts)
+        try:
+            est, plan_payload, plan_text = _plan(built, backend_name, opts)
+        except Exception as exc:
+            raise SimulationError(f"{type(exc).__name__}: {exc}", EXIT_CONFIG) from exc
+        # Unconditionally, exactly as the runner writes it into plan.json: a
+        # consumer must be able to tell "no warnings" from "this plan does not
+        # carry the field" (D31).
+        plan_payload["ppw_warnings"] = ppw_warns
         if ppw_warns:
             plan_text += "\n" + "\n".join(f"  ! WARNING: {w}" for w in ppw_warns)
-            plan_payload["ppw_warnings"] = ppw_warns
         print(plan_text)
     else:
         print(f"(planner models the native engine only; '{built.solver}' runs unplanned)")
@@ -499,6 +565,11 @@ def _run_in_memory(
         result = solvers.get(built.solver)().run(
             built.grid, built.medium, built.source, built.spec, **run_kwargs
         )
+    except SimulationError:
+        raise
+    except Exception as exc:
+        # Exit code 4, like the runner's classified solver failure.
+        raise SimulationError(f"{type(exc).__name__}: {exc}", EXIT_SOLVER) from exc
     finally:
         progress_close(display)
 

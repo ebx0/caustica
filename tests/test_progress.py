@@ -92,11 +92,35 @@ def test_payload_carries_exactly_the_contract_keys():
     assert last["step"] > first["step"]
 
 
-def test_snapshot_is_lazy_and_slices_through_the_reference_point():
-    """One device->host copy PER CALL, and only when the consumer asks."""
+def test_snapshot_is_lazy_and_slices_through_the_reference_point(monkeypatch):
+    """One device->host copy PER CALL, and ZERO when nobody asks.
+
+    The laziness is the entire cost argument for carrying `snapshot` in the
+    payload at all, so it is asserted by COUNTING the host transfers, not by
+    trusting the shape of the result.
+    """
+    from caustica.core import backend as backend_mod
+
+    copies = {"n": 0}
+    real = backend_mod.Backend.to_numpy
+
+    def counted(self, arr):
+        copies["n"] += 1
+        return real(self, arr)
+
+    monkeypatch.setattr(backend_mod.Backend, "to_numpy", counted)
+
     events: list[dict] = []
-    run_mini(progress=events.append)
-    snap = events[-1]["snapshot"]()
+    run_mini(progress=events.append)  # nobody calls snapshot()
+    baseline = copies["n"]  # the result's own phasor/p_max transfers
+
+    events2: list[dict] = []
+    run_mini(progress=events2.append)
+    assert copies["n"] - baseline == baseline, "an unasked snapshot cost a transfer"
+
+    before = copies["n"]
+    snap = events2[-1]["snapshot"]()
+    assert copies["n"] - before == 1, "one call must cost exactly one copy"
     assert snap.shape == (24, 32)  # x-z plane, y fixed at the reference point
     assert snap.dtype == np.float32
     assert np.isfinite(snap).all()
@@ -312,3 +336,81 @@ def test_a_bar_is_only_used_where_something_can_watch_it(monkeypatch):
 
     expected = _load_tqdm()
     assert ConsoleProgress(stream=Tty())._tqdm is expected
+
+
+def _previewed_periods(events, **kw):
+    """Which periods the console consumer rendered a preview for."""
+    import io
+
+    from caustica.progress import ConsoleProgress
+
+    sink = io.StringIO()
+    cp = ConsoleProgress(stream=sink, use_tqdm=False, **kw)
+    for ev in events:
+        cp(ev)
+    return [
+        int(line.split("preview @ period ")[1].split()[0])
+        for line in sink.getvalue().splitlines()
+        if "preview @ period" in line
+    ]
+
+
+def _fake_events(n_settle: int):
+    """A settle run of n periods plus the record flip, with a live snapshot."""
+    field = np.zeros((8, 12), np.float32)
+    field[4, 8] = 1.0
+    base = dict(
+        periods_expected=n_settle + 2,
+        steps_expected=(n_settle + 2) * 4,
+        peak=1.0,
+        converge_delta=0.01,
+        elapsed_s=0.0,
+        eta_s=None,
+        snapshot=lambda: field,
+    )
+    evs = [{**base, "period": p, "step": p * 4, "stage": "settle"} for p in range(1, n_settle + 1)]
+    evs.append({**base, "period": n_settle, "step": n_settle * 4, "stage": "record"})
+    return evs
+
+
+def test_the_mid_run_preview_fires_every_eight_periods(tmp_path):
+    """D21's cadence itself, independent of the record-flip preview.
+
+    Pinned because the cadence is the whole cost argument: one device->host
+    copy every 8 periods, not every period.
+    """
+    from caustica.progress import DEFAULT_PREVIEW_EVERY
+
+    assert DEFAULT_PREVIEW_EVERY == 8
+    evs = _fake_events(20)
+    fired = _previewed_periods(evs)
+    # 8 and 16 from the cadence; 20 is the settle->record flip.
+    assert fired == [8, 16, 20]
+    # A run shorter than one cadence step previews ONLY at the flip...
+    assert _previewed_periods(_fake_events(3)) == [3]
+    # ...and the cadence is a knob, not a constant baked into the loop.
+    assert _previewed_periods(evs, preview_every=5) == [5, 10, 15, 20]
+    assert _previewed_periods(evs, preview=False) == []
+
+
+def test_the_heartbeat_counts_exactly_one_period_per_payload(tmp_path):
+    """The status.json counter itself, not just the file's shape."""
+    from caustica.runner import _Heartbeat
+
+    hb = _Heartbeat(
+        tmp_path / "status.json",
+        base={},
+        spp=4,
+        steps_expected=40,
+        steps_worst=48,
+        interval_s=1e9,
+        offset_periods=3,
+    )
+    for ev in _fake_events(5):
+        hb(ev)
+    assert hb.periods == 3 + 6, "offset + one increment per payload (5 settle + 1 record)"
+    assert hb.session_periods == 6
+    hb.write("done")
+    import json
+
+    assert json.loads((tmp_path / "status.json").read_text(encoding="utf-8"))["steps_done"] == 36

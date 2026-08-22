@@ -278,13 +278,13 @@ Additions beyond the original scope, all from the 2026-08-21 review:
 the packaged example still runs with one warning; `allow_slow_cpu=True` overrides; `env_report()`
 returns a dict with no GPU present and does not raise.
 
-### W3 — Facade API — **Medium** — 1.5 sessions
+### W3 — Facade API — **DONE (2026-08-22, M10j)**
 
 **Files:** new `src/caustica/facade.py`, `__init__.py`.
 
 ```python
 res = caustica.simulate(
-    setup="path/to/job.json",   # job path | job dict | ExplicitJobConfig | built objects
+    setup="path/to/job.json",   # job path | job dict | ExplicitJobConfig | BuiltJob
     solver="westervelt",
     backend="auto",
     harmonics=(1, 2),
@@ -311,23 +311,38 @@ Hard constraints:
 5. `out=<path>` delegates to `run_job_file` — no duplicated output/stamp/resume logic (trap T4).
 6. After W0c there is no `stored_setup`; `setup=` takes a job, not a setup name.
 
+**What "built objects" turned out to mean.** Constraint 1 (everything normalises to an
+`ExplicitJobConfig`) and the plain reading of "built objects" (a bare `Grid`/`Medium`/`CWSource`)
+CONTRADICT each other: a voxelised `CWSource` is a set of indices and phases, and no job field
+describes it. Resolved in favour of constraint 1 — the fourth form is a **`BuiltJob`**, which is
+literally what `build_job` returns (the built grid/medium/source, with the job that produced them
+still attached), so entering there is not a second construction path. A bare object raises
+`TypeError` pointing at the object API. `BuiltJob` gained a `base_dir` field: it carries the
+ORIGINAL job config, so without it a re-dump resolved relative paths against a temp directory
+(found in the M10j review).
+
 **Acceptance:** `tests/test_facade.py` — `simulate(job_dict)` and `caustica run job.json` produce
 bit-identical phasor/p_max for the packaged example; an unsupported input raises usefully;
 `out=None` writes nothing (assert against a tmp CWD).
 
-### W4 — Progress hook + mid-run preview — **Easy–Medium** — 1 session
+### W4 — Progress hook + mid-run preview — **DONE (2026-08-22, M10j)**
 
 **Files:** `kspace/engine.py`, `kspace/linear.py`, `kspace/westervelt.py`, `runner.py`, new
 `caustica/progress.py`, facade.
 
 - One payload, reused everywhere (notebook, CLI, `status.json`, future GUI):
   `{period, periods_expected, step, steps_expected, peak, converge_delta, elapsed_s, eta_s, stage}`,
-  `stage` ∈ `settle` | `record`. `_Heartbeat` (`runner.py:133`) already computes these — make it a
+  `stage` ∈ `settle` | `record`. Plus a TENTH key that is deliberately outside the serializable
+  contract: `snapshot`, a zero-argument callable returning a 2-D slice through the focus. Lazy on
+  purpose (one device→host copy only when a consumer asks); anything that serializes the payload
+  must drop it. `_Heartbeat` (`runner.py:133`) already computes these — make it a
   *consumer* of the callback, not a second implementation.
 - Fire from `_period_boundary()` (engine.py:299) **after fixing T1**, and once at the settle→record
   transition (engine.py:386). **Never per step** — that forces a device→host sync every step.
-- Rendering lives outside the solver: `caustica.progress` picks `tqdm` when importable, else plain
-  periodic lines. `tqdm` is an optional extra; Colab must work without it.
+- Rendering lives outside the solver: `caustica.progress` picks `tqdm` when importable AND
+  something interactive is watching (a tty or a notebook kernel), else plain periodic lines.
+  `tqdm` is NOT a dependency and NOT a declared extra — it is used if it happens to be there;
+  Colab must work without it.
 - **Mid-run preview is ON by default (D21):** every N periods (N=8, matching the default checkpoint
   cadence) render one coarse slice through the focus. One device→host copy per callback. Disable
   with `progress=None`. Keep the render itself outside the solver — the solver emits arrays, the
