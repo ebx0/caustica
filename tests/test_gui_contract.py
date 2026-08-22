@@ -273,6 +273,34 @@ def test_every_caustica_name_on_the_page_actually_exists():
         assert hasattr(mod, parts[-1]), f"caustica{dotted} does not exist"
 
 
+def test_the_documented_dry_run_exit_codes_are_the_real_ones(tmp_path, monkeypatch):
+    """The review's process finding, answered.
+
+    The rot test pins the page's field LISTS rigorously — and none of them
+    were ever wrong. Every finding of the M10l review was a prose claim in
+    the sentences between the lists, which is exactly the class a list
+    comparison cannot reach. The cheap ones get assertions of their own,
+    starting with the sentence that said "--dry-run exits 0" when a memory
+    refusal makes it exit 3.
+    """
+    body = section("Planning without running: `--dry-run` and `plan.json`")
+    assert "exits **0** when the run fits" in body
+    assert "still exits **3**" in body
+
+    job = mini_job(tmp_path)
+    fits = run_job_file(job, opts(out=tmp_path / "fits", dry_run=True))
+    assert fits == EXIT_OK
+
+    refused = run_job_file(job, opts(out=tmp_path / "refused", dry_run=True, vram_limit_gib=1e-5))
+    assert refused == EXIT_OOM  # the answer to the question, as documented
+
+    # ...and the CPU gate really does keep the exit-0 contract under --dry-run
+    assert "still exits 0" in body
+    monkeypatch.setenv("CAUSTICA_CPU_LIMIT_MIN", "0")
+    slow = run_job_file(job, opts(out=tmp_path / "slow", dry_run=True, measure=True))
+    assert slow == EXIT_OK
+
+
 def test_the_page_points_at_the_import_direction_gate():
     assert "tests/test_import_direction.py" in doc_text()
     assert (REPO / "tests" / "test_import_direction.py").exists()

@@ -868,7 +868,23 @@ GUI ayrı repoda olacak ve teknolojisi seçilmedi (PLAN.md K13). Bu milestone ya
   - [x] kwave cancel'ı desteklemiyor ve bunu dürüstçe SÖYLÜYOR (checkpoint yok → durulacak sınır
         yok; öldürmek dosyanın var oluş sebebinin tersi) —
         `test_a_non_native_solver_says_cancel_does_nothing`
-  - [x] Süit 379 → 412 (410 passed / 2 skipped / 0 failed); `ruff check .` + `ruff format --check`
+  - [x] `--dry-run` bir PROBE'dur: `error.json`'a da `cancel`'a da hiçbir yönde dokunmaz (review
+        bulgusu — eskiden gerçek bir koşunun hata kaydını SİLİYORDU) —
+        `test_dry_run_never_touches_the_failure_record_or_the_cancel_file`,
+        `test_dry_run_of_a_broken_job_writes_no_error_json`; skip-guard yalnız `error.json`
+        temizler, `cancel` başka bir sürecin olabilir —
+        `test_the_skip_guard_clears_the_stale_error_but_not_a_cancel`; dokümante edilen dry-run
+        çıkış kodları gerçek — `test_the_documented_dry_run_exit_codes_are_the_real_ones`
+  - [x] Sayfanın adlandırdığı her `caustica.AD` gerçekten var (review turunda uydurma bir istisna
+        adı bulundu) — `test_every_caustica_name_on_the_page_actually_exists`, mutasyonla doğrulandı
+  - [x] `cancel` bir DİZİN ise kilitlenme yok (yoklama `is_file`) —
+        `test_a_cancel_directory_cannot_livelock_the_folder`
+  - [x] Gözden geçirme turu: iki mercek, altı gerçek bulgu + altı abartı onarıldı, yedi şüphe
+        çürütüldü (docs/devlog.md 2026-08-22). "Mevcut hata sözleşmesi değişmedi" iddiası
+        ÖLÇÜLEREK kapandı: `runner.py` geçici olarak `96e6330`'unkiyle değiştirilip yedi hata yolu
+        iki kez koşturuldu → stdout/stderr bayt-aynı (geçici klasör adları ve `warnings.warn`
+        satır numarası hariç)
+  - [x] Süit 379 → 417 (415 passed / 2 skipped / 0 failed); `ruff check .` + `ruff format --check`
         temiz; `git status --porcelain data/setups/` boş — dokuz kurulum dosyası + manifest bayt-aynı
 
 ### M10f — Colab köprüsü: `caustica.colab` + değişmeyen notebook `[ ]` — Colab kapısı içerir

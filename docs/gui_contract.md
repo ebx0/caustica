@@ -109,6 +109,12 @@ existing code rather than adding a sixth.
 | `4` | `EXIT_SOLVER` | the solve or the store failed |
 | `5` | `EXIT_INTERRUPTED` | stopped cleanly and resumably (`--max-hours`, or a `cancel` file) |
 
+One code is deliberately absent from the table: **1**. It is what Python
+returns when an exception escapes the runner's own classification — a bug, not
+a verdict, and it comes with a traceback and no `error.json`. A caller that
+sees 1 should report it, not retry it. (`caustica report` and
+`caustica example` also use 2 for their own argument errors.)
+
 Exit 5 is not a failure: a checkpoint is on disk and `--resume` finishes the
 run. A resumed run reproduces the uninterrupted one bit for bit on one backend
 (the documented band is rel < 1e-6).
@@ -202,11 +208,19 @@ authoritative. A GUI never has to parse stderr.
 Two rules a GUI may rely on:
 
 1. A **successful** run writes no `error.json`, and a new attempt on a folder
-   deletes the previous one. Its presence always means "this folder's last
+   deletes the previous one. Its presence means "this folder's last real
    attempt failed".
 2. An **interrupted** run (exit 5) writes no `error.json` either. Stopping on
    request is not failing; `status.json` says `interrupted` and the exit code
    says 5.
+3. `--dry-run` touches it in neither direction: a fit-check is a probe, not an
+   attempt, so it never deletes an existing record and never writes one.
+
+The converse does **not** hold, and a GUI must not assume it: a process that is
+killed (the ordinary Colab session death) writes nothing at all, and leaves
+`status.json` reading `solving` with no process behind it. Absence of
+`error.json` means "no *classified* failure was recorded", not "the run is
+fine". The exit code, when there is one, is the authority.
 
 There is one case with nowhere to write: the job would not load *and* no
 explicit `--out` was given, so the folder's own name — which comes from the
@@ -224,7 +238,9 @@ involved.
 
 - The solve polls for it **once per acoustic period boundary** — one `stat`,
   never per step. A per-step poll would put a filesystem round-trip between
-  GPU kernels.
+  GPU kernels. (There is one extra poll just before the record window, so the
+  count is periods + 1.) The poll asks whether `cancel` is a *file*: a
+  directory of that name is not a request and is ignored.
 - On seeing it the run writes a checkpoint, stops, and exits **5**.
 - The runner then **deletes** the file, so the `--resume` that follows is not
   cancelled by it in turn. The resumed run finishes bit-identically to an
@@ -249,6 +265,14 @@ involved.
 no status. This is how a GUI answers "will this fit, and how long will it
 take?" before committing a GPU. A non-native solver writes only `job.json`:
 there is nothing to plan, so there is no `plan.json` to read.
+
+Two things a caller must expect. A dry run exits **0** when the run fits — but
+a memory refusal still exits **3**, because "it does not fit" is the answer to
+the question, not a malfunction. (The CPU-time gate is different: under
+`--dry-run` it prints its verdict and still exits 0, since planning a
+Colab-bound job from a laptop is a normal thing to do.) And a dry run writes
+neither `error.json` nor anything else beyond the plan — it will not disturb
+the record of a real run in the same folder.
 
 ### plan.json: fields
 
@@ -278,9 +302,10 @@ happens, and the same `advice` list is written to `error.json`.
 ## `caustica-preview/1` — the ≤ 10 MB quick-look
 
 `preview.npz` is the package a GUI displays. It holds peak-plane slices per
-harmonic, a block-mean coarse amplitude volume, mm axes measured from the
-transducer apex, the convergence history, and a `meta_json` entry carrying the
-format tag, grid geometry, the realized peak voxel and the coarsening step.
+harmonic, one `p_max` plane, a block-mean coarse amplitude volume, mm axes
+measured from the transducer apex, the convergence history, and a `meta_json`
+entry carrying the format tag, grid geometry, the realized peak voxel and the
+coarsening step.
 The 10 MB budget is *measured* on the compressed bytes, not estimated.
 
 Read it with `caustica.report.preview.load_preview(path)`; render it with
@@ -336,7 +361,9 @@ prints the same function's output, so the two cannot disagree.
 - `scipy` — the scipy version, or null
 - `pydantic` — the pydantic version, or null
 - `h5py` — the h5py version, or null
-- `resolved_backend` — the backend name `auto` would pick here
+- `resolved_backend` — the backend this run actually resolved (for a bare
+  `env_report()` call, what `auto` would pick here); on a failed probe it
+  reads `probe_error: <ExceptionType>` instead of a backend name
 
 ### env_report(): keys added on the cupy backend
 
