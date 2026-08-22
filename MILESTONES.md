@@ -474,26 +474,43 @@ olur, UWCEM işleri ayrı repoya taşınır, yerine genel `medium_volume` kind'�
       import-yönü AST testi YEŞİL (`tests/test_import_direction.py` — W0c'den önce bilerek
       kırmızı yazıldı); UWCEM'e bağlı 11 test bloğu verbatim staging'e alındı (W0d'de yeni
       repoya)
-- [ ] `uwcem-phantom` ayrı (private) repo: catalog / reader / builder / dataset / setup / spec /
-      processing / heterogeneity / orientation / paths / cli + `apps/phantom_launcher.py` +
-      137 test taşınır. caustica'ya bağımlıdır; ürettiği şey `medium_volume` dosyası ve
-      **explicit job JSON**'dur (`load_setup(...)` artık explicit job döndürür)
-- [ ] Veri kökü çözümü: açık argüman → `CAUSTICA_PHANTOM_DATA` → mevcut checkout `_data` →
-      kullanıcı önbelleği (`~/.cache/caustica/phantoms`). `platformdirs` bağımlılığı EKLENMEZ.
-      Hiçbir dosya yeniden İNDİRİLMEZ
-- [ ] UWCEM lisans/şart incelemesi yeni repo public olmadan ÖNCE; atıf zinciri export'lara ulaşır
+- [x] (W0d, 2026-08-22) `uwcem-phantom` ayrı repo (`C:\Users\bulbu\Desktop\uwcem-phantom`,
+      YEREL — push YOK, devir talimatı gereği kullanıcı istemeden pushlanmaz): paket + 
+      `apps/phantom_launcher.py` + `apps/phantom_studio` + `phantoms.bat/sh` + test süiti
+      taşındı (planın 137 sayısı plan-anı fotoğrafıydı; güncel taşınan süit yeni evde
+      **165 passed non-slow** + dokuzlu yavaş kapı). caustica'ya bağımlı; `setup_to_job()`/
+      `emit_jobs()` (+ CLI `setup --emit-jobs`) her stored setup'tan **explicit job** üretir
+      (medium_volume kapısından). `load_breast_phantom` `legacy_import.py`'de yaşıyor
+- [x] (W0e, 2026-08-22) Veri kökü: açık argüman → `CAUSTICA_PHANTOM_DATA` → dolu checkout
+      `_data` → kullanıcı önbelleği (`%LOCALAPPDATA%\caustica\phantoms` / `~/.cache/...`),
+      elle yazıldı — `platformdirs` YOK. dataset/ ve setups/ aynı kökte (repo varsayımı yok);
+      yerelde kök = `hifusim\data` (kullanıcı env değişkeni kuruldu; `_data` alt klasörleri
+      aynı diskte oraya taşındı — 4.5 GB dataset ve setup JSON'ları YERİNDEN OYNAMADI).
+      Hiçbir dosya yeniden indirilmedi/üretilmedi (taşınan süit + dokuzlu kapı ağsız geçti)
+- [x] (W0f, 2026-08-22) UWCEM şartları okundu ve yeni repo README'sine kaydedildi: resmi
+      lisans YOK; Instruction Manual verbatim — "free of charge ... reference the online
+      repository and acknowledge the authors ... in any publication that is derived".
+      Muhafazakâr okuma uygulanıyor: git'te hiçbir fantom baytı yok, türev exportları biz
+      dağıtmıyoruz, atıf metni her export'un metadata'sında taşınıyor (`catalog.CITATION`).
+      Repo kod-only olduğundan public olabilir — push kararı kullanıcının
 - Geçiş penceresi: kullanıcı kararı (2026-08-21) — ayrışım sırasında dokuz yerel setup'ın geçici
   olarak çalışmaması KABUL; bitişte çalışır olması ŞART
 - Başarı kriterleri:
-  - `grep -ri uwcem src/` boş (solvers/base.py'deki tarihsel yorum yeniden yazılır)
-  - Import-yönü AST testi geçer (`src/caustica` → `apps`/`uwcem_phantoms`/`caustica_gui*` YASAK).
-    Bu test M10l'de yazılır ve M10k inene kadar KIRMIZI kalır — ayrışımın kanıtı odur
-  - Aynı `.npz` dosyası `medium_volume` üzerinden `phantom_dataset`'in ürettiğiyle **BİT-AYNI**
-    `Medium` verir
-  - Round-trip: `write_medium_volume(...)` ile yazılan dosya okunduğunda bit-aynı `Medium` verir
-  - Dokuz yerel setup ayrışım sonrası uçtan uca koşar (`load_setup` → explicit job →
-    `caustica run`) ve ortamlar bit-aynı; 4.5 GB yeniden ÜRETİLMEZ
-  - Taşınan 137 test yeni repoda yeşil (silinmeden ÖNCE doğrulanır)
+  - [x] `grep -ri uwcem src/` boş — testle sürekli zorlanıyor
+    (`test_no_uwcem_reference_survives_in_source_text`; base.py yorumu dahil yeniden yazıldı)
+  - [x] Import-yönü AST testi geçiyor (`tests/test_import_direction.py` — W0c'den ÖNCE yazıldı,
+    kırmızı doğdu, W0c ile yeşile döndü; planın istediği kanıt sırası)
+  - [x] Aynı `.npz` → `medium_volume` Medium'u, PhantomAsset yolununkiyle sha256 BİT-AYNI
+    (gerçek 560×700×480 dosyada, 4 hacim + id_map; `test_existing_dataset_file_gives_bit_identical_medium`)
+  - [x] Round-trip bit-aynı (label + continuous modda testli)
+  - [x] Dokuz yerel setup: `load_setup` → `setup_to_job` → caustica build — medya sha256
+    BİT-AYNI 9/9 + `caustica validate` ok 9/9 + `caustica run --dry-run` exit 0 9/9
+    (`test_all_nine_setups_bit_identical_media_and_dry_run`, 5:04). Hiçbir dosya yeniden
+    üretilmedi/indirilmedi. NOT (dürüst yorum): "uçtan uca koşar" burada boru hattının tamamı +
+    bitwise medya paritesi demek — dokuz TAM çözüm 9×~2.6 saat CPU'dur ve M10i kapısının tam da
+    reddettiği sınıftır; mini ölçekli tam çözüm kanıtı medium_volume koşu testinde var
+  - [x] Taşınan süit yeni repoda YEŞİL, buradan silinmeden ÖNCE doğrulandı: 165 passed
+    (non-slow) + dokuzlu yavaş kapı 3/3 — plan-anı "137" sayısı o günün fotoğrafıydı (T8)
 
 ### M10h — Kütüphane paketleme + temiz ortam kapısı `[x]` (2026-08-21; CI kanıtı 2026-08-22) — **DEVİR PAKETİ 1/4**
 > **Borç kapandı (2026-08-22):** gözden geçirenin `[~]` kararı üzerine dal pushlandı (kullanıcı

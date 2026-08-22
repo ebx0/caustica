@@ -58,8 +58,8 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q -ra"
-# `apps` and `uwcem_phantoms` are repo-level side packages (not installed with
-# the caustica wheel); tests import them from the repo root.
+# `apps` holds repo-level consumers (focus_study; not installed with the
+# caustica wheel); tests import them from the repo root.
 pythonpath = ["."]
 markers = [
     "slow: long-running physics validation tests",
@@ -70,7 +70,7 @@ markers = [
 
 [tool.ruff]
 line-length = 100
-src = ["src", "tests", "apps", "uwcem_phantoms"]
+src = ["src", "tests", "apps"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "NPY"]
