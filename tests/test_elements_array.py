@@ -199,6 +199,134 @@ def test_elements_derived_matches_on_reload(tmp_path):
         job2.source.check_derived(built.derived, base_dir=base2)
 
 
+def _asymmetric_table() -> np.ndarray:
+    """A 6-element spiral: no symmetry, so a mirror/rotation is a REAL change.
+
+    Elements are 2.95 mm apart at the closest, comfortably clear of the
+    voxelization dedup at dx = 0.5 mm with 0.8 mm elements — the mutations
+    below have to be caught by the record, not by a build failure.
+    """
+    k = np.arange(6)
+    r = 1.6 + 0.68 * k
+    th = k * 2.39996  # golden angle: no two elements share a bearing
+    return np.column_stack((r * np.cos(th), r * np.sin(th), ROC_MM - np.sqrt(ROC_MM**2 - r**2)))
+
+
+def _swap_radii(t: np.ndarray) -> np.ndarray:
+    """Give element 1 element 4's radius and vice versa, keeping their bearings.
+
+    The SET of radii is unchanged, so max radius, shell depth and count are
+    all unchanged — but two elements have physically moved.
+    """
+    out = t.copy()
+    r = np.linalg.norm(t[:, :2], axis=1)
+    th = np.arctan2(t[:, 1], t[:, 0])
+    for i, j in ((1, 4), (4, 1)):
+        out[i] = (r[j] * np.cos(th[i]), r[j] * np.sin(th[i]), t[j, 2])
+    return out
+
+
+def test_the_summary_numbers_alone_would_not_catch_these():
+    """Why the digest exists: n/r_max/shell_depth are order statistics.
+
+    If this ever fails because a mutation DOES move them, the mutation has
+    stopped being a test of the digest.
+    """
+    t = _asymmetric_table()
+    rot = np.array(
+        [
+            [np.cos(0.6458), -np.sin(0.6458), 0.0],
+            [np.sin(0.6458), np.cos(0.6458), 0.0],
+            [0.0, 0.0, 1.0],
+        ]
+    )
+
+    def summary(a):
+        return (
+            len(a),
+            round(float(np.linalg.norm(a[:, :2], axis=1).max()), 9),
+            round(float(a[:, 2].max()), 9),
+        )
+
+    base = summary(t)
+    assert summary(t * [-1.0, 1.0, 1.0]) == base  # mirror
+    assert summary(t @ rot.T) == base  # rotation
+    assert summary(t[::-1]) == base  # reordering
+
+
+@pytest.mark.parametrize(
+    "name,mutate",
+    [
+        # Every one of these leaves n_elements, r_max_mm and shell_depth_mm
+        # untouched — and moves the radiated field by tens of per cent
+        # (measured in the M10m review, 48-59% relative L2).
+        ("mirror x", lambda t: t * [-1.0, 1.0, 1.0]),
+        (
+            "rotate 37 deg",
+            lambda t: (
+                t
+                @ np.array(
+                    [
+                        [np.cos(0.6458), -np.sin(0.6458), 0.0],
+                        [np.sin(0.6458), np.cos(0.6458), 0.0],
+                        [0.0, 0.0, 1.0],
+                    ]
+                ).T
+            ),
+        ),
+        ("reorder rows", lambda t: t[::-1].copy()),
+        ("swap two elements' radii", _swap_radii),
+    ],
+)
+def test_derived_catches_table_changes_that_summaries_miss(tmp_path, name, mutate):
+    """The record must certify the TABLE, not three order statistics of it."""
+    table = _asymmetric_table()
+    np.savez(tmp_path / "t.npz", positions=table)
+    d = elements_job_dict(
+        {"kind": "elements", "file": "t.npz", "elem_radius_mm": 0.8, "roc_mm": ROC_MM}
+    )
+    path = write_job(tmp_path, d)
+    built = build_job(*load_job(path), with_medium=False)
+    job2, base2 = load_job(path)
+    job2.source.check_derived(built.derived, base_dir=base2)  # unchanged: passes
+
+    np.savez(tmp_path / "t.npz", positions=mutate(table))
+    with pytest.raises(JobError, match="table_sha256"):
+        job2.source.check_derived(built.derived, base_dir=base2)
+
+
+def test_derived_catches_a_normals_only_change(tmp_path):
+    """Normals never touch the aperture numbers, but they move the source."""
+    table = _asymmetric_table()
+    normals = np.array([0.0, 0.0, ROC_MM]) - table
+    normals /= np.linalg.norm(normals, axis=1, keepdims=True)
+    np.savez(tmp_path / "t.npz", positions=table, normals=normals)
+    d = elements_job_dict(
+        {"kind": "elements", "file": "t.npz", "elem_radius_mm": 0.8, "roc_mm": ROC_MM}
+    )
+    path = write_job(tmp_path, d)
+    built = build_job(*load_job(path), with_medium=False)
+    job2, base2 = load_job(path)
+
+    tilted = normals + [0.6, 0.0, 0.0]
+    tilted /= np.linalg.norm(tilted, axis=1, keepdims=True)
+    np.savez(tmp_path / "t.npz", positions=table, normals=tilted)
+    with pytest.raises(JobError, match="table_sha256"):
+        job2.source.check_derived(built.derived, base_dir=base2)
+
+
+def test_an_on_axis_table_records_no_f_number(tmp_path):
+    """`inf` would put the token `Infinity` — not legal JSON — in run_meta."""
+    cfg = ElementsArrayConfig(positions_mm=[(0.0, 0.0, 0.0)], elem_radius_mm=1.2, roc_mm=ROC_MM)
+    d = cfg.derived()
+    assert "f_number" not in d
+    assert json.loads(json.dumps(d), parse_constant=_reject_constant) == d
+
+
+def _reject_constant(token: str):  # pragma: no cover - only runs on a failure
+    raise AssertionError(f"non-standard JSON token in derived: {token}")
+
+
 def test_inline_elements_match_the_same_table_from_file(tmp_path):
     pos = ring_positions_mm()
     np.savez(tmp_path / "ring.npz", positions=pos)

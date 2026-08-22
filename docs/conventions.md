@@ -19,8 +19,23 @@ library-wide and shared with the analytic references:
 p(t) = Re{ P · e^(-i ω t) }          outgoing wave = e^(+i k x)
 ```
 
-The `result.h5` file states it in its own metadata (`phasor_convention`), so a
-downstream tool never has to guess.
+The `result.h5` file states it in its own metadata — the `phase_convention`
+attribute, on the file root and on the `output` group — so a downstream tool
+never has to guess:
+
+```python
+import h5py
+with h5py.File("result.h5") as f:
+    print(f.attrs["phase_convention"])
+# p(t) = Re{P exp(-i omega t)}; outgoing wave = exp(+ikx) (matches the analytic
+# O'Neil/Rayleigh references). The absolute phase zero is not source-referenced;
+# relative phase (voxel-to-voxel) is exact.
+```
+
+**Read that last sentence before you export a phase map.** Voxel-to-voxel
+phase *differences* are exact; the absolute zero is not tied to the source, so
+a phase map lifted straight from `result.phase` carries an arbitrary global
+offset. For hardware drive, reference every element to one of them.
 
 **What this costs you if you assume `e^(+iωt)`:** every phase flips sign. An
 amplitude-only analysis is unaffected; a delay-and-sum reconstruction, a phase
@@ -101,10 +116,24 @@ mass-source normalization `2·c·dt/dx` at the source voxels (k-Wave applies its
 own equivalent internally), so:
 
 > a plane source with `amplitude_kpa = 100` produces a plane wave of ≈100 kPa,
-> to the few-per-cent level, independent of grid, CFL and medium.
+> rather than a number that moves when you change the discretization.
 
-This is a validated property, not a hope — the suite asserts it on both the
-native and the k-Wave paths.
+That is a measured property, and it is worth knowing exactly how far the
+measurement goes, because the sentence above is easy to over-read:
+
+- The native path is **asserted** by the suite
+  (`test_mass_source_normalization_and_phase_convention`), with the realized
+  plateau bounded to **−10 % / +12 %** of the requested amplitude. "Few
+  per cent" is what is typically observed; ±10 % is what is guaranteed.
+- **Invariance is asserted along one axis**, the one that used to break it:
+  raising `c_max` (hence `dt` and steps-per-period) shifts the realized drive
+  by **< 2 %**. Before the normalization the same change moved it ~20 %.
+  Nothing in the suite sweeps `dx` or `cfl` for this property.
+- The **k-Wave** cross-validation compares *normalized* fields (correlation
+  and normalized L2), so it does not assert absolute amplitude at all. The
+  adapter applies k-Wave's own equivalent scaling and measurement agrees
+  (100 kPa requested → ~100 kPa realized), but that is an observation, not
+  a gate.
 
 Two caveats that are physics, not bookkeeping:
 
@@ -113,9 +142,12 @@ Two caveats that are physics, not bookkeeping:
   therapy bowl). Peak focal pressure is a result, not an input.
 - **Element voxelization is discrete.** Each element becomes a one-voxel-thick
   disc, so a coarse `dx` changes the *radiating area* slightly even though the
-  amplitude is normalized. The `derived.elements_represented` field in a run's
-  `run_meta.json` tells you how many elements survived voxelization — if it is
-  less than your element count, the run is refused.
+  amplitude is normalized. An element that would lose **all** its voxels to
+  deduplication is a hard refusal at build time, so the
+  `derived.elements_represented` field in a run's `run_meta.json` always
+  equals your element count — it is a receipt that the refusal did not fire,
+  not a partial-loss counter. Partial area loss on a coarse grid is real and
+  is not reported; halve `dx` and compare if it matters.
 
 ## 5. The PML is part of the grid
 

@@ -161,18 +161,31 @@ def plugin_job_dict() -> dict:
     }
 
 
+def core_kinds(registry) -> tuple[str, ...]:
+    """The kinds caustica itself ships, ignoring any installed plugin.
+
+    A third-party kind in the same environment is the whole point of the
+    registry — it must not turn caustica's own suite red (found by the M10m
+    skeptical review: installing a plugin failed six tests that asserted the
+    registry's exact contents).
+    """
+    return tuple(
+        n for n in registry.available() if registry.get(n).__module__.startswith("caustica.")
+    )
+
+
 # ------------------------------------------------------------- the core kinds
 
 
 def test_core_kinds_register_through_the_same_door():
     """No private path: caustica's own kinds ARE the registry's first clients."""
-    assert medium_kinds.available() == (
+    assert core_kinds(medium_kinds) == (
         "homogeneous",
         "medium_volume",
         "scene",
         "volume_import",
     )
-    assert array_kinds.available() == ("archimedean_spiral", "bowl", "elements")
+    assert core_kinds(array_kinds) == ("archimedean_spiral", "bowl", "elements")
     assert medium_kinds.get("scene") is jobmod.SceneMediumConfig
     assert array_kinds.get("elements") is jobmod.ElementsArrayConfig
 
@@ -226,7 +239,7 @@ def test_registration_refusals_teach():
     with pytest.raises(ValueError, match="must default to"):
         medium_kinds.register(Mismatch)
 
-    assert medium_kinds.available() == ("homogeneous", "medium_volume", "scene", "volume_import")
+    assert core_kinds(medium_kinds) == ("homogeneous", "medium_volume", "scene", "volume_import")
 
 
 def test_registration_is_all_or_nothing_when_wiring_fails():
@@ -255,6 +268,42 @@ def test_registration_is_all_or_nothing_when_wiring_fails():
     assert "late_kind" not in json.dumps(jobmod.job_schema())
 
 
+def test_reloading_the_job_module_still_works():
+    """`%autoreload 2` re-runs job.py, producing NEW classes with the SAME tags.
+
+    Identity-only collision detection called that a name clash — reporting a
+    class as colliding with itself, halfway through the reload, leaving the
+    module a mix of new and stale objects with no error at the point of use.
+    Editing caustica inside a notebook is a first-class workflow, so a reload
+    has to survive.
+    """
+    before = medium_kinds.available()
+    importlib.reload(jobmod)
+    try:
+        assert medium_kinds.available() == before
+        assert array_kinds.available() == array_kinds.available()
+        # the registry now holds the RELOADED classes, and the schema follows
+        assert medium_kinds.get("homogeneous") is jobmod.HomogeneousMediumConfig
+        assert array_kinds.get("elements") is jobmod.ElementsArrayConfig
+        job = jobmod._JOB_ADAPTER.validate_python(
+            {
+                **plugin_job_dict(),
+                "medium": {"kind": "homogeneous"},
+                "source": {
+                    "kind": "array",
+                    "array": {"kind": "bowl", "d_outer_mm": 10.0, "roc_mm": 12.0},
+                    "apex_mm": [9.0, 9.0, 6.0],
+                },
+            }
+        )
+        assert isinstance(job.medium, jobmod.HomogeneousMediumConfig)
+        # ...and the reload did not stack a second rebuild hook per registry
+        assert len(medium_kinds._hooks) == 1
+        assert len(array_kinds._hooks) == 1
+    finally:
+        importlib.reload(jobmod)  # leave the module fresh for the next test
+
+
 # ------------------------------------------------------------------ plugins
 
 
@@ -277,6 +326,15 @@ def test_entry_point_plugin_adds_a_medium_and_an_array_kind(tmp_path):
     with plugin_on_path(tmp_path, ("caustica_test_plugin",)):
         assert "test_gel" in medium_kinds.available()
         assert "test_ring" in array_kinds.available()
+        # ...and caustica's own kind set is untouched, which is what keeps
+        # caustica's suite green in an environment that has plugins installed.
+        assert core_kinds(medium_kinds) == (
+            "homogeneous",
+            "medium_volume",
+            "scene",
+            "volume_import",
+        )
+        assert core_kinds(array_kinds) == ("archimedean_spiral", "bowl", "elements")
 
         p = tmp_path / "job.json"
         p.write_text(json.dumps(plugin_job_dict()), encoding="utf-8")
@@ -308,7 +366,13 @@ def test_a_broken_plugin_is_skipped_not_fatal(tmp_path, caplog):
     with plugin_on_path(tmp_path, ("caustica_broken_plugin",)):
         with caplog.at_level("WARNING", logger="caustica"):
             names = medium_kinds.available()
-        assert names == ("homogeneous", "medium_volume", "scene", "volume_import")
+        assert "boom" not in names
+        assert core_kinds(medium_kinds) == (
+            "homogeneous",
+            "medium_volume",
+            "scene",
+            "volume_import",
+        )
         assert "failed to load" in caplog.text
 
 

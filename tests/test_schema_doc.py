@@ -22,6 +22,19 @@ DOC = REPO / "docs" / "job_reference.md"
 CONVENTIONS = REPO / "docs" / "conventions.md"
 
 
+def core_kinds(registry) -> tuple[str, ...]:
+    """The kinds caustica itself ships, ignoring any installed plugin.
+
+    A third-party kind in the same environment is the whole point of the
+    registry — it must not turn caustica's own suite red (found by the M10m
+    skeptical review: installing a plugin failed six tests that asserted the
+    registry's exact contents).
+    """
+    return tuple(
+        n for n in registry.available() if registry.get(n).__module__.startswith("caustica.")
+    )
+
+
 def doc_sections() -> dict[str, list[str]]:
     """`## heading` -> the `### \\`kind\\`` names beneath it."""
     sections: dict[str, list[str]] = {}
@@ -37,16 +50,28 @@ def doc_sections() -> dict[str, list[str]]:
     return sections
 
 
-def doc_snippets() -> dict[str, dict]:
-    """`### \\`kind\\`` -> the first ```json block under that heading."""
+def doc_snippets_all() -> dict[str, list[dict]]:
+    """`### \\`kind\\`` -> every ```json block under that heading, in order."""
     text = DOC.read_text(encoding="utf-8")
-    out: dict[str, dict] = {}
+    out: dict[str, list[dict]] = {}
     for match in re.finditer(r"### `([a-z_]+)`\n(.*?)(?=\n## |\n### |\Z)", text, re.S):
         kind, body = match.group(1), match.group(2)
-        block = re.search(r"```json\n(.*?)\n```", body, re.S)
-        if block:
-            out[kind] = json.loads(block.group(1))
+        blocks = [json.loads(b) for b in re.findall(r"```json\n(.*?)\n```", body, re.S)]
+        if blocks:
+            out[kind] = blocks
     return out
+
+
+def doc_snippets() -> dict[str, dict]:
+    """`### \\`kind\\`` -> the first ```json block under that heading."""
+    return {k: v[0] for k, v in doc_snippets_all().items()}
+
+
+def minimal_job() -> dict:
+    """The complete job the reference opens with."""
+    block = re.search(r"```json\n(\{\n  \"format\".*?)\n```", DOC.read_text(encoding="utf-8"), re.S)
+    assert block, "the reference no longer opens with a complete job snippet"
+    return json.loads(block.group(1))
 
 
 # ------------------------------------------------------------------- schema
@@ -104,11 +129,13 @@ def test_cli_schema_prints_parseable_json(capsys):
 def test_reference_documents_exactly_the_registered_kinds():
     """The doc-rot gate: headings vs the registry, both directions."""
     sections = doc_sections()
-    assert tuple(sorted(sections["Medium kinds"])) == medium_kinds.available()
-    assert tuple(sorted(sections["Array kinds"])) == array_kinds.available()
+    # caustica's reference documents caustica's kinds; a third-party kind
+    # documents itself in its own package.
+    assert tuple(sorted(sections["Medium kinds"])) == core_kinds(medium_kinds)
+    assert tuple(sorted(sections["Array kinds"])) == core_kinds(array_kinds)
 
 
-@pytest.mark.parametrize("kind", sorted(medium_kinds.available()))
+@pytest.mark.parametrize("kind", core_kinds(medium_kinds))
 def test_each_medium_snippet_validates(kind):
     snippet = doc_snippets().get(kind)
     assert snippet is not None, f"docs/job_reference.md has no JSON snippet for '{kind}'"
@@ -116,7 +143,7 @@ def test_each_medium_snippet_validates(kind):
     medium_kinds.get(kind).model_validate(snippet)  # extra="forbid" catches stale keys
 
 
-@pytest.mark.parametrize("kind", sorted(array_kinds.available()))
+@pytest.mark.parametrize("kind", core_kinds(array_kinds))
 def test_each_array_snippet_validates(kind):
     snippet = doc_snippets().get(kind)
     assert snippet is not None, f"docs/job_reference.md has no JSON snippet for '{kind}'"
@@ -126,16 +153,42 @@ def test_each_array_snippet_validates(kind):
 
 def test_the_documented_minimal_job_actually_runs_validate(tmp_path):
     """The first snippet a stranger copies must pass validate as printed."""
-    text = DOC.read_text(encoding="utf-8")
-    block = re.search(r"```json\n(\{\n  \"format\".*?)\n```", text, re.S)
-    assert block, "the reference no longer opens with a complete job snippet"
-    job = json.loads(block.group(1))
+    job = minimal_job()
     assert job["format"] == JOB_FORMAT
     p = tmp_path / "doc_job.json"
     p.write_text(json.dumps(job), encoding="utf-8")
     report = validate_job(p)
     assert report.ok, report.render()
     assert report.warnings == [], report.render()
+
+
+@pytest.mark.parametrize("kind", core_kinds(array_kinds))
+def test_every_array_kind_has_a_snippet_that_fits_the_documented_grid(kind, tmp_path):
+    """At least one snippet per array kind must RUN, not merely parse.
+
+    Model validation alone let the spiral section ship the 100 mm production
+    array as its only example — schema-valid, and a focus outside the grid of
+    the job this page opens with (found by the M10m skeptical review). A kind
+    may show a full-size recipe, but it owes the reader one that works here.
+    """
+    snippets = doc_snippets_all().get(kind, [])
+    assert snippets, f"docs/job_reference.md has no JSON snippet for '{kind}'"
+    failures = []
+    for i, snippet in enumerate(snippets):
+        if snippet.get("kind") != kind:
+            continue
+        job = minimal_job()
+        job["source"]["array"] = snippet
+        p = tmp_path / f"{kind}_{i}.json"
+        p.write_text(json.dumps(job), encoding="utf-8")
+        report = validate_job(p)
+        if report.ok:
+            return
+        failures.append(f"snippet #{i}: {report.errors}")
+    raise AssertionError(
+        f"no '{kind}' snippet in docs/job_reference.md validates inside the "
+        f"page's own minimal job:\n" + "\n".join(failures)
+    )
 
 
 def test_conventions_covers_the_five_silent_wrongness_traps():
