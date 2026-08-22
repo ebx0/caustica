@@ -16,6 +16,16 @@ library — module layout, private helpers, log text, stdout prose, the shape of
 `checkpoint.npz` — may change in any release without notice. If a GUI needs
 something that is not on this page, the fix is to add it here first.
 
+**What on this page is machine-checked, and what is not.** The bullet lists,
+the tables, and the literal names, numbers and format strings on this page are
+compared against the running code by `tests/test_gui_contract.py`; they cannot
+rot silently. The prose between them is explanatory — reviewed, not executed.
+Every finding of the M10l review, and one of the mutation round that followed
+it, was a sentence rather than a list, which is the class a list comparison
+cannot reach; where such a sentence makes a claim precise enough to test, the
+answer is to add the test, not to trust the sentence. **If prose and a list
+disagree, the list is the contract.**
+
 The layering is enforced too: `tests/test_import_direction.py` AST-scans every
 module under `src/caustica` and fails if any of them imports `apps`,
 `uwcem_phantoms`, or a `caustica_gui*` package. Arrows point down only. A GUI
