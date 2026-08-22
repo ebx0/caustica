@@ -55,7 +55,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import subprocess
 import sys
 import time
 import traceback
@@ -70,7 +69,7 @@ import numpy as np
 import caustica
 from caustica.config.job import BuiltJob, build_job, dump_job, load_job
 from caustica.core.backend import CausticaWarning, check_backend_name, get_backend
-from caustica.env import env_report, gpu_environment
+from caustica.env import env_report, git_commit, gpu_environment
 from caustica.io.atomic import atomic_write
 from caustica.io.checkpoint import CheckpointSpec, RunInterrupted
 from caustica.io.store import (
@@ -209,19 +208,11 @@ def _clear_stale(path: Path) -> None:
         log.warning("could not remove stale %s: %s", path.name, exc)
 
 
-def _git_commit() -> str:
-    """Best-effort commit hash of the caustica checkout ('unknown' when not a repo)."""
-    try:
-        root = Path(caustica.__file__).resolve().parents[2]
-        out = subprocess.run(
-            ["git", "-C", str(root), "rev-parse", "HEAD"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        return out.stdout.strip() if out.returncode == 0 else "unknown"
-    except Exception:  # pragma: no cover - git missing
-        return "unknown"
+# Promoted to caustica.env (fix A1) — and no longer git-only: a wheel install
+# has no checkout, so the commit now falls back to the stamp the build froze
+# into the package. Colab installs from a wheel, which is exactly where every
+# run used to be stamped "unknown".
+_git_commit = git_commit
 
 
 # Promoted to caustica.env (M10i) — the runner keeps calling the same
