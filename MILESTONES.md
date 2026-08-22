@@ -290,11 +290,11 @@ Omurga (2026-08-21'de kütüphane-önce kararlarıyla revize edildi — ayrınt�
 docs/library_first_plan.md): lokalde `job.json` yaz → Colab'da değişmeyen notebook koşar →
 çıktı `/content` altına düşer → lokalde raporla. **Drive kütüphanenin işi değil** (K12).
 **M10 → M10b → M10c → M10d** (hepsi CPU'da yazılır ve testlenir, Colab beklemez) → **M10e**
-public → **M10k** UWCEM ayrışımı ‖ **M10h** paketleme ‖ **M10i** ortam ve güvenlik politikası (üçü paralel;
-M10h/M10i `config/job.py`'ye dokunmaz) → **M10m** dışarıdan kullanılabilirlik →
-**M10j** facade + ilerleme → **M10l** GUI sözleşmesi → **M10f** Colab köprüsü →
-**ilk Colab oturumu** (M7 + M8 kapılarıyla birleşik) → **M10g** kuyruk.
-M10m/M10j `config/job.py`'ye dokunduğu için M10k'yı bekler. M12–M14 bu omurganın üstünden koşar.
+public → **M10h ✅ + M10i ✅ + M10k ✅** (2026-08-22 kapandı) → **M10m** dışarıdan
+kullanılabilirlik → **M10n** plugin mimarisi → **M10j** facade + ilerleme → **M10l** GUI
+sözleşmesi → **M10f** Colab köprüsü → **ilk Colab oturumu** (M7 + M8 kapılarıyla birleşik) →
+**M10g** kuyruk → **UWCEM kalanları** (docs/uwcem.md, EN SON — kullanıcı 2026-08-22).
+M12–M14 bu omurganın üstünden koşar.
 
 ### M10 — IO: HDF5 kontratı + atomik yazım + resume + koşu-içi checkpoint `[x]` (2026-08-19)
 Colab omurgasının temeli: runner, kuyruk ve rapor bu kontratın üstüne oturur.
@@ -435,10 +435,10 @@ Colab notebook'u public repodan clone eder: token/secret yönetimi tamamen ortad
   - [ ] **`CITATION.cff`** (bugün YOK): public bir araştırma kütüphanesi alıntılanabilir olmalı.
         v0.1 tag'inde Zenodo DOI'si alınır ve README'ye "How to cite" bölümü eklenir
 
-### M10k — UWCEM ayrışımı: kütüphane UWCEM'siz olur `[ ]` — **DEVİR PAKETİ 3/4**
-Lisans riski ve kendi katmanlama kuralımızın ihlali aynı kökten geliyor: `config/job.py` bugün
-DÖRT yerden `uwcem_phantoms` import ediyor. Karar (PLAN.md K7–K10): kütüphane tamamen UWCEM'siz
-olur, UWCEM işleri ayrı repoya taşınır, yerine genel `medium_volume` kind'ı gelir.
+### M10k — UWCEM ayrışımı: kütüphane UWCEM'siz olur `[x]` (2026-08-22)
+Gerekçe (K7–K10): lisans riski ve katmanlama ihlali aynı kökten geliyordu — `config/job.py`
+dört yerden `uwcem_phantoms` import ediyordu. Ayrışım W0a–W0f olarak kapandı; **UWCEM'e dair
+güncel durum + kalan işler TEK dosyada: `docs/uwcem.md`** (kullanıcı 2026-08-22: kalanlar EN SON).
 - [x] (W0a, 2026-08-22) `medium_volume` genel medium kind'ı: `caustica.io.medium_volume` —
       etiket haritası + malzeme db'si VEYA voxel-başına özellik hacimleri; **grid dosyadan
       gelir** (explicit `grid` "fixes the grid" hata metniyle reddedilir — testli). MEVCUT
@@ -453,9 +453,9 @@ olur, UWCEM işleri ayrı repoya taşınır, yerine genel `medium_volume` kind'�
       numpy dizilerinden (etiket VEYA c/ρ/α/β) + dx + origin; yeni dosyalar
       `caustica-medium-volume/1` etiketi taşır. Round-trip bit-aynı Medium (label + continuous
       modda testli); `uwcem-phantom` repo'su W0d'de bu fonksiyona bağlanacak
-- [ ] `geometry/volumes.py::load_breast_phantom()` taşınır: UWCEM üretim fantomunun şekli
-      (310×355×253, 0.5 mm) ve `breast_phantom_mapping` kaynağa özgüdür. `load_labels_txt`
-      GENELDİR (mapping callable'ı kaynağa özgü kısmı dışarıda tutuyor) — o KALIR
+- [x] `geometry/volumes.py::load_breast_phantom()` taşındı (W0c'de geometry'den çıktı, W0d'de
+      yeni repo `legacy_import.py`'de — kutu güncellemesi unutulmuştu, 2026-08-22 kapatıldı).
+      `load_labels_txt` GENELDİR (mapping callable'ı kaynağa özgü kısmı dışarıda tutar) — KALDI
 - [x] (W0b, 2026-08-22) Literatür akustik doku değerleri `caustica.materials.TISSUE_LIBRARY`'de
       (`AcousticTissue` taşıyıcısı + dB/cm↔Np/m dönüşümleriyle; kaynak/ölçüm yorumları harfiyen,
       isimler dahil — isim MaterialDB JSON'una gömülü olduğundan değişmedi). Beş literatür-çapa
@@ -512,7 +512,7 @@ olur, UWCEM işleri ayrı repoya taşınır, yerine genel `medium_volume` kind'�
   - [x] Taşınan süit yeni repoda YEŞİL, buradan silinmeden ÖNCE doğrulandı: 165 passed
     (non-slow) + dokuzlu yavaş kapı 3/3 — plan-anı "137" sayısı o günün fotoğrafıydı (T8)
 
-### M10h — Kütüphane paketleme + temiz ortam kapısı `[x]` (2026-08-21; CI kanıtı 2026-08-22) — **DEVİR PAKETİ 1/4**
+### M10h — Kütüphane paketleme + temiz ortam kapısı `[x]` (2026-08-21; CI kanıtı 2026-08-22)
 > **Borç kapandı (2026-08-22):** gözden geçirenin `[~]` kararı üzerine dal pushlandı (kullanıcı
 > onayı), CI'ı tetiklemek için **draft PR #1** açıldı (`library-first` → `master`, merge YOK:
 > <https://github.com/ebx0/caustica/pull/1>). İlk koşuda `wheel` + windows yeşil; iki ubuntu
@@ -553,7 +553,7 @@ olur, UWCEM işleri ayrı repoya taşınır, yerine genel `medium_volume` kind'�
         `test_copied_example_runs_without_touching_the_install_dir`: kurulum dizini içerik
         anlık-görüntüsü koşu öncesi/sonrası BİREBİR, çıktı kopyanın yanına düşüyor (T4)
 
-### M10i — Ortam ve güvenlik politikası `[x]` (2026-08-22) — **DEVİR PAKETİ 2/4**
+### M10i — Ortam ve güvenlik politikası `[x]` (2026-08-22)
 Ortak tema: **kullanıcı sessizce yanmasın.** Yanlış backend, yanlış çözünürlük, görünmeyen uyarı,
 tek çekirdekte sürünen CPU — hepsi "çalışıyor gibi görünüp yanlış/yavaş sonuç veren" sınıfından.
 `config/job.py`'nin yalnızca `validate` raporlama kısmına dokunur; şemaya dokunmaz.
@@ -606,14 +606,19 @@ tek çekirdekte sürünen CPU — hepsi "çalışıyor gibi görünüp yanlış/
   - [x] cupy'siz `backend="auto"` → görünür `CausticaWarning`, süreç başına TAM BİR kez (testli)
   - [x] ppw uyarısı dört yerde — dört test (plan, status, run_meta, rapor başı)
 
-### M10m — Dışarıdan kullanılabilirlik: kendi kurulumunu getir `[ ]` — **DEVİR PAKETİ 4/4**
+### M10m — Dışarıdan kullanılabilirlik: kendi kurulumunu getir `[ ]` — SIRADAKİ İŞ
 Kabul sorusu: **hiç tanımadığımız bir araştırmacı, repoyu bulup kendi problemini koşabiliyor mu?**
-Bugün cevap HAYIR — job şeması yalnızca spiral+bowl tanıyor, kendi hacmini üretecek yazıcı yok ve
-şemayı okumak için pydantic kaynağına inmek gerekiyor. M10k'dan SONRA gelir (`config/job.py`).
+Kalan boşluklar: job şeması transducer tarafında yalnızca spiral+bowl tanıyor ve şemayı okumak
+için pydantic kaynağına inmek gerekiyor. (Hacim tarafı KAPANDI: `medium_volume` okuyucu+yazıcı
+M10k/W0a ile geldi.) K15 (tam plugin mimarisi) gereği kind kapıları burada registry'ye döner.
 - [ ] `elements` array kind'ı: açık eleman pozisyonları + normalleri (JSON içinde satır satır ya
       da `.npz`/`.csv` dosya referansıyla), eleman yarıçapı ve odak uzaklığıyla. `TransducerArray`
       zaten genel — eksik olan yalnızca şema kapısı. `derived()` kalıbı korunur (yeniden yüklemede
       geometri yeniden türetilir, sessiz sapma yakalanır)
+- [ ] **Kind registry'leri (K15):** medium ve array kind'ları, çözücülerdeki registry +
+      entry-point kalıbına taşınır — kapalı pydantic union yerine kayıtlı kind'lardan kurulan
+      discriminated union. Üçüncü taraf paket (örn. `uwcem-phantom`) kendi kind'ını entry-point
+      ile ekleyebilir; çekirdek kind seti değişmez, `caustica schema` kayıtlı kind'ları basar
 - [ ] `caustica schema` komutu: `caustica-job/1` şemasını JSON Schema olarak basar (pydantic'ten
       üretilir — elle yazılmış ikinci bir tanım OLMAZ)
 - [ ] `docs/job_reference.md`: her medium kind'ı, her array kind'ı, drive/run/output bölümleri,
@@ -631,6 +636,25 @@ Bugün cevap HAYIR — job şeması yalnızca spiral+bowl tanıyor, kendi hacmin
     `docs/job_reference.md` başlıkları test ile karşılaştırılır (doküman sessizce eskimez)
   - **Yabancı-kullanıcı provası**: repo dışında, temiz ortamda, YALNIZCA README + job_reference
     okunarak kendi çanak+su senaryosu yazılıp koşulur (adım adım devlog'a yazılır)
+
+### M10n — Plugin mimarisi: beş eksen entry-point `[ ]` (K15, kullanıcı 2026-08-22)
+"Proje her kısmında modüler olabilmeli." Çözücülerdeki kalıp (registry + entry-point +
+yetenek deklarasyonu) kalan eksenlere genellenir. Erken-soyutlama riski kullanıcıya söylendi
+ve kabul edildi; panzehiri: her seam ÇEKİRDEKTEKİ implementasyonların kendisini de registry'den
+geçirmek (özel yol yok — çekirdek, kendi plugin API'sinin birinci müşterisidir).
+- [ ] Envanter: solver ✅ (var) · medium kind (M10m'de) · array kind (M10m'de) · **backend**
+      (`get_backend` isim→fabrika kaydına döner; numpy/cupy kayıtlı varsayılanlar) · **report
+      renderer** (figür/rapor üreticisi seam'i; matplotlib implementasyonu kayıtlı varsayılan)
+- [ ] `docs/extending.md`: her eksen için "kendi X'ini ekle" tarifi + çalışan iskelet örneği
+- [ ] Entry-point grubu adları sabitlenir (`caustica.solvers`, `caustica.medium_kinds`,
+      `caustica.array_kinds`, `caustica.backends`, `caustica.report_renderers`)
+- Başarı kriterleri:
+  - Sahte bir dış paket (test fixture'ı) beş eksenin HER BİRİNE entry-point ile bir uzantı
+    ekler ve uçtan uca kullanır (kayıt → keşif → çalıştırma testli)
+  - Çekirdek davranış bit-değişmez: mevcut süit yeşil, golden alanlar aynı
+  - `import caustica` süresi ölçülür ve registry keşfi onu yüzde 10'dan fazla YAVAŞLATMAZ
+    (entry-point taraması lazy)
+  - Kayıtlı olmayan kind/backend adı, kayıtlı adları listeleyen aksiyonlu hata verir
 
 ### M10j — Notebook ergonomisi: facade + ilerleme `[ ]`
 M10k'dan SONRA gelir: facade da job şemasına dokunur (`stored_setup` kalkmadan yazılırsa iki kez
@@ -741,7 +765,9 @@ Protokol **paylaşılan bir klasör yolu** alır; Drive onun bir örneğidir ve 
   - ETA log'ları planner modelini kullanır (start→start cadence ölçümü korunur)
 
 ### M14 — Colab üretim doğrulaması `[ ]` — Colab oturumu gerektirir
-- [ ] Tam boy dx=0.30 senaryosu Colab A100'de `caustica run` job akışıyla (M10c/M10f) koşar; notebook v12 ile karşılaştırma
+- [ ] Tam boy dx=0.30 senaryosu Colab A100'de `caustica run` job akışıyla (M10c/M10f) koşar; v12
+      referans SAYILARIYLA karşılaştırma (not 2026-08-22: kaynak notebook dosyası yalınlaştırmada
+      silindi — hedef, devlog'daki yayımlanmış v12 değerleridir: amp/p_max bandı, ~65 s/sample)
 - Başarı kriterleri:
   - amp/p_max bandı [0.85, 0.95] içinde; focus_ratio ve fokal alan deseni notebook koşusuyla tutarlı (normalize r > 0.99 — bire-bir sayısal eşitlik ARANMAZ, karar #2)
   - t_end > 110 µs kontratı korunur
@@ -865,19 +891,25 @@ Protokol **paylaşılan bir klasör yolu** alır; Drive onun bir örneğidir ve 
   public API üç katman (facade → nesneler → job JSON) · GPU'suz 5 dk üstü koşu reddedilir · cupy
   asla otomatik kurulmaz · ilerleme + odak önizlemesi varsayılan açık · Colab'da Drive
   KULLANILMAZ (`/content`) · GUI ayrı repo, şimdilik yalnızca sözleşme dondurulur.
-- **Şimdi (devredilen paket):** **M10h + M10i + M10k + M10m** (2026-08-21 kullanıcı kararları).
-  Sıra: M10h paketleme → M10i ortam ve güvenlik politikası → M10k UWCEM ayrışımı → M10m dışarıdan
-  kullanılabilirlik. M10h/M10i `config/job.py`'ye dokunmadığı için ayrışımla çakışmaz; M10m
-  ayrışımı bekler. Ayrışım sırasında dokuz setup'ın geçici olarak çalışmaması KABUL, bitişte
-  bit-aynı koşmalı. **M10j (facade) bilerek dışarıda** — sonraki tur.
-- **Paketin kabul sorusu:** bu dört milestone kapandığında *hiç tanımadığımız bir araştırmacı*
-  repoyu bulup, README'yi okuyup, Colab'da ya da yerelde **kendi** problemini koşabiliyor olmalı.
-  M10m'in "yabancı-kullanıcı provası" kriteri bunu ölçer.
-- **Sonra:** M10j facade + ilerleme → M10l GUI sözleşmesi → M10f Colab köprüsü → **ilk Colab
-  oturumu tek seferde üç kapıyı kapatır** (M7 parite/tam-boy + M8 VRAM ±%10 ve süre ±%25 +
-  M10f E2E) → M10g kuyruk. M14 bu akışın üstünden koşar.
-  Not: GPU paritesi (M7) o oturuma kadar DOĞRULANMAMIŞ kalır (kullanıcı kararı 2026-08-21);
-  README'de GPU iddiaları bu nedenle açıkça "doğrulanmadı" işaretli durur.
+- **Yönetim modeli (2026-08-22, kullanıcı):** operatör = Fable 5 (bu oturum), kod = Opus 5
+  alt-ajanları. Proje yönetim sistemi = bu dosya (MILESTONES.md); ek araç/MCP gerekmiyor.
+  Önemli kararlar kullanıcıya sorulur; gerisi operatörde.
+- **Durum (2026-08-22):** M10h ✅ (CI dahil) + M10i ✅ + M10k ✅ — kütüphane UWCEM'siz, 279 test
+  yeşil; taşınan süit `../uwcem-phantom`'da 165+ yeşil (yerel git, push yok — kullanıcı kararı).
+  UWCEM'e dair her şey artık TEK dosyada: **docs/uwcem.md** — kalanları EN SON yapılacak.
+  Yalınlaştırma turu #1 (2026-08-22): kök mtype.txt (123 MB) + labels.npz + _code_cells.py +
+  kaynak notebook silindi (kullanıcı onayı; M14 notu güncellendi); bayat `build/` silindi.
+- **Şimdi (sıra):** **M10m** dışarıdan kullanılabilirlik (elements kind + kind registry'leri +
+  `caustica schema` + job_reference/conventions + yabancı-kullanıcı provası) → **M10n** plugin
+  mimarisi (K15: beş eksen entry-point) → **M10j** facade + ilerleme → **M10l** GUI sözleşmesi
+  (import-yönü testi ✅ erken kapandı; kalan: gui_contract.md + cancel dosyası + error.json) →
+  **M10f** Colab köprüsü → **ilk Colab oturumu tek seferde üç kapıyı kapatır** (M7 parite/tam-boy
+  + M8 VRAM ±%10 ve süre ±%25 + M10f E2E) → **M10g** kuyruk → **UWCEM kalanları** (docs/uwcem.md).
+  M14 bu akışın üstünden koşar. GPU paritesi (M7) o oturuma kadar DOĞRULANMAMIŞ kalır; README
+  GPU iddialarını "doğrulanmadı" işaretli tutar.
+- **Yalınlaştırma (kalan küçük işler; uygun milestone'a iliştirilir):** `data/` kökünün checkout
+  dışına taşınması (env var kurulu, acele yok) · README'nin M10m sonrası yeni kind'larla
+  güncellenmesi · `janitor/` defterinin işlenmesi.
 - **M10e kalan kalem:** commit + push (KULLANICI ONAYI) → public CI yeşili (3.10 taban ayağı
   dahil) + temiz-ortam `pip install git+.../caustica` + UWCEM atıf son kontrol (`janitor/06`).
   Not: UWCEM atıf yükümlülüğü M10k ile `uwcem-phantom` repo'suna taşınıyor.

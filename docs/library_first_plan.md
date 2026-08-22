@@ -1,8 +1,8 @@
 # Library-First Conversion Plan
 
-**Status:** planning only — nothing here has been applied to the code or to `MILESTONES.md`.
-Written 2026-08-21. Every claim about the current codebase in §3 was verified against the source
-on that date; file:line anchors are given so they can be re-checked.
+**Status:** written 2026-08-21 as the conversion plan; **partially executed** — see the
+EXECUTION STATUS block below. §3's file:line anchors were verified on 2026-08-21 and have
+drifted since; re-verify before relying on them.
 
 **Goal.** `pip install caustica` → `import caustica` → a real simulation runs on a Colab GPU, with
 no repository checkout, no notebook surgery, and no GUI anywhere in the dependency graph. The
@@ -14,43 +14,12 @@ and the acceptance test that closes it. §7 is the trap list — read it before 
 contains eight ways to break working behaviour that are not obvious from the source. §12 is the
 project's working agreement and is binding.
 
-**Instructions for an implementer.**
-
-> **This handoff is W1 + W2 + W0 + W5 (D23), in that order.** Do **not** start W3 (facade) or W4
-> (progress) — they come next round. Work on branch **`library-first`** (D25): one local commit per
-> sub-step, **no push**, `master` untouched. The `uwcem-phantom` repository is created empty and
-> private by the user (D24) — do not create it yourself, and do not make it public.
->
-> Milestone mapping in `MILESTONES.md`: **W1 = M10h**, **W2 = M10i**, **W0 = M10k**,
-> **W5 = M10m**. (W3 + W4 = M10j, later. W8 = M10l, later.)
-
-**W1 first** — half a session, and it gives every later step a clean-env check to run against.
-Then **W2**. Then **W0**, one sub-step at a time (**W0a → W0b → W0c → W0d → W0e → W0f**). Then
-**W5**, which needs W0c. W1/W2 touch `pyproject.toml`, `env.py`, `runner.py`, CI; W0 touches
-`config/job.py`, `materials.py`, `io/`, the phantom package; W5 returns to `config/job.py` and
-`docs/`. Only W0 and W5 overlap, and they are sequential.
-
-**The acceptance question for the whole handoff:** when these four close, a researcher who has
-never seen this project must be able to find the repo, read the README, and run **their own**
-problem — on Colab or locally. W5's "outsider rehearsal" criterion measures exactly that; if it
-cannot be passed, the handoff is not done, however green the unit tests are.
-
-For each step:
-
-1. Read §3 (ground truth) and §7 (traps) first; re-verify the anchors, since line numbers drift.
-2. Implement, then write the named test file. A step is done when its test would fail if the
-   behaviour regressed — not when the code appears to work.
-3. `MILESTONES.md` **is already updated and is authoritative** — the criteria live there under
-   M10h / M10i / M10k / M10m. Tick a criterion only against a passing test.
-4. Run `./.venv/Scripts/python.exe -m pytest -q`, `ruff check`, `ruff format`, then commit on the
-   branch with a message naming the sub-step.
-
-**A temporary break is accepted (D26):** the nine local setups may stop working between W0c and
-W0d. The closing gate is unchanged — when W0 ends they must run bit-identically again, with no
-file rebuilt or re-downloaded.
-
-**W6 and W7 cannot be closed without the user** — both need a live Colab session (B10). Implement
-and CPU-test them, then stop and report. Never mark a GPU criterion verified from CPU evidence.
+**EXECUTION STATUS (2026-08-22).** This document is now largely a *record*: W0 (=M10k),
+W1 (=M10h) and W2 (=M10i) are **done and closed with evidence** — see `MILESTONES.md`.
+Everything UWCEM now lives in **one file, `docs/uwcem.md`**, and its remaining tasks run LAST
+(user decision 2026-08-22). Remaining live specs here: W5 (=M10m, next), W3+W4 (=M10j),
+W8 (=M10l), W6 (=M10f), W7 (=M10g). Operating model: Fable 5 operates, Opus 5 subagents write
+the code, criteria live in MILESTONES.md (K17). Full plugin architecture was added as M10n (K15).
 
 **Language note.** English document (public-repo consistency; code and docstrings in this project
 are English by convention). `MILESTONES.md` and `PLAN.md` are Turkish and stay that way.
@@ -89,7 +58,7 @@ are English by convention). `MILESTONES.md` and `PLAN.md` are Turkish and stay t
 | **D29** | **Outsider documentation** | **Minimal set lands in this handoff**: `caustica schema`, `docs/job_reference.md`, `docs/conventions.md`, README Colab quickstart | Nobody can author a job by reading pydantic source; conventions (phasor sign, Np/m, amplitude semantics) are how results get silently misread |
 | **D30** | **GPU parity timing** | **Unchanged** — verified at the first Colab session, after M10j | User's call (2026-08-21). Until then README marks every GPU claim unverified |
 | **D31** | **Low ppw** | **Loud warning, never a block.** Repeated in the plan output, `status.json`, `run_meta.json` and at the top of the report | A hard threshold would block the project's own production setting (1.88 ppw at 2f0 — a deliberate choice behind the dx=0.30 lock). Ignorable, but not scroll-past-able |
-| **D32** | **CPU FFT threading** | **`workers=-1` by default.** Order matters: threading → recalibrate the planner → then set the 5-minute gate | `workers` appears nowhere in the source today, so every CPU run is single-threaded; a gate calibrated on that number is meaningless |
+| **D32** | **CPU FFT threading** | ~~`workers=-1` by default~~ → **measured on an idle machine; default stayed 1** (M10i outcome — no gain on this hardware, `cpu_workers` knob added). Order held: measure → recalibrate → gate | The decision rule was "fit the plan to the measurement"; the measurement said single-thread |
 | **D33** | **Visibility of critical events** | **`warnings.warn`** for backend fallback and low ppw; the library installs no logging handler on import; the CLI and facade enable logging | The library logs the numpy fallback at INFO with no handler configured — nobody has ever seen that message |
 | **D34** | **Default output** | **Unchanged: full `result.h5` + preview.** Add a `--preview-only` flag and a predicted `result.h5` size line in the plan | Losing the field of a multi-hour run is unrecoverable; disk pressure is opt-in |
 | **D35** | **Job format version** | **Stays `caustica-job/1`; no special error for removed kinds** | User's call. The only person who will meet the raw pydantic error is the author, while migrating the nine setups |
@@ -226,103 +195,13 @@ and the `elements` array kind (D27).
 
 Effort is in *working sessions*. Difficulty measures *uncertainty*, not typing volume.
 
-### W0 — UWCEM extraction — **Hard (breadth)** — 4–5 sessions
+### W0 — UWCEM extraction — **DONE (M10k, 2026-08-22)**
 
-The largest single piece of work in this plan, and the one with the most ways to go quietly wrong.
-Do it in the sub-order given; each sub-step keeps the suite green.
-
-#### W0a — `medium_volume`: the generic format (D16)
-
-**Files:** new `src/caustica/io/medium_volume.py` (or `caustica/geometry/`), `config/job.py`.
-
-- Own the format in caustica. It carries **either** a label map + material DB **or** per-voxel
-  property volumes (c, rho, alpha, beta), plus shape, dx, an origin, and provenance metadata.
-- **It must read the existing `.npz` files byte-for-byte as they are** (`caustica-phantom-dataset/2`
-  and its `hifusim-phantom-dataset/2` legacy alias) — trap T7. Rebuilding 4.5 GB is not acceptable.
-- New medium kind `MediumVolumeConfig(kind="medium_volume")`: `file`, `pml_mm`, `linear`, optional
-  `materials`. Grid shape and dx come from the file, and an explicit `grid` section is rejected —
-  carry over the exact rule and error text from `PhantomDatasetMediumConfig` (`job.py:216-227`),
-  which exists precisely to stop a job from silently running a resampled ghost.
-- **The library WRITES the format too (D28):** `write_medium_volume(...)` takes numpy arrays (a
-  label map, or per-voxel c/ρ/α/β), `dx`, an origin and provenance metadata, and produces the file.
-  The UWCEM repo calls this function rather than carrying its own writer — one source for the
-  format. Without a writer, "bring your own volume" is a promise the library cannot keep, since
-  the only writer would live in a repo about a phantom source the user does not have.
-- Reuse `VolumeImportMediumConfig`'s discipline of routing through `SceneConfig` so placement and
-  resampling stay single-sourced.
-- No UWCEM name appears anywhere in this module.
-
-**Acceptance:** `tests/test_medium_volume.py` — one of the existing local dataset `.npz` files loads
-through `medium_volume` and produces a `Medium` **bit-identical** to what `phantom_dataset` produced
-before the change (compare on a small crop; skip the test when no local dataset is present).
-
-#### W0b — Tissue values into `caustica.materials` (D17)
-
-**Files:** `src/caustica/materials.py`, `uwcem_phantoms/tissue.py`.
-
-- Move the literature acoustic values (skin, muscle, fat, fibroglandular, water — Duck et al.) into
-  `caustica.materials`, next to the existing `breast_default()` (`materials.py:67`). Keep the
-  provenance comments: which numbers are measured and which are interpolated. That honesty is the
-  value of the table.
-- The UWCEM media-number → tissue-class mapping stays behind and moves with the UWCEM repo.
-
-**Acceptance:** existing material tests still pass; a new test asserts the moved values are
-unchanged to the digit.
-
-#### W0c — Cut the coupling (D15)
-
-**Files:** `config/job.py`, `tests/test_job.py`.
-
-- Delete `_require_uwcem` (`job.py:64`), `PhantomDatasetMediumConfig`, `StoredSetupJobConfig`, and
-  the imports at `:230-231`, `:618-619`, `:955-956`. Remove `stored_setup` from the job union.
-- `MediumConfig` becomes `homogeneous | scene | volume_import | medium_volume`.
-- The docstring at `job.py:25` and the "mirror of uwcem S1" comment at `:254` lose their UWCEM
-  references; the *array recipe itself* is generic and stays.
-- **Also move `geometry/volumes.py:262 load_breast_phantom()`** — it hardcodes the UWCEM production
-  phantom's shape (310×355×253, 0.5 mm) and `breast_phantom_mapping`. `load_labels_txt` above it is
-  genuinely generic (the `mapping` callable holds everything source-specific) and **stays**.
-- Split `tests/test_job.py`: UWCEM-dependent cases move to the new repo, the rest stay.
-- **This is a breaking schema change.** Under D10 that is allowed, but say so in `MILESTONES.md`
-  and in the devlog: `caustica-job/1` loses two kinds. Do not silently renumber the format.
-
-**Acceptance:** the import-direction test (W8) passes for the first time; `grep -ri uwcem src/`
-returns nothing but the incidental comment in `solvers/base.py:130`, which should be reworded.
-
-#### W0d — The new repository (D18)
-
-- The repo is **created empty and private by the user** (D24). Fill it; do not create it, do not
-  change its visibility, and do not push anything until W0f's licence reading is done.
-- Move `catalog.py`, `reader.py`, `builder.py`, `dataset.py`, `setup.py`,
-  `spec.py`, `processing.py`, `heterogeneity.py`, `orientation.py`, `paths.py`, `cli.py`, the
-  UWCEM half of `tissue.py`, `apps/phantom_launcher.py`, and the 137 tests listed in §3.
-- It **depends on caustica** and produces two artifacts: `medium_volume` files, and explicit job
-  JSON (replacing what `stored_setup` used to expand server-side).
-- `load_setup("s1-012304")` must keep working *from the new repo* and must now emit an explicit
-  job — that is the migration path for your nine local setups.
-- caustica's `data/` empties; the generated 4.5 GB and the nine setup JSONs stay on your disk,
-  out of git, exactly as today.
-
-**Acceptance (the gate that protects your local work):** after the split, all nine local setups
-still run end-to-end — `load_setup(...)` → explicit job → `caustica run` — and produce media
-bit-identical to before. No file is rebuilt or re-downloaded.
-
-#### W0e — Cache relocation (B4), in the new repo
-
-- Data root: explicit argument → `CAUSTICA_PHANTOM_DATA` → existing `_data` in a detected checkout
-  → user cache (`~/.cache/caustica/phantoms`, `%LOCALAPPDATA%\caustica\phantoms`).
-  **Hand-roll from `os.environ` + `pathlib`; do not add a `platformdirs` dependency** — a runtime
-  dependency is a decision, not an implementation detail, and this one buys ~10 lines.
-- `dataset_dir()` follows the same order and must not assume a repo. Write the resolved path into
-  the run stamp.
-- **Trap T5:** your `uwcem_phantoms/_data` holds already-fetched UWCEM archives. Nothing may
-  re-download.
-
-#### W0f — Licensing check (do this before the new repo is public)
-
-- Read the UWCEM repository's terms and record, in the new repo's README: what may be redistributed
-  (the plan assumes: **nothing** — files are fetched by the user from upstream), the citation
-  requirement (`catalog.py:44` already carries it), and whether derived exports may be shared.
-- caustica's MIT LICENSE stays clean of it. This is the whole point of D15/D18.
+Executed as W0a–W0f; all gates closed with evidence (bit-identical Medium on the real dataset
+file, nine setups 9/9, import-direction AST test green, licence terms recorded). The full
+current state, locations, licence text and the few remaining tasks (repo publication — user's
+call; maintenance rules) are consolidated in **`docs/uwcem.md`**. The detailed step plan that
+used to live here was moved out when it stopped being a plan and became history.
 
 ### W1 — Packaging & distribution — **Trivial** — 0.5 session
 
