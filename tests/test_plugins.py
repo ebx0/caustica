@@ -39,6 +39,7 @@ from caustica.registry import (
     MEDIUM_KIND_GROUP,
     REPORT_RENDERER_GROUP,
     SOLVER_GROUP,
+    same_definition,
 )
 from caustica.report.renderers import render_report, report_renderers
 from caustica.solvers.registry import solver_registry
@@ -394,6 +395,34 @@ def test_registration_is_all_or_nothing_when_wiring_fails():
     assert "late_kind" not in json.dumps(jobmod.job_schema())
 
 
+def _restore_job_module(original: dict) -> None:
+    """Undo a reload of ``caustica.config.job`` by putting the FIRST classes back.
+
+    Reloading again does not undo a reload: it produces a THIRD set of class
+    objects, and every module that did ``from caustica.config.job import X``
+    at collection time still points at the first one. Anything built after
+    that fails ``isinstance`` against the name the test imported -- a failure
+    that lands in an unrelated file, several tests later.
+
+    So: restore the module namespace verbatim, then re-register the original
+    kind classes (the collision guard treats a same-module/qualname class as
+    a redefinition, which is exactly what this is) and rebuild the models.
+    """
+    first = {
+        obj.__qualname__: obj
+        for obj in original.values()
+        if isinstance(obj, type) and obj.__module__ == jobmod.__name__
+    }
+    vars(jobmod).clear()
+    vars(jobmod).update(original)
+    for registry in (medium_kinds, array_kinds):
+        for name, reloaded in list(registry._items.items()):
+            was = first.get(reloaded.__qualname__)
+            if was is not None and same_definition(was, reloaded):
+                registry.add(name, was)  # a redefinition, per the collision guard
+    jobmod._rebuild_kind_unions()
+
+
 def test_reloading_the_job_module_still_works():
     """`%autoreload 2` re-runs job.py, producing NEW classes with the SAME tags.
 
@@ -404,6 +433,10 @@ def test_reloading_the_job_module_still_works():
     has to survive.
     """
     before = medium_kinds.available()
+    # Everything job.py defined on its FIRST import: other test modules (and
+    # any live user code) hold these exact objects, so the reload has to be
+    # handed back at the end -- see _restore_job_module.
+    original = dict(vars(jobmod))
     importlib.reload(jobmod)
     try:
         assert medium_kinds.available() == before
@@ -427,7 +460,7 @@ def test_reloading_the_job_module_still_works():
         assert len(medium_kinds._hooks) == 1
         assert len(array_kinds._hooks) == 1
     finally:
-        importlib.reload(jobmod)  # leave the module fresh for the next test
+        _restore_job_module(original)
 
 
 # ------------------------------------------------------------------ plugins
