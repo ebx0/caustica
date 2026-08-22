@@ -36,7 +36,7 @@ import time
 import warnings
 from collections.abc import Callable
 from itertools import product
-from math import ceil, floor
+from math import ceil, floor, isfinite
 
 import numpy as np
 
@@ -50,7 +50,12 @@ from caustica.io.checkpoint import (
     write_checkpoint,
 )
 from caustica.medium import Medium
-from caustica.solvers.base import CWRunSpec, SolverResult, interior_slices
+from caustica.solvers.base import (
+    CWRunSpec,
+    SolverDivergedError,
+    SolverResult,
+    interior_slices,
+)
 from caustica.solvers.kspace import operators as ops
 from caustica.sources import CWSource, ramp_envelope
 
@@ -127,6 +132,36 @@ def cw_tof_periods(
         refs = np.array(list(product(*((0, n - 1) for n in grid.shape))), np.float64) * grid.dx
     dmax = max(float(np.sqrt(((src_pos - r) ** 2).sum(axis=1)).max()) for r in refs)
     return max(1, int(ceil(dmax / medium.c_min / period)))
+
+
+def _guard_finite(peak: float, *, where: str, solver_name: str) -> None:
+    """Stop the run the moment the field stops being a number.
+
+    A diverged k-space run does not crash. inf/NaN propagate through every
+    remaining step, the convergence test never fires (``nan < tol`` is
+    False), the loop runs to its settle cap, and the run exits 0 with a
+    result file full of NaN -- a wrong answer wearing the shape of an
+    answer, which is the one failure mode this library must never have. The
+    first GPU gate session produced exactly that (256^3 rung, 2026-08-22:
+    ``peak nan``, ``exit 0``, ``result.h5`` written, and the gate suite then
+    counted the run as VRAM evidence).
+
+    The peak is already on the host at every call site, so the check costs
+    nothing and fires at the FIRST bad period rather than after the run has
+    burned the remaining ones.
+    """
+    if isfinite(peak):
+        return
+    raise SolverDivergedError(
+        f"solver '{solver_name}' diverged during {where}: the peak pressure is "
+        f"{peak}, so the field is no longer finite. Nothing downstream of this "
+        f"point is a physical result. Usual causes, most common first: a time "
+        f"step the scheme cannot integrate for this medium (check the CFL and "
+        f"points-per-wavelength of the fastest material), a drive amplitude far "
+        f"outside the range float32 can carry, a medium with a non-physical "
+        f"sound speed or density, or a source sitting in or against the PML "
+        f"band, where it is driven and damped at once."
+    )
 
 
 def run_cw_kspace_pstd(
@@ -448,6 +483,9 @@ def run_cw_kspace_pstd(
             n += 1
             xp.maximum(period_peak, xp.abs(p[conv]).max(), out=period_peak)
         peak = float(period_peak)
+        _guard_finite(
+            peak, where=f"settling period {period_idx} (step {n})", solver_name=solver_name
+        )
         periods_done = period_idx
         rel = abs(peak - prev_peak) / max(prev_peak, 1e-9) if prev_peak is not None else None
         last_peak, last_delta = peak, rel
@@ -502,6 +540,10 @@ def run_cw_kspace_pstd(
         n += 1
     for h in harmonics:
         buffers[h] *= xp.complex64(2.0 / rec_steps)
+    # One reduction over the recorded peak: the settle guard above cannot see
+    # a divergence that starts inside the record window itself, and the record
+    # window is exactly what gets written to result.h5.
+    _guard_finite(float(pmax.max()), where=f"the record window (step {n})", solver_name=solver_name)
 
     phasors = {h: b.to_numpy(buffers[h]) for h in harmonics}
     if checkpoint is not None and not checkpoint.keep_on_success:

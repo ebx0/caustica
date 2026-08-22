@@ -31,6 +31,16 @@ class SolverCapabilityError(ValueError):
     """A setup asked a solver for something it declares it cannot do."""
 
 
+class SolverDivergedError(RuntimeError):
+    """The field stopped being a number: the run diverged (inf/NaN).
+
+    Its own exception type because the caller's response differs from every
+    other solver failure: a diverged run is not a bug in the machine and not
+    a resumable interruption -- it is a setup the scheme cannot integrate,
+    and the fix is in the job, not in the retry.
+    """
+
+
 @dataclass(frozen=True)
 class SolverCaps:
     """What a solver supports; checked before compute."""
