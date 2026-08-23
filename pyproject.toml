@@ -5,13 +5,24 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "caustica"
 version = "0.1.0.dev0"
-description = "GPU-accelerated multi-solver acoustic simulation library for HIFU / therapeutic ultrasound (k-space PSTD: Westervelt, linear; KZK planned)"
+description = "GPU-accelerated nonlinear acoustic simulation library — focused/therapeutic ultrasound (HIFU) first (multi-solver: k-space PSTD Westervelt/linear native, k-Wave adapter; stamped, reproducible runs)"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]
-authors = [{ name = "caustica developers" }]
-keywords = ["HIFU", "ultrasound", "acoustics", "simulation", "PSTD", "Westervelt", "k-space"]
+authors = [{ name = "Eren Bulbul", email = "ebulbul@yildiz.edu.tr" }]
+keywords = [
+    "HIFU",
+    "ultrasound",
+    "nonlinear acoustics",
+    "acoustic simulation",
+    "focused ultrasound",
+    "transcranial ultrasound",
+    "therapeutic ultrasound",
+    "PSTD",
+    "Westervelt",
+    "k-space",
+]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
     "Intended Audience :: Science/Research",
