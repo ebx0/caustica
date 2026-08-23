@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="caustica">
+  <title>caustica</title>
+  <!-- A focusing aperture and the point it converges on: the caustic the
+       library is named for. Drawn in white for the Material header bar. -->
+  <g fill="none" stroke="#FFFFFF" stroke-linecap="round">
+    <path d="M17 9 A 26 26 0 0 0 17 55" stroke-width="7"/>
+    <path d="M26 18 A 16 16 0 0 0 26 46" stroke-width="4.2" opacity="0.66"/>
+    <path d="M34 25.5 A 8 8 0 0 0 34 38.5" stroke-width="3.2" opacity="0.42"/>
+  </g>
+  <circle cx="50" cy="32" r="5" fill="#FFFFFF"/>
+</svg>

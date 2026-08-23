@@ -47,5 +47,13 @@ data/
 runs/
 janitor/
 
+# The one .npz that IS committed: three 5 KB label slices cut out of a UWCEM
+# phantom, so `scripts/make_howto.py` can redraw the medium thumbnail without
+# the multi-GB (git-ignored) dataset under data/.
+!docs/assets/howto-phantom.npz
+
+# The rendered documentation site (mkdocs build) — deployed by CI, never committed.
+site/
+
 # Generated at build time by build_stamp.py (fix A1) — never committed.
 src/caustica/_build_info.py

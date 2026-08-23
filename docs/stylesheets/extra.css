@@ -1,0 +1,52 @@
+/* caustica docs theme: the steel blue the how-to-use diagram is drawn in. */
+
+:root {
+  --md-primary-fg-color: #1f4e79;
+  --md-primary-fg-color--light: #2f6699;
+  --md-primary-fg-color--dark: #16395a;
+  --md-accent-fg-color: #2f6699;
+  --md-accent-fg-color--transparent: rgba(47, 102, 153, 0.1);
+}
+
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #7fb2e0;
+  --md-primary-fg-color--light: #9cc6ea;
+  --md-primary-fg-color--dark: #16222f;
+  --md-accent-fg-color: #9cc6ea;
+  --md-accent-fg-color--transparent: rgba(156, 198, 234, 0.1);
+  --md-hue: 214;
+}
+
+/* Light/dark image pairs. Material drives the scheme from its own toggle, not
+   from prefers-color-scheme, so <picture> media queries would ignore it — the
+   #only-light / #only-dark fragment is the theme's own convention. */
+[data-md-color-scheme="default"] img[src$="#only-dark"] {
+  display: none;
+}
+
+[data-md-color-scheme="slate"] img[src$="#only-light"] {
+  display: none;
+}
+
+/* The flow diagram carries its own background; let it run full column width. */
+.howto img {
+  width: 100%;
+  max-width: 940px;
+  border-radius: 8px;
+}
+
+/* Hero: the one-line pitch under the title. */
+.hero-tagline {
+  font-size: 1.15rem;
+  line-height: 1.6;
+  color: var(--md-default-fg-color--light);
+}
+
+/* Feature cards: a touch more air than the stock grid. */
+.md-typeset .grid.cards > ul > li {
+  border-radius: 8px;
+}
+
+.md-typeset .grid.cards > ul > li > hr {
+  margin-block: 0.6em;
+}
