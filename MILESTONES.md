@@ -1103,7 +1103,7 @@ bu harness'in İÇİNE doğar.
       korelasyon/odak/genişlik; beta=0 bit-özdeşlik; Fubini A2/A1 ≥4 istasyon) — HER tolerans
       mevcut fizik testinden miras ve süit bunu kendisi denetliyor (kaynaksız limit = kırmızı).
       Verdict cebri `_verdict.py`'a çıktı, gpu-gates 40 testi DEĞİŞMEDEN yeşil. İlk tam koşu
-      kanıt olarak repoda: `benchmarks/reports/analytic/numpy-20260823-010211/` (PASS, 7.6 s;
+      kanıt olarak repoda: `benchmarks/reports/analytic/numpy-20260823-073910/` (PASS, 7.6 s;
       absorpsiyon %0.334 ve dispersiyon %0.004 — 2026-08-10 raporunu yeniden üretiyor).
       `--size quick` (2.7 s) AYNI kapıları küçük bowl'da koşar, gevşetilmiş değil (testli)
 - [x] Çok-motor karşılaştırma (2026-08-23, `1ee2fd4`): `python -m caustica.validation compare`
