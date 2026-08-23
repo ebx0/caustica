@@ -7,7 +7,7 @@ Notable changes to **caustica**. The format follows
 Nothing has been released yet: `0.1.0` is the first planned release and the
 sections below describe what is on `master` today. The milestone ledger that
 drives this work — including the rule that no box is ticked without measured
-evidence — lives in [`MILESTONES.md`](MILESTONES.md).
+evidence — lives in [`MILESTONES.md`](https://github.com/ebx0/caustica/blob/master/MILESTONES.md).
 
 ## [Unreleased]
 

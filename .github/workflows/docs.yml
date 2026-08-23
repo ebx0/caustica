@@ -3,7 +3,9 @@ name: Docs
 # Deliberately narrow: this workflow exists for the documentation site and must
 # never become a reason the main repository goes red.
 #
-#   * it only runs when documentation actually changes,
+#   * it only runs when the site's inputs actually change -- which now includes
+#     src/, because the API reference is generated from the docstrings there,
+#     and CHANGELOG.md, because the site serves it rather than a copy,
 #   * it never touches the package build or the test suite,
 #   * and it does not publish until Pages is switched on (see `deploy` below),
 #     because actions/deploy-pages fails hard on a repository where Pages is
@@ -11,15 +13,15 @@ name: Docs
 on:
   push:
     branches: [master, main]
-    paths:
+    paths: &docs_inputs
       - "docs/**"
+      - "src/caustica/**"
       - "mkdocs.yml"
+      - "CHANGELOG.md"
+      - "pyproject.toml"
       - ".github/workflows/docs.yml"
   pull_request:
-    paths:
-      - "docs/**"
-      - "mkdocs.yml"
-      - ".github/workflows/docs.yml"
+    paths: *docs_inputs
   workflow_dispatch:
 
 permissions:

@@ -433,6 +433,8 @@ class Study:
         facade's ``"auto"`` — a sweep that prints a progress bar per run is
         the one thing a notebook cell cannot scroll past.
 
+    Notes
+    -----
     A ``BuiltJob`` handed in as ``setup`` is used for its job description
     only; the medium is rebuilt per run, because a variant may change the
     grid it was built on. One code path, at the price of one build.

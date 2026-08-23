@@ -1,5 +1,7 @@
 # Using caustica from Python
 
+This page is the tour. The signature-by-signature reference, generated from the docstrings, is [the API reference](api/index.md); five worked cases are on [examples](examples.md).
+
 The CLI and the Python API are the same machinery behind two doors: the same
 `build_job`, the same planner, the same gates, the same exit codes. This page is
 the library side of it.

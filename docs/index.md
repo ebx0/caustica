@@ -14,8 +14,8 @@ Pure Python — NumPy on the CPU, CuPy on the GPU. No compiler, no precompiled b
 and the same four commands on a laptop and in a Colab cell.
 </p>
 
-[Get started](#quickstart){ .md-button .md-button--primary }
-[Write a job](job_reference.md){ .md-button }
+[Get started](install.md){ .md-button .md-button--primary }
+[Examples](examples.md){ .md-button }
 [:octicons-mark-github-16: GitHub](https://github.com/ebx0/caustica){ .md-button }
 
 </div>
@@ -78,6 +78,11 @@ No checkout, no external data — the example job ships inside the wheel.
     carried on `SimulationError.exit_code`.
 
     [:octicons-arrow-right-24: The rest of the Python API](library.md)
+
+Five worked examples — a focused bowl against O'Neil, nonlinear steepening against Fubini,
+focusing through bone, a steered 128-element array, and a sonication carried through to
+thermal dose — are on [the examples page](examples.md). Every figure and number there came
+back from a run, not from memory.
 
 ## How it fits together
 
@@ -189,9 +194,11 @@ against k-Wave on identical grids, media and sources:
 
 ## Where to go next
 
+- **[Examples](examples.md)** — five worked cases, each one solved to produce its own figure.
 - **[Conventions that bite](conventions.md)** — the five assumptions that make a result
   *silently* wrong if you get them backwards. Read this before you trust a number.
-- **[Using caustica from Python](library.md)** — `simulate()`, the geometry DSL, volume
-  media, your own transducer, the planner.
-- **[Anatomical phantoms](uwcem.md)** — segmented volumes resampled onto your grid.
-- **[Engineering log](devlog.md)** — milestone by milestone, including what broke.
+- **[API reference](api/index.md)** — generated from the docstrings, so it cannot drift.
+- **[Performance](benchmarks.md)** — measured per-step cost, and what is honestly not
+  measured yet.
+- **[Changelog](changelog.md)** — what has been built, in the order it was built.
+- **[Engineering log](devlog.md)** — the long version, including what broke.

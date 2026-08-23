@@ -37,3 +37,5 @@ measured on the **CPU** path.
 [MILESTONES.md](https://github.com/ebx0/caustica/blob/master/MILESTONES.md) is
 the honest ledger: each milestone carries its acceptance criteria and whether it
 is met.
+
+Two of these gates are drawn, at the scale they are actually run, on the [examples page](examples.md): the focused bowl against O'Neil, and nonlinear steepening against Fubini.
