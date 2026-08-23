@@ -254,6 +254,33 @@ def test_job_focus_in_water_refused_and_escapable(tmp_path):
     assert build_job(job, base_dir=base, with_medium=False).grid.shape == (30, 25, 26)
 
 
+def test_label_refusals_fire_before_the_medium_is_built(tmp_path, monkeypatch):
+    """The speed contract (M10c): every cheap refusal runs BEFORE the GBs.
+
+    On a full-size volume ``to_medium()`` materializes four property arrays;
+    a job whose focus sits in the coupling water must be refused without
+    paying for a single one of them. The ordering was verified by reading
+    the code once, and nothing has held it in place since.
+    """
+    from caustica.config.job import JobError, build_job, load_job
+
+    labels = np.zeros((30, 25, 26), dtype=np.int32)
+    labels[:, :, 24:] = 2  # the bowl's natural focus (voxel 21) is in water
+    mv = write_medium_volume(
+        tmp_path / "deepwater.npz", dx=1e-4, labels=labels, materials=_tiny_db()
+    )
+    p = tmp_path / "bad.json"
+    p.write_text(json.dumps(_mv_job(mv.name)), encoding="utf-8")
+    job, base = load_job(p)
+
+    def never_built(*args, **kwargs):
+        raise AssertionError("the medium was materialized before the label refusal")
+
+    monkeypatch.setattr(MediumVolume, "to_medium", never_built)
+    with pytest.raises(JobError, match="water"):
+        build_job(job, base_dir=base)  # with_medium=True: the expensive path
+
+
 def test_job_f0_guard_generalizes(tmp_path):
     from caustica.config.job import JobError, build_job, load_job
 

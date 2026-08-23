@@ -181,11 +181,48 @@ def load_field(path: str | Path, name: str) -> np.ndarray:
         return restore(ds[:], ds.attrs["scale"])
 
 
-def load_result(path: str | Path) -> SolverResult:
+def _geometry(hf: h5py.File) -> dict:
+    """The file's self-description: where the fields sit and what drove them.
+
+    Parsed HERE, beside the :func:`save_result` that writes these attrs.
+    ``caustica report`` used to keep its own copy of this parsing —
+    and open the file a SECOND time to run it — which is exactly how a
+    schema and its reader drift apart (janitor ticket 02).
+
+    Missing optional stamps degrade the way a reader needs them to: a
+    pre-M10d file has no ``apex_vox``, so positions fall back to the grid
+    origin and ``apex_known`` says so instead of the caller guessing.
+    """
+    a = hf.attrs
+    return {
+        "dx": float(a["dx_m"]),
+        "grid_shape": tuple(int(v) for v in a["grid_shape"]),
+        "pml_vox": int(a["pml_vox"]),
+        "apex_vox": tuple(int(v) for v in a["apex_vox"]) if "apex_vox" in a else (0, 0, 0),
+        "focus_vox": tuple(int(v) for v in a["focus_vox"]) if "focus_vox" in a else None,
+        "apex_known": "apex_vox" in a,
+        "job_name": str(a.get("job_name", "")),
+        "solver": str(a.get("solver", "")),
+        "backend": str(a.get("backend", "")),
+        "git_commit": str(a.get("git_commit", "")),
+        "f0_hz": float(a["f0_hz"]),
+        "amplitude_pa": float(hf["input"].attrs["amplitude_pa"]),
+        "source_indices": np.asarray(hf["input/source_indices"]),
+    }
+
+
+def load_result(
+    path: str | Path, *, with_geometry: bool = False
+) -> SolverResult | tuple[SolverResult, dict]:
     """Reconstruct a :class:`SolverResult` from a ``caustica-result/1`` file.
 
     Values differ from the originals by at most the recorded quantization
     error (``<= max_norm_err * |peak|`` per field, 0 when stored float32).
+
+    ``with_geometry=True`` returns ``(result, geometry)`` — the fields AND
+    the self-description (dx, grid shape, PML, apex/focus voxels, drive,
+    source voxels, provenance) from ONE open, which is all a report needs to
+    place the numbers in space.
     """
     path = Path(path)
     with h5py.File(path, "r") as hf:
@@ -210,7 +247,7 @@ def load_result(path: str | Path) -> SolverResult:
             "loaded_from": str(path),
             "caustica_version": str(hf.attrs["caustica_version"]),
         }
-        return SolverResult(
+        result = SolverResult(
             phasor=phasors[1],
             p_max=p_max,
             region=region,
@@ -225,6 +262,7 @@ def load_result(path: str | Path) -> SolverResult:
             phasors=phasors,
             meta=meta,
         )
+        return (result, _geometry(hf)) if with_geometry else result
 
 
 def validate_result_file(path: str | Path) -> bool:
