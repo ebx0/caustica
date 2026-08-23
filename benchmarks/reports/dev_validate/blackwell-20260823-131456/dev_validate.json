@@ -1,0 +1,545 @@
+{
+  "format": "caustica-dev-validate/1",
+  "generated": "2026-08-23T13:18:12+00:00",
+  "profile": "colab",
+  "caustica": "0.1.0.dev0",
+  "git_commit": "114b3f1c197ca0d38bee5fd032bbbfc04768ce05",
+  "python": "3.13.15",
+  "argv": [
+    "--profile",
+    "colab"
+  ],
+  "cwd": "/content",
+  "report_dir": "dev_validate_reports/colab-20260823-131456",
+  "environment": {
+    "caustica": "0.1.0.dev0",
+    "python": "3.13.15",
+    "platform": "Linux-6.6.122+-x86_64-with-glibc2.35",
+    "numpy": "2.1.3",
+    "scipy": "1.16.3",
+    "pydantic": "2.13.4",
+    "h5py": "3.16.0",
+    "resolved_backend": "cupy",
+    "gpu_name": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+    "driver_version": 13000,
+    "cuda_runtime_version": 12090,
+    "cupy_version": "14.0.1",
+    "vram_total_gib": 94.971,
+    "vram_free_gib": 91.766
+  },
+  "elapsed_s": 195.9,
+  "stages": [
+    {
+      "stage": "U1",
+      "title": "256^3 NaN discrimination probe (5 fresh processes)",
+      "verdict": "INFO",
+      "numbers": "bare256=NaN, cal256=NaN, warm256=NaN, apex256=NaN, bare400=clean",
+      "note": "surviving: shape_itself",
+      "elapsed_s": 45.3,
+      "data": {
+        "cases": [
+          {
+            "case": "bare256",
+            "side": 256,
+            "apex_frac": "0.06",
+            "why": "256^3 alone in a virgin process",
+            "exit": 4,
+            "child_returncode": 4,
+            "period1_peak": "190.657 MPa",
+            "final_peak_mpa": null,
+            "diverged": true,
+            "signal": "exit4+error.json",
+            "error_class": "SolverDivergedError",
+            "error_message": "SolverDivergedError: solver 'westervelt' diverged during settling period 2 (step 40): the peak pressure is nan, so the field is no longer finite. Nothing downstream of this point is a physical result. Usual causes, most common first: a time step the scheme cannot integrate for this medium (check the",
+            "elapsed_s": 4.7,
+            "saw_marker": true,
+            "stderr_tail": ""
+          },
+          {
+            "case": "cal256",
+            "side": 256,
+            "apex_frac": "0.06",
+            "why": "planner.calibrate() first, same process",
+            "exit": 4,
+            "child_returncode": 4,
+            "period1_peak": "190.657 MPa",
+            "final_peak_mpa": null,
+            "diverged": true,
+            "signal": "exit4+error.json",
+            "error_class": "SolverDivergedError",
+            "error_message": "SolverDivergedError: solver 'westervelt' diverged during settling period 2 (step 40): the peak pressure is nan, so the field is no longer finite. Nothing downstream of this point is a physical result. Usual causes, most common first: a time step the scheme cannot integrate for this medium (check the",
+            "elapsed_s": 3.7,
+            "saw_marker": true,
+            "stderr_tail": ""
+          },
+          {
+            "case": "warm256",
+            "side": 256,
+            "apex_frac": "0.06",
+            "why": "a 400^3 solve first, same process",
+            "exit": 4,
+            "child_returncode": 4,
+            "period1_peak": "44.2 kPa",
+            "final_peak_mpa": null,
+            "diverged": true,
+            "signal": "exit4+error.json",
+            "error_class": "SolverDivergedError",
+            "error_message": "SolverDivergedError: solver 'westervelt' diverged during settling period 2 (step 40): the peak pressure is nan, so the field is no longer finite. Nothing downstream of this point is a physical result. Usual causes, most common first: a time step the scheme cannot integrate for this medium (check the",
+            "elapsed_s": 20.4,
+            "saw_marker": true,
+            "stderr_tail": ""
+          },
+          {
+            "case": "apex256",
+            "side": 256,
+            "apex_frac": "0.15",
+            "why": "256^3 with the apex clear of the PML",
+            "exit": 4,
+            "child_returncode": 4,
+            "period1_peak": "189.347 MPa",
+            "final_peak_mpa": null,
+            "diverged": true,
+            "signal": "exit4+error.json",
+            "error_class": "SolverDivergedError",
+            "error_message": "SolverDivergedError: solver 'westervelt' diverged during settling period 2 (step 40): the peak pressure is nan, so the field is no longer finite. Nothing downstream of this point is a physical result. Usual causes, most common first: a time step the scheme cannot integrate for this medium (check the",
+            "elapsed_s": 1.2,
+            "saw_marker": true,
+            "stderr_tail": ""
+          },
+          {
+            "case": "bare400",
+            "side": 400,
+            "apex_frac": "0.06",
+            "why": "control: a larger shape, alone",
+            "exit": 0,
+            "child_returncode": 0,
+            "period1_peak": "44.2 kPa",
+            "final_peak_mpa": "2.472",
+            "diverged": false,
+            "signal": "clean",
+            "error_class": null,
+            "error_message": "",
+            "elapsed_s": 15.3,
+            "saw_marker": true,
+            "stderr_tail": ""
+          }
+        ],
+        "interpretation": {
+          "surviving": "shape_itself",
+          "hypotheses": {
+            "not_reproduced": {
+              "claim": "the 256^3 rung does not diverge on this device/commit at all",
+              "verdict": "refuted"
+            },
+            "not_shape_specific": {
+              "claim": "the rung scene diverges at 400^3 too — this is not about 256^3",
+              "verdict": "refuted"
+            },
+            "geometry_x_backend": {
+              "claim": "the default apex (0.06 x extent) sits in/against the PML; moving it to 0.15 x extent fixes it",
+              "verdict": "refuted"
+            },
+            "process_state": {
+              "claim": "whether 256^3 diverges depends on what ran before it IN THE SAME process (calibration / a previous solve)",
+              "verdict": "refuted"
+            },
+            "shape_itself": {
+              "claim": "the 256^3 shape diverges however it is reached, and 400^3 does not",
+              "verdict": "supported"
+            }
+          }
+        },
+        "table": [
+          "",
+          "================================================================================================",
+          "U1 - 256^3 NaN discrimination probe (one FRESH process per case)",
+          "================================================================================================",
+          "case       side   apex  exit    period-1 peak  final MPa    NaN signal                        s",
+          "-----------------------------------------------------------------------------------------------",
+          "bare256     256   0.06     4      190.657 MPa         --    NaN exit4+error.json              5",
+          "cal256      256   0.06     4      190.657 MPa         --    NaN exit4+error.json              4",
+          "warm256     256   0.06     4         44.2 kPa         --    NaN exit4+error.json             20",
+          "apex256     256   0.15     4      189.347 MPa         --    NaN exit4+error.json              1",
+          "bare400     400   0.06     0         44.2 kPa      2.472  clean clean                        15",
+          "-----------------------------------------------------------------------------------------------",
+          "surviving hypothesis: shape_itself",
+          "  refuted       not_reproduced: the 256^3 rung does not diverge on this device/commit at all",
+          "  refuted       not_shape_specific: the rung scene diverges at 400^3 too — this is not about 256^3",
+          "  refuted       geometry_x_backend: the default apex (0.06 x extent) sits in/against the PML; moving it to 0.15 x extent fixes it",
+          "  refuted       process_state: whether 256^3 diverges depends on what ran before it IN THE SAME process (calibration / a previous solve)",
+          "  supported     shape_itself: the 256^3 shape diverges however it is reached, and 400^3 does not",
+          "================================================================================================"
+        ]
+      }
+    },
+    {
+      "stage": "U2",
+      "title": "gpu-gates rerun + report parse",
+      "verdict": "FAIL",
+      "numbers": "exit 4; overall FAIL; 5 rungs; worst |VRAM dev| 0.3%",
+      "note": "gates: M7.parity=PASS, M7.fullsize=PASS, M8.vram=PASS, M8.time=FAIL, M8.oom=PASS; DIVERGED rungs (exit 4): vram-2gib-256",
+      "elapsed_s": 147.3,
+      "data": {
+        "exit_code": 4,
+        "report": "benchmarks/reports/gpu_gates/nvidia-rtx-pro-6000-blackwell-server-edition-20260823-131542/gpu_gates.json",
+        "overall": "FAIL",
+        "device": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+        "gpu_key": "unknown:NVIDIA RTX PRO 6000 Blackwell Server Edition",
+        "free_vram_gib_at_start": 94.426,
+        "rungs": [
+          {
+            "name": "vram-2gib-256",
+            "shape": [
+              256,
+              256,
+              256
+            ],
+            "exit_code": 4,
+            "expect_fit": true,
+            "vram_plan_gib": 1.729,
+            "vram_actual_gib": null,
+            "vram_dev_pct": null,
+            "t_plan_s": 1.8,
+            "t_actual_s": null,
+            "t_dev_pct": null,
+            "plan_source": "calibrated",
+            "warmup_s": null,
+            "error_class": "SolverDivergedError"
+          },
+          {
+            "name": "vram-8gib-400",
+            "shape": [
+              400,
+              400,
+              400
+            ],
+            "exit_code": 0,
+            "expect_fit": true,
+            "vram_plan_gib": 6.591,
+            "vram_actual_gib": 6.572,
+            "vram_dev_pct": -0.2882718859050239,
+            "t_plan_s": 9.1,
+            "t_actual_s": 13.66,
+            "t_dev_pct": 50.109890109890124,
+            "plan_source": "calibrated",
+            "warmup_s": 4.389,
+            "error_class": null
+          },
+          {
+            "name": "vram-14gib-512",
+            "shape": [
+              512,
+              512,
+              512
+            ],
+            "exit_code": 0,
+            "expect_fit": true,
+            "vram_plan_gib": 13.818,
+            "vram_actual_gib": 13.775,
+            "vram_dev_pct": -0.3111883051092724,
+            "t_plan_s": 22.1,
+            "t_actual_s": 34.97,
+            "t_dev_pct": 58.235294117647044,
+            "plan_source": "calibrated",
+            "warmup_s": 12.838,
+            "error_class": null
+          },
+          {
+            "name": "vram-28gib-640",
+            "shape": [
+              640,
+              640,
+              640
+            ],
+            "exit_code": 0,
+            "expect_fit": true,
+            "vram_plan_gib": 26.981,
+            "vram_actual_gib": 26.895,
+            "vram_dev_pct": -0.3187428190208001,
+            "t_plan_s": 50.8,
+            "t_actual_s": 83.93,
+            "t_dev_pct": 65.21653543307089,
+            "plan_source": "calibrated",
+            "warmup_s": 32.375,
+            "error_class": null
+          },
+          {
+            "name": "oom-972",
+            "shape": [
+              972,
+              972,
+              972
+            ],
+            "exit_code": 3,
+            "expect_fit": false,
+            "vram_plan_gib": 94.486,
+            "vram_actual_gib": null,
+            "vram_dev_pct": null,
+            "t_plan_s": 245.7,
+            "t_actual_s": null,
+            "t_dev_pct": null,
+            "plan_source": "calibrated",
+            "warmup_s": null,
+            "error_class": "VramRefusal"
+          }
+        ],
+        "gates": {
+          "M7.parity": "PASS",
+          "M7.fullsize": "PASS",
+          "M8.vram": "PASS",
+          "M8.time": "FAIL",
+          "M8.oom": "PASS"
+        },
+        "m8_time_checks": [
+          {
+            "name": "vram-2gib-256: wall time",
+            "verdict": "SKIP",
+            "detail": "not measured"
+          },
+          {
+            "name": "vram-8gib-400: wall time",
+            "verdict": "FAIL",
+            "detail": "predicted 9.1 s vs actual 13.66 s (-33.4%, tolerance +/-25%)"
+          },
+          {
+            "name": "vram-14gib-512: wall time",
+            "verdict": "FAIL",
+            "detail": "predicted 22.1 s vs actual 34.97 s (-36.8%, tolerance +/-25%)"
+          },
+          {
+            "name": "vram-28gib-640: wall time",
+            "verdict": "FAIL",
+            "detail": "predicted 50.8 s vs actual 83.93 s (-39.5%, tolerance +/-25%)"
+          }
+        ],
+        "diverged_rungs": [
+          "vram-2gib-256"
+        ],
+        "notes": [
+          "recorded 3 warmup sample(s) into the calibration for NVIDIA RTX PRO 6000 Blackwell Server Edition; it applies to the NEXT plan, not to the numbers graded above"
+        ]
+      }
+    },
+    {
+      "stage": "U3",
+      "title": "calibration quality + step-time spot check",
+      "verdict": "FAIL",
+      "numbers": "NVIDIA RTX PRO 6000 Blackwell Server Edition; fit throughput-anchored residual 0.705; 320^3 t_step dev -9.7%",
+      "note": "failed: fit_max_rel_residual < 0.10",
+      "elapsed_s": 0.9,
+      "data": {
+        "device": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+        "path": "/root/.caustica/calibration.json",
+        "entry": {
+          "a": 0.0,
+          "b": 3.695926690488404e-10,
+          "fit_mode": "throughput-anchored",
+          "fit_max_rel_residual": 0.7045755942641264,
+          "p_max_probe": 80621568,
+          "shapes": [
+            "216x216x216",
+            "320x320x320",
+            "432x432x432"
+          ],
+          "warmup_s": 32.375,
+          "warmup_source": "measured",
+          "warmup_context_s": 0.0,
+          "warmup_per_elem_s": 1.4264024314884076e-07,
+          "backend": "cupy",
+          "nonlinear": false,
+          "calibrated_at": "2026-08-23T13:15:44+00:00"
+        },
+        "spot_check": {
+          "shape": [
+            320,
+            320,
+            320
+          ],
+          "free_bytes": 101388779520,
+          "estimate_source": "calibrated",
+          "t_step_predicted_s": 0.012110812579392402,
+          "t_step_measured_s": 0.010937259999991511,
+          "dev_pct": -9.690122538910336,
+          "p_elems": 32768000
+        },
+        "checks": [
+          {
+            "name": "probe shapes recorded",
+            "ok": true,
+            "detail": "['216x216x216', '320x320x320', '432x432x432']"
+          },
+          {
+            "name": ">=2 probe shapes",
+            "ok": true,
+            "detail": "['216x216x216', '320x320x320', '432x432x432']"
+          },
+          {
+            "name": "fit_mode recorded",
+            "ok": true,
+            "detail": "throughput-anchored"
+          },
+          {
+            "name": "fit_max_rel_residual < 0.10",
+            "ok": false,
+            "detail": "0.705"
+          },
+          {
+            "name": "warmup_context_s present",
+            "ok": true,
+            "detail": "0"
+          },
+          {
+            "name": "warmup_per_elem_s present",
+            "ok": true,
+            "detail": "1.426e-07"
+          },
+          {
+            "name": "spot-check plan is 'calibrated'",
+            "ok": true,
+            "detail": "calibrated"
+          },
+          {
+            "name": "|t_step deviation| <= 25%",
+            "ok": true,
+            "detail": "-9.7%"
+          }
+        ]
+      }
+    },
+    {
+      "stage": "U4",
+      "title": "unknown-GPU path through spec_for_device",
+      "verdict": "PASS",
+      "numbers": "NVIDIA RTX PRO 6000 Blackwell Server Edition; branch unknown; key unknown:NVIDIA RTX PRO 6000 Blackwell Server Edition; vram 95.0/95.0 GiB",
+      "note": "token lookup alone does NOT find it — device_name is load-bearing here",
+      "elapsed_s": 0.0,
+      "data": {
+        "device": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+        "branch": "unknown",
+        "total_bytes": 101974081536,
+        "spec": {
+          "key": "unknown:NVIDIA RTX PRO 6000 Blackwell Server Edition",
+          "vram_gib": 94.97076416015625,
+          "mem_bw_gbs": 1555,
+          "fp32_tflops": 19.5,
+          "source": "device",
+          "device_name": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+          "notes": "not in gpu_db.json; VRAM read from the device (NVIDIA RTX PRO 6000 Blackwell Server Edition)"
+        },
+        "calibration_found_by_device_name": true,
+        "calibration_found_by_key_alone": false,
+        "checks": [
+          {
+            "name": "device_name attached",
+            "ok": true,
+            "detail": "NVIDIA RTX PRO 6000 Blackwell Server Edition"
+          },
+          {
+            "name": "key starts with 'unknown:'",
+            "ok": true,
+            "detail": "unknown:NVIDIA RTX PRO 6000 Blackwell Server Edition"
+          },
+          {
+            "name": "key is not a gpu_db row",
+            "ok": true,
+            "detail": "unknown:NVIDIA RTX PRO 6000 Blackwell Server Edition"
+          },
+          {
+            "name": "vram matches the card",
+            "ok": true,
+            "detail": "94.97 vs 94.97"
+          },
+          {
+            "name": "source == 'device'",
+            "ok": true,
+            "detail": "device"
+          },
+          {
+            "name": "find_calibration_for(device_name=...) reaches the entry",
+            "ok": true,
+            "detail": "found"
+          }
+        ]
+      }
+    },
+    {
+      "stage": "U5",
+      "title": "two-term warmup model vs a real run",
+      "verdict": "WARN",
+      "numbers": "192^3, P=7,077,888; predicted 1.01 s, actual 0.50 s, ratio 0.50",
+      "note": "failed: prediction within +/-40% (model check only — not a release gate)",
+      "elapsed_s": 1.7,
+      "data": {
+        "device": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+        "side": 192,
+        "p_elems": 7077888,
+        "warmup_context_s": 0.0,
+        "warmup_per_elem_s": 1.4264024314884076e-07,
+        "predicted_s": 1.0095916653002621,
+        "actual_s": 0.501,
+        "ratio": 0.49624022980716453,
+        "exit_code": 0,
+        "elapsed_s": 1.7,
+        "checks": [
+          {
+            "name": "run completed",
+            "ok": true,
+            "detail": "exit 0"
+          },
+          {
+            "name": "run_meta carries a warmup",
+            "ok": true,
+            "detail": "0.501"
+          },
+          {
+            "name": "prediction within +/-40%",
+            "ok": false,
+            "detail": "0.50"
+          }
+        ]
+      }
+    },
+    {
+      "stage": "U6",
+      "title": "divergence guard on cupy",
+      "verdict": "PASS",
+      "numbers": "backend cupy; exit 4; error_class SolverDivergedError; result.h5 False",
+      "note": "",
+      "elapsed_s": 0.8,
+      "data": {
+        "backend": "cupy",
+        "exit_code": 4,
+        "child_returncode": 4,
+        "error": {
+          "stage": "solve",
+          "error_class": "SolverDivergedError",
+          "exit_code": 4,
+          "message": "SolverDivergedError: solver 'linear' diverged during settling period 1 (step 6): the peak pressure is nan, so the field is no longer finite. Nothing downstream of this point is a physical result. Usual causes, most common first: a time step the scheme cannot integrate for this medium (check the CFL and points-per-wavelength of the fastest material), a drive amplitude far outside the range float32 can carry, a medium with a non-physical sound speed or density, or a source sitting in or against the PML band, where it is driven and damped at once."
+        },
+        "result_h5_exists": false,
+        "checks": [
+          {
+            "name": "exit==4",
+            "ok": true,
+            "detail": "got 4"
+          },
+          {
+            "name": "error.json written",
+            "ok": true,
+            "detail": "['advice', 'error_class', 'exit_code', 'format']"
+          },
+          {
+            "name": "error_class",
+            "ok": true,
+            "detail": "SolverDivergedError"
+          },
+          {
+            "name": "no result.h5",
+            "ok": true,
+            "detail": "exists=False"
+          }
+        ]
+      }
+    }
+  ]
+}

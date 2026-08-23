@@ -260,8 +260,10 @@ yerelde ve uwcem-phantom tarafında yaşar).
   - Kurcalanan dosya (format, türetilmiş geometri, voxel sayısı, apex, geçiş payı) beş ayrı
     yerden yakalanıyor (testli); tam suite + 11 setup testi yeşil
 
-### M7 — CuPy backend (CUDA) `[ ]` — ikinci Colab oturumu gerektirir
-- [ ] ElementwiseKernel'ların portu; aynı çözücü kodu iki backend'de; fp32 yolu
+### M7 — CuPy backend (CUDA) `[x]` (2026-08-23 — üç GPU oturumuyla KAPANDI)
+- [x] Aynı çözücü kodu iki backend'de; fp32 yolu — üç cihaz oturumunda kanıtlı (A100 +
+      Blackwell ×2). NOT: 256³ cupy sapması AYRI izlenen açık kusur (aşağıda, M8 notunda);
+      M7'nin dört ölçütü 256³'e bağlı değil ve dördü de ölçüldü
 - **Ölçüm protokolü HAZIR (2026-08-23):** `python -m caustica.validation gpu-gates` tek komutta
   kalibrasyon → VRAM merdiveni → OOM reddi → numpy/cupy paritesi → damgalı MD+JSON rapor
   (`benchmarks/reports/gpu_gates/<gpu>-<tarih>/`). GPU yoksa eyleme geçirilebilir mesajla temiz
@@ -269,7 +271,7 @@ yerelde ve uwcem-phantom tarafında yaşar).
   parite ölçüm noktası CPU'da 36 testle çivili (`tests/test_validation_gpu_gates.py`).
   **Aşağıdaki kutular yine de `[ ]`: sayılar cihazda ölçülmeden işaretlenmez.**
 - Başarı kriterleri:
-  - [ ] numpy↔cupy parite: mini 3D senaryoda fazor/p_max rel fark < 1e-5 (fp32 toleransı
+  - [x] numpy↔cupy parite: mini 3D senaryoda fazor/p_max rel fark < 1e-5 (fp32 toleransı
         belgelenir) — süitte `M7.parity` kapısı. **Ölçüm noktası düzeltildi (operatör ölçümü,
         2026-08-23):** kapı BELLEKTEKİ fp32 alanlar üzerinden ölçülür, `result.h5` round-trip'i
         üzerinden DEĞİL. İlk oturumun dosyası yerel CPU koşusuyla relL2 3.6e-5 / relL∞ 4.883e-4
@@ -278,7 +280,7 @@ yerelde ve uwcem-phantom tarafında yaşar).
         ALTINDA uyuşuyor; 1e-5 kapısını float16 depolamaya bakarak kurmak kusursuz bir çözücüye
         YANLIŞ FAIL verirdi. Depolama tabanı raporda ayrı başlıkta (`stored_float16_reference`,
         bilgi amaçlı, kapıya girmez)
-  - [ ] **EN AZ İKİ FARKLI MİMARİDE** tam boy (dx=0.30, 512³ FFT sınıfı) koşu OOM'suz
+  - [x] **EN AZ İKİ FARKLI MİMARİDE** tam boy (dx=0.30, 512³ FFT sınıfı) koşu OOM'suz
         tamamlanır — süitte `M7.fullsize` kapısı; merdivenin 14 GiB basamağı tam olarak
         512³/dx=0.30. **Ölçüt değişti (kullanıcı kararı, 2026-08-23):** eski metin "T4 VE
         A100" diyordu; elde A100-SXM4-40GB (Ampere) ve RTX PRO 6000 Blackwell var, T4 yok.
@@ -290,26 +292,45 @@ yerelde ve uwcem-phantom tarafında yaşar).
         **Bu ölçütün hangi yarısı makine-kontrollü:** süit TEK cihazda koşar, dolayısıyla
         `M7.fullsize` kapısı "bu cihazda 512³ tamamlandı"yı kanıtlar; "en az iki mimari"
         şartı iki ayrı rapor klasörü karşılaştırılarak KAPATILIR (operatör işi, kanıt =
-        `benchmarks/reports/gpu_gates/` altındaki iki damgalı rapor)
-  - [ ] Adım süresi ölçülür ve `benchmarks/`e damgalanır (baseline; M19 bunu referans alır) —
-        süit `step_time_baseline` bölümünü yazar; ısınma AYRIŞTIRILMIŞ (`t_step_steady_s`)
+        `benchmarks/reports/gpu_gates/` altındaki iki damgalı rapor).
+        **KAPANDI (2026-08-23, oturum #3):** A100 (Ampere, oturum #1 arşivi) + Blackwell
+        (`benchmarks/reports/dev_validate/blackwell-20260823-131456/` U2: 512³ exit 0,
+        34.97 s) — iki mimari; 400³/512³/640³ alanları cihazlar arası rakam-rakam aynı
+  - [x] Adım süresi ölçülür ve `benchmarks/`e damgalanır (baseline; M19 bunu referans alır) —
+        süit `step_time_baseline` bölümünü yazar; ısınma AYRIŞTIRILMIŞ (`t_step_steady_s`).
+        Baseline repoda: A100 (oturum #1 arşivi) + Blackwell oturum #3 — kararlı adım
+        25.75/52.7/103 ms @ 400³/512³/640³ (`dev_validate/blackwell-20260823-131456/`)
   - [x] GPU yokken testler otomatik SKIP (CI kırılmaz) — süit de dahil:
         `test_the_real_cli_skips_cleanly_on_a_machine_without_a_gpu`
 
-### M8 — Planner v1 (süre + VRAM tahmini) `[~]` — yerel yarısı tamam (2026-08-11), Colab kapıları açık
+### M8 — Planner v1 (süre + VRAM tahmini) `[~]` — VRAM+OOM cihazda kapandı (2026-08-23); TEK açık kapı M8.time
 - [x] Statik VRAM modeli (tampon dökümü + cuFFT workspace payı + %15 marj); süre modeli a·N·logN + b·N; `gpu_db.json` (T4/L4/V100/A100/H100); cihazda kalibrasyon (~20 adım) → `~/.caustica/calibration.json`; `planner.estimate(gpu=...)` + `planner.compare(...)` — `src/caustica/planner/`, 11 test (`tests/test_planner.py`)
 - Başarı kriterleri:
-  - [ ] VRAM tahmini, ölçülen mempool tepe değerinin ±%10'u içinde (≥2 farklı grid
+  - [x] VRAM tahmini, ölçülen mempool tepe değerinin ±%10'u içinde (≥2 farklı grid
         boyutunda) — süitte `M8.vram`: merdiven ≥2 basamak üretir ve tek iyi ölçüm PASS
-        saydırmaz (`test_one_measurement_is_not_two`). **Ölçümün tanımı değişti (kullanıcı
+        saydırmaz (`test_one_measurement_is_not_two`).
+        **KAPANDI (2026-08-23, oturum #3, F2 sonrası):** −%0.29 / −%0.31 / −%0.32 @
+        400³/512³/640³ — üç boy, ±%10 ölçütünün 30 kat içinde
+        (`dev_validate/blackwell-20260823-131456/` U2). **Ölçümün tanımı değişti (kullanıcı
         kararı, 2026-08-23):** "mempool tepesi" = **o basamağın KENDİ sürecinin** tepesi.
         cupy havuzu süreç genelinde ve monoton olduğu için tek süreçte koşan merdiven, her
         basamağa bir öncekinin tuttuğu belleği ekliyordu (1.729+6.591 → ölçülen 8.096;
         8.096+13.818 → ölçülen 21.369) ve planner −%2.0 → −%18.6 → −%35.3 sapıyor gibi
         görünüyordu. Sapma yoktu, ölçüm kirliydi. Her basamak artık kendi sürecinde koşuyor
         (F2) — kullanıcının kendi koşusu da zaten budur
-  - [ ] Kalibrasyon SONRASI süre tahmini gerçekleşenin ±%25'i içinde (aynı cihaz, ≥2 senaryo) — **Colab kapısı** (mekanik yerelde testli: cpu kalibrasyonu → fit → estimate zinciri); süitte `M8.time`: süit kendi `planner.calibrate()`ini koşarak "kalibrasyon sonrası" şartını ÜRETİR, varsaymaz
-  - [ ] OOM reddi cihazda kanıtlanır: merdivenin bir üstü (cihaza SIĞMAYAN en küçük şekil) çıkış 3 ile reddedilir ve öneri metni rapora kanıt olarak girer — süitte `M8.oom` (**ikinci Colab oturumu**)
+  - [ ] Kalibrasyon SONRASI süre tahmini gerçekleşenin ±%25'i içinde (aynı cihaz, ≥2 senaryo)
+        — süitte `M8.time`: süit kendi `planner.calibrate()`ini koşar. **AÇIK KALAN TEK KAPI.**
+        Oturum #3 (Blackwell): −%33.4/−%36.8/−%39.5 FAIL — ama AYRIŞTIRMASI yol gösterdi:
+        ısınma çıkarılınca kararlı adım maliyeti tahminleri yalnız −%6…−%9 sapıyor; kaçıran
+        yarı ISINMA (plan probun 0.2–2.3 s'ini kullandı, gerçek koşular 4.4/12.8/32.4 s
+        ödedi; Blackwell'de ısınma P'de süperlineer — doğrusal iki-terim onu da tutamaz,
+        U5 192³'te 2× fazla tahmin ölçtü). Düzeltme yolda: t_step VE ısınma için global
+        form yerine örnekler-arası log-log interpolasyon + leave-one-out dürüstlük ölçüsü;
+        dördüncü oturum bu kapıyı ölçer
+  - [x] OOM reddi cihazda kanıtlanır: merdivenin bir üstü (cihaza SIĞMAYAN en küçük şekil)
+        çıkış 3 ile reddedilir ve öneri metni rapora kanıt olarak girer — süitte `M8.oom`.
+        **KAPANDI (2026-08-23):** A100'de 750³ (43.4 GiB) ve Blackwell'de 972³ (94.5 GiB)
+        exit 3 + öneri metniyle reddedildi (oturum #1 arşivi + oturum #3 kanıtı)
   - [x] Tahmin kaynağı raporda etiketli: `db` | `calibrated` | `measured` (testli; cpu kalibrasyonu GPU anahtarıyla asla eşleşmez)
   - [x] OOM öngörüsünde eyleme geçirilebilir öneri metni (dx büyüt ×m hesaplı / AOI küçült / linear'a geç / daha büyük cihaz) — testli
 - **Süre modeli düzeltildi (fix A2, 2026-08-23):** `t_expected = warmup + steps·t_step`. İlk Colab
