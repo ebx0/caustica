@@ -49,6 +49,8 @@ from __future__ import annotations
 import json
 import math
 import re
+import subprocess
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -515,32 +517,21 @@ def _norm(text: str) -> str:
 
 
 def gpu_key_for(device_name: str, total_gib: float | None = None) -> str:
-    """Best ``gpu_db.json`` key for a CUDA device name.
+    """Best ``gpu_db.json`` key for a CUDA device name, or ``unknown:<name>``.
 
     The suite configures itself: asking the operator to also pass ``--gpu
-    A100`` on an A100 is a way to get a T4 report labeled A100. Falls back to
-    the planner's own default rather than raising — a wrong datasheet label
-    is cosmetic once calibration has run, which it has by then.
+    A100`` on an A100 is a way to get a T4 report labeled A100. A device the
+    database does not know gets an explicit ``unknown:`` label rather than
+    the nearest plausible product — the label is what the report is read by.
     """
-    from caustica.planner import load_gpu_db  # noqa: PLC0415
+    from caustica.planner import gpu_key_for_device  # noqa: PLC0415
 
-    devices, _ = load_gpu_db()
-    norm = _norm(device_name)
-    best: tuple[int, float, str] | None = None
-    for key, spec in devices.items():
-        # .lower() BEFORE stripping punctuation, or "A100" becomes "100" and
-        # "SXM" becomes "" — an empty token is a substring of everything, so
-        # every device scored a match on it (caught by the T4/L4/H100 cases
-        # in tests/test_validation_gpu_gates.py).
-        tokens = [tok for tok in (_norm(part) for part in key.split("-")) if tok]
-        if not tokens or tokens[0] not in norm:
-            continue
-        score = sum(1 for t in tokens if t in norm)
-        gap = -abs(spec.vram_gib - total_gib) if total_gib is not None else 0.0
-        cand = (score, gap, key)
-        if best is None or cand > best:
-            best = cand
-    return best[2] if best is not None else "A100"
+    key = gpu_key_for_device(device_name, total_gib)
+    # No silent substitution. This used to return "A100" for anything it did
+    # not recognise, which labelled an RTX PRO 6000 Blackwell report "A100",
+    # judged its 95 GiB against an A100's 38.88 GiB, and hid the calibration
+    # the suite had just measured (2026-08-22).
+    return key if key is not None else f"unknown:{device_name}"
 
 
 @dataclass
@@ -560,14 +551,52 @@ class Harness:
     free_vram_gib: Callable[[], float | None]
     calibrate: Callable[..., dict]
     run_job: Callable[..., int]
-    record_warmup: Callable[[str, float], Any]
+    record_warmup: Callable[..., Any]
+    #: Writes the two-term warmup model (context + per-element) back from
+    #: real runs. Defaulted so an existing Harness stays constructible.
+    record_warmup_model: Callable[..., Any] | None = None
+
+
+def run_job_subprocess(job_path: Path, opts: Any) -> int:
+    """Run one job in a FRESH process; return its exit code.
+
+    In-process was wrong in a way only a real device shows. cupy's memory
+    pool is process-wide and monotone: it hands blocks back to the pool, not
+    to the driver. So each rung's "VRAM peak" was the previous rung's
+    retained pool plus its own -- 1.729 + 6.591 GiB predicted came back as
+    8.096 measured, and 8.096 + 13.818 came back as 21.369 -- which read as
+    the planner under-predicting by 19% and then 35% when the planner was
+    right (-2.0% on the one uncontaminated rung).
+
+    Worse, the leak also poisoned the gate the NEXT rung had to pass: free
+    VRAM read 17.63 GiB of a 39.08 GiB card, exactly the pool's 21.4 GiB
+    short, and a 26.98 GiB rung that fits the device was refused. A process
+    boundary is the only thing that reliably returns the pool, and it is
+    also what a user's own run actually is (measured, 2026-08-22).
+    """
+    argv = [sys.executable, "-m", "caustica", "run", str(job_path), "--out", str(opts.out)]
+    if opts.backend:
+        argv += ["--backend", str(opts.backend)]
+    if opts.gpu:
+        argv += ["--gpu", str(opts.gpu)]
+    if not opts.measure:
+        argv += ["--no-measure"]
+    if opts.preview_only:
+        argv += ["--preview-only"]
+    if opts.vram_limit_gib is not None:
+        argv += ["--vram-limit-gib", str(opts.vram_limit_gib)]
+    argv += ["--status-interval", str(opts.status_interval_s)]
+    if getattr(opts, "progress", "auto") is None:
+        argv += ["--no-progress"]
+    # Output is deliberately NOT captured: the operator watches the rung
+    # settle in real time, exactly as they would running it themselves.
+    return int(subprocess.run(argv, check=False).returncode)
 
 
 def default_harness() -> Harness:
     """The real thing: cupy, the planner and the runner."""
     from caustica import env as env_mod  # noqa: PLC0415
     from caustica import planner  # noqa: PLC0415
-    from caustica.runner import run_job_file  # noqa: PLC0415
 
     def _free_gib() -> float | None:
         info = env_mod.gpu_environment("cupy")
@@ -582,8 +611,9 @@ def default_harness() -> Harness:
         device_name=lambda: planner.calibration.device_name("cupy"),
         free_vram_gib=_free_gib,
         calibrate=planner.calibrate,
-        run_job=run_job_file,
+        run_job=run_job_subprocess,
         record_warmup=planner.record_warmup,
+        record_warmup_model=planner.record_warmup_model,
     )
 
 
@@ -658,7 +688,7 @@ def run_rung(
     outdir: Path,
     harness: Harness,
     *,
-    gpu_key: str,
+    gpu_key: str | None = None,
     settle_periods: int = 2,
 ) -> RungResult:
     """Run one rung and read its stamp back. Never raises on a refusal."""
@@ -1046,7 +1076,14 @@ def gpu_gates(
     if free_gib is None:
         free_gib = float(env.get("vram_free_gib") or env.get("vram_total_gib") or 0.0)
         notes.append("free VRAM could not be probed; the ladder was sized from the env stamp")
+    # Two different things: `key` is the LABEL the report is read by, and
+    # `plan_for` is what the rungs are told to plan against. Passing the
+    # label down would break on a device the database does not know (there
+    # is no "unknown:..." row to resolve), and would also throw away the
+    # live VRAM the runner can read for itself. Only an explicit --gpu is
+    # forwarded; otherwise each rung plans for the card it is running on.
     key = gpu_key or gpu_key_for(device, env.get("vram_total_gib"))
+    plan_for = gpu_key
 
     stamp = datetime.now(timezone.utc)
     root = Path(out) if out is not None else Path("benchmarks/reports/gpu_gates")
@@ -1098,7 +1135,7 @@ def gpu_gates(
                     spec,
                     outdir / "rungs" / spec.name,
                     harness,
-                    gpu_key=key,
+                    gpu_key=plan_for,
                     settle_periods=settle_periods,
                 )
             )
@@ -1151,13 +1188,28 @@ def gpu_gates(
     # Write the warmup BACK only after every gate has been judged: feeding a
     # number into the model that is then used to grade the same run would be
     # circular. The next suite (and every planner call after it) gets it.
-    warmups = [r.actual.get("warmup_s") for r in results if r.actual.get("warmup_s") is not None]
-    if warmups:
-        harness.record_warmup(device, max(warmups))
-        payload["recorded_warmup_s"] = max(warmups)
+    # (padded elements, warmup) per completed rung. Each rung ran in its own
+    # process, so every sample paid the CUDA context AND its own plan
+    # creation -- which is what the two-term model's terms are. Writing back
+    # a single flat number instead would collapse the model to a constant
+    # and re-lose the 46%-of-wall-time term the fix exists to keep.
+    from caustica.planner.model import fft_sizes  # noqa: PLC0415
+
+    warm_samples = [
+        (int(fft_sizes(tuple(r.spec.shape))[1]), float(r.actual["warmup_s"]))
+        for r in results
+        if r.actual.get("warmup_s") is not None
+    ]
+    if warm_samples:
+        if harness.record_warmup_model is not None:
+            harness.record_warmup_model(device, warm_samples)
+        else:  # a Harness from before this field: keep the old behaviour
+            harness.record_warmup(device, max(w for _, w in warm_samples))
+        payload["recorded_warmup_s"] = max(w for _, w in warm_samples)
+        payload["recorded_warmup_samples"] = [[p, w] for p, w in warm_samples]
         notes.append(
-            f"recorded warmup {max(warmups):.2f} s into the calibration for {device}; "
-            f"it applies to the NEXT plan, not to the numbers graded above"
+            f"recorded {len(warm_samples)} warmup sample(s) into the calibration for "
+            f"{device}; it applies to the NEXT plan, not to the numbers graded above"
         )
 
     json_path, md_path = write_report(outdir, payload)

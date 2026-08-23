@@ -382,7 +382,12 @@ class RunnerOptions:
 
     out: str | Path | None = None
     backend: str | None = None  # None -> the job's backend field
-    gpu: str = "A100"  # datasheet estimate target (always reported)
+    # Datasheet estimate target (always reported). None -> the device this
+    # run is actually on, falling back to DEFAULT_PLAN_GPU off the GPU. A
+    # fixed default here is what made an RTX PRO 6000 Blackwell plan
+    # itself as an A100 (2026-08-22); an explicit value still means "plan
+    # for THAT device", which is the point of the flag.
+    gpu: str | None = None
     measure: bool = True  # ~20-step local timing probe
     dry_run: bool = False
     resume: bool = False
@@ -443,10 +448,38 @@ def _ppw_warnings_for(built: BuiltJob) -> list[str]:
     return low_ppw_warnings(built.grid, built.source.f0, built.harmonics, c_min, approx)
 
 
+#: Planning target when no device is present and none was named.
+DEFAULT_PLAN_GPU = "A100"
+
+
+def _gpu_target(backend_name: str, opts: RunnerOptions):
+    """The device this plan is FOR: the one named, or the one we are on.
+
+    Returns a ``GPUSpec`` for a live device (so a card outside gpu_db.json
+    is planned from its own VRAM and its own calibration) and a plain key
+    otherwise. Never guesses a product it cannot see.
+    """
+    from caustica import planner  # noqa: PLC0415
+
+    if opts.gpu:
+        return opts.gpu
+    if backend_name == "cupy":
+        try:
+            import cupy  # noqa: PLC0415
+
+            props = cupy.cuda.runtime.getDeviceProperties(cupy.cuda.Device().id)
+            _free, total = cupy.cuda.Device().mem_info
+            return planner.spec_for_device(props["name"].decode(), int(total))
+        except Exception:  # pragma: no cover - a device that cannot be asked
+            pass
+    return DEFAULT_PLAN_GPU
+
+
 def _plan(built: BuiltJob, backend_name: str, opts: RunnerOptions):
     """Planner verdicts: datasheet GPU + (optionally) measured-here."""
     from caustica import planner  # noqa: PLC0415 (keep import caustica light)
 
+    gpu_target = _gpu_target(backend_name, opts)
     common = dict(
         solver=built.solver,
         harmonics=built.harmonics,
@@ -454,7 +487,7 @@ def _plan(built: BuiltJob, backend_name: str, opts: RunnerOptions):
         reference_point=built.focus_vox,
     )
     est_gpu = planner.estimate(
-        built.grid, built.medium, built.source, built.spec, gpu=opts.gpu, **common
+        built.grid, built.medium, built.source, built.spec, gpu=gpu_target, **common
     )
     est_here = (
         planner.estimate(
@@ -462,7 +495,7 @@ def _plan(built: BuiltJob, backend_name: str, opts: RunnerOptions):
             built.medium,
             built.source,
             built.spec,
-            gpu=opts.gpu,
+            gpu=gpu_target,
             measure=True,
             # The probe must time the backend the run will USE — "auto" on a
             # GPU machine forced to numpy would time cuFFT and feed the CPU
@@ -503,7 +536,7 @@ def _plan(built: BuiltJob, backend_name: str, opts: RunnerOptions):
         "vram_gib": round(est_here.vram_gib, 3),
         "vram_breakdown_bytes": dict(est_here.vram_breakdown),
         "result_size_mb_expected": round(result_mb, 1),
-        "gpu": opts.gpu,
+        "gpu": est_gpu.gpu,
         "gpu_t_expected_s": round(est_gpu.t_expected_s, 1),
         "gpu_fits": est_gpu.fits,
         "warnings": list(est_here.warnings),

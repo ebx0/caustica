@@ -418,6 +418,54 @@ def record_warmup(
     return entry
 
 
+def record_warmup_model(
+    device: str,
+    samples: list[tuple[int, float]],
+    *,
+    source: str = "measured",
+    path: str | Path | None = None,
+) -> dict | None:
+    """Refit warmup = context + per_elem * P from REAL runs, and store it.
+
+    Strictly better data than the probe: these are whole solves, at several
+    sizes, each in its own process, so every one of them paid the CUDA
+    context AND its own plan creation -- which is exactly what the two terms
+    mean. With a single sample only the constant can move, and the probe's
+    slope is kept.
+
+    Returns the updated entry, or None when the device has no calibration
+    (inventing one would let the planner call a datasheet guess
+    "calibrated").
+    """
+    target = Path(path) if path is not None else default_calibration_path()
+    data = load_calibration(target)
+    entry = data.get("devices", {}).get(device)
+    if entry is None or not samples:
+        return None
+
+    if len(samples) >= 2:
+        p_arr = np.array([float(p) for p, _ in samples], dtype=np.float64)
+        w_arr = np.array([float(w) for _, w in samples], dtype=np.float64)
+        slope, const = np.polyfit(p_arr, w_arr, 1)
+        if slope < 0.0:  # a falling warmup is noise, not a model
+            slope, const = 0.0, float(w_arr.mean())
+        entry["warmup_per_elem_s"] = max(0.0, float(slope))
+        entry["warmup_context_s"] = max(0.0, float(const))
+    else:
+        p_elems, w = samples[0]
+        per = float(entry.get("warmup_per_elem_s") or 0.0)
+        entry["warmup_per_elem_s"] = per
+        entry["warmup_context_s"] = max(0.0, float(w) - per * int(p_elems))
+
+    entry["warmup_s"] = max(0.0, max(w for _, w in samples))
+    entry["warmup_source"] = source
+    entry["warmup_samples"] = [[int(p), float(w)] for p, w in samples]
+    entry["warmup_recorded_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(data, indent=2))
+    return entry
+
+
 def load_calibration(path: str | Path | None = None) -> dict:
     target = Path(path) if path is not None else default_calibration_path()
     if not target.exists():

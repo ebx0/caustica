@@ -297,7 +297,14 @@ def test_gpu_key_is_detected_from_the_device_name():
     assert gg.gpu_key_for("NVIDIA A100-SXM4-80GB", 79.2) == "A100-80GB"
     assert gg.gpu_key_for("Tesla T4", 15.0) == "T4"
     assert gg.gpu_key_for("NVIDIA L4", 22.0) == "L4"
-    assert gg.gpu_key_for("Some Future GPU", 1000.0) == "A100"  # falls back, never raises
+    # A device the database does not know is LABELLED unknown, not renamed
+    # to the nearest plausible product: returning "A100" here is what put an
+    # A100 label on an RTX PRO 6000 Blackwell report, judged its 95 GiB
+    # against 38.88 GiB, and hid the calibration just measured on it.
+    assert gg.gpu_key_for("Some Future GPU", 1000.0) == "unknown:Some Future GPU"
+    assert gg.gpu_key_for("NVIDIA RTX PRO 6000 Blackwell Server Edition", 95.0) == (
+        "unknown:NVIDIA RTX PRO 6000 Blackwell Server Edition"
+    )
 
 
 # ------------------------------------------------------------- the protocol
@@ -743,3 +750,110 @@ def test_the_gate_notebook_points_the_reader_at_the_user_notebook():
     assert "Hardware accelerator: GPU" in intro
     for code in ("0", "2", "4"):  # the exit codes an operator will see
         assert code in intro
+
+
+# --------------------------------------- one process per rung (M8, fix F2)
+
+
+def _mini_job_file(tmp_path):
+    job = {
+        "format": "caustica-job/1",
+        "kind": "explicit",
+        "name": "mini",
+        "medium": {"kind": "homogeneous"},
+        "grid": {"ndim": 3, "dx_mm": 0.75, "size_mm": [18, 18, 24], "pml": {"thickness_mm": 3.0}},
+        "source": {
+            "kind": "array",
+            "array": {"kind": "bowl", "d_outer_mm": 10.0, "roc_mm": 12.0},
+            "apex_mm": [9, 9, 6.0],
+        },
+        "drive": {"f0_mhz": 1.0, "amplitude_kpa": 100.0},
+        "run": {"spec": {"min_settle_periods": 2, "max_settle_periods": 4}, "harmonics": [1]},
+        "solver": "linear",
+    }
+    p = tmp_path / "mini.json"
+    p.write_text(json.dumps(job), encoding="utf-8")
+    return p
+
+
+def test_the_default_harness_runs_each_rung_in_its_own_process():
+    """The load-bearing half of the VRAM fix.
+
+    cupy's memory pool is process-wide and monotone, so an in-process ladder
+    measures rung N-1's retained pool as part of rung N's peak (measured:
+    +18.6% then +35.3% against a planner that was right to -2.0% on the one
+    uncontaminated rung) and reads a short free-VRAM number at the next
+    rung's gate. Only a process boundary returns the pool.
+    """
+    assert gg.default_harness().run_job is gg.run_job_subprocess
+
+
+def test_the_subprocess_runner_translates_every_option_it_is_given(monkeypatch):
+    seen = {}
+
+    class _Done:
+        returncode = 7
+
+    def fake_run(argv, check=False):
+        seen["argv"] = argv
+        return _Done()
+
+    monkeypatch.setattr(gg.subprocess, "run", fake_run)
+    from caustica.runner import RunnerOptions
+
+    code = gg.run_job_subprocess(
+        Path("job.json"),
+        RunnerOptions(
+            out=Path("out"),
+            backend="cupy",
+            gpu="A100-40GB",
+            measure=False,
+            preview_only=True,
+            status_interval_s=0.0,
+        ),
+    )
+    assert code == 7, "the child's exit code is the rung's exit code"
+    argv = seen["argv"]
+    assert argv[1:4] == ["-m", "caustica", "run"]
+    for flag in ("--out", "--backend", "--gpu", "--no-measure", "--preview-only"):
+        assert flag in argv, f"{flag} missing from {argv}"
+    assert argv[argv.index("--backend") + 1] == "cupy"
+    assert argv[argv.index("--gpu") + 1] == "A100-40GB"
+
+
+def test_the_subprocess_runner_omits_gpu_when_none_is_named(monkeypatch):
+    """An unknown device has no gpu_db row to pass; the child reads the card."""
+    seen = {}
+
+    class _Done:
+        returncode = 0
+
+    monkeypatch.setattr(
+        gg.subprocess, "run", lambda argv, check=False: (seen.update(argv=argv), _Done())[1]
+    )
+    from caustica.runner import RunnerOptions
+
+    gg.run_job_subprocess(Path("job.json"), RunnerOptions(out=Path("out"), gpu=None))
+    assert "--gpu" not in seen["argv"]
+
+
+def test_the_subprocess_runner_actually_runs_a_job(tmp_path):
+    """End to end, on the CPU: a faked argv can be wrong in every flag."""
+    from caustica.runner import EXIT_OK, RunnerOptions
+
+    out = tmp_path / "out"
+    code = gg.run_job_subprocess(
+        _mini_job_file(tmp_path),
+        RunnerOptions(
+            out=out,
+            backend="numpy",
+            gpu=None,
+            measure=False,
+            preview_only=True,
+            status_interval_s=0.0,
+        ),
+    )
+    assert code == EXIT_OK
+    assert (out / "preview.npz").exists()
+    assert (out / "run_meta.json").exists()
+    assert not (out / "result.h5").exists()  # --preview-only reached the child

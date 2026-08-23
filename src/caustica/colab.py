@@ -403,7 +403,7 @@ def _announce_folder_override(job_file: Path, outdir: Path) -> None:
 def run_job(
     job_path: str | os.PathLike[str],
     out: str | os.PathLike[str] | None = None,
-    gpu: str = "A100",
+    gpu: str | None = None,
     **runner_opts: Any,
 ) -> Path:
     """Run ONE ``caustica-job/1`` file on this runtime's GPU; return its folder.
