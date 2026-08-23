@@ -2331,3 +2331,27 @@ artefaktını yakalayabiliyor (`a2_at_fundamental_peak` dürüst).
   `benchmarks/reports/analytic/numpy-20260823-073910/` (planner tablolu tam PASS).
 - M11'in üç başarı kriteri de kanıtla `[x]` — milestone kapandı. Sıradaki: M18 (termal),
   Colab dönüşünü beklemeden CPU'da yazılabilir.
+
+## 2026-08-23 — M18 KAPANDI: termal modül (Pennes + CEM43), iki fazda
+
+Ablasyon planlamanın çıktısı basınç değil DOZ — milestone'un ilk cümlesi buydu; artık kütüphane
+bunu damgalı bir raporla söylüyor. Faz 1 (`08c4ffb`): HeatingSource (harmonik-α dürüstlük
+sözleşmesi), korunumlu-FD PennesSolver (harmonik-ortalama yüzey iletkenliği, Gershgorin sınırı,
+NaN koruması), CEM43 çözüm SIRASINDA (son-T tuzağı testli); analitik kapılar %0.006–%0.75, hepsi
+<%2. Faz 2 (`a0c82cd`): `caustica-thermal/1` doz/eşik raporu (ITRUSST doku tablosu; sorumluluk
+notu kurcalamaya kapalı), bağımsız backward-Euler sparse çaprazı en kötü %0.745 (limit %5,
+duyarlılık tuzağıyla kanıtlı), uçtan uca sonication zinciri + `ThermalResult.chain`.
+
+Ölçüt uyarlaması (kullanıcı, 2026-08-23): kWaveDiffusion yalnız MATLAB'da — kriter
+"bağımsız-gerçekleştirme çaprazı < %5" oldu (`be45388`), kanıtı yukarıda.
+
+Operasyon notu: Faz-2 ajanı üç kez düştü (2× ağ, 1× oturum limiti) ve dördüncü denemede
+tamamladı; 648 satırlık report.py bir çökmeden sağ çıkıp kaldığı yerden devam ettirildi.
+Her tamamlanan parçanın anında commit'lenmesi toplam kaybı sıfır dosyada tuttu.
+
+### Kanıt
+- Tam süit: **701 → 730 test**; termal ailesi 83 test.
+- Bu turda ayrıca: janitor 03/08/09/07/10 kapandı (`c7f5238`, `31ef9b5`, `523f5a4`),
+  pyproject kimliği genişletildi + gerçek yazar. Açık janitor: 04, 05 (ikisi de gün/karar bekler).
+- Sıradaki: M15 (eksenel simetri) — ilk adımı bir VERIFY (CuPy'de DCT/DST); Colab dönüşü
+  M7/M8'i kapatır, 256³ NaN sondası (dev_validate U1) hâlâ sahada cevap bekliyor.

@@ -1126,7 +1126,7 @@ bu harness'in İÇİNE doğar.
         0 voksel) — `benchmarks/reports/compare/20260823-065728/`; linear-vs-westervelt(β=0)
         r=1.0 relL2=0 birebir (M5 garantisi). `@pytest.mark.kwave` ile CI'da atlanabilir
 
-### M18 — Termal modül: Pennes + CEM43 `[ ]` (öne çekildi — HIFU-önce, kullanıcı 2026-08-22)
+### M18 — Termal modül: Pennes + CEM43 `[x]` (2026-08-23 — iki fazda KAPANDI)
 Ablasyon planlamanın çıktısı basınç değil DOZ. ITRUSST güvenlik konsensüsü (Brain Stim 2025)
 eşikleri rapora girer: ≤2 CEM43 beyin / ≤16 kemik / ≤21 deri; ΔT≤2°C.
 - [~] `sensors.HeatingSource` (Q = 2·α·I; harmonik katkılar) → `thermal.PennesSolver` (GPU
@@ -1138,7 +1138,16 @@ eşikleri rapora girer: ≤2 CEM43 beyin / ≤16 kemik / ≤21 deri; ΔT≤2°C.
       iptale kaybediyor, yükseliş olarak %0.006), CEM43 çözüm SIRASINDA birikir (son-T'den
       doz 2.55 vs gerçek 0.35 — tuzak testli). Analitik kapılar: Gaussian %0.12, Green %0.75,
       perfüzyon %0.10, kararlı durum %0.033, iki-katman %0.006 — hepsi <%2 ölçütünde.
-      KALAN (Faz 2): rapora doz/eşik özeti + bağımsız-implicit çaprazı + sorumluluk notu
+      **FAZ 2 TAMAM** (2026-08-23, `a0c82cd`, +29 test): `thermal/report.py` —
+      `caustica-thermal/1` damgalı doz/eşik raporu (doku-başına ITRUSST tablosu, her satır
+      PASS/EXCEEDED, eşleşmeyen etiket NOT GRADED; sorumluluk notu sabit ve kurcalamaya
+      kapalı — düzenlenmiş notlu payload REDDEDİLİR). Bağımsız-implicit çaprazı ölçüldü:
+      iki-katman perfüzyonlu levha + Gaussian Q, beş zamanda en kötü %0.745 maks / %0.903
+      relL2 (limit %5); kararlı durum %0.0017; duyarlılık tuzağı (+%20 perfüzyon bozması →
+      %8-15 uyuşmazlık) kapının görebildiğini kanıtlıyor. Uçtan uca: westervelt →
+      HeatingSource → 20 s açık + 40 s kapalı (doz taşınır) → 37→53.06→40.29 °C, doz 80.5→88.3
+      CEM43 tekdüze; `ThermalResult.chain` faz-üstü maks + doz-gerileyen faz reddi.
+      Kanıt: `benchmarks/reports/thermal/20260823-120953/` (Brain EXCEEDED / Skin PASS)
 - Başarı kriterleri:
   - Analitik nokta-kaynak/Gaussian difüzyon rel err < %2; perfüzyon kararlı-durum < %2
   - Uçtan uca sonication → T(r,t) → CEM43; **bağımsız-gerçekleştirme çaprazı < %5**
