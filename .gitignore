@@ -33,6 +33,13 @@ Thumbs.db
 # gets curated into benchmarks/reports/ by hand, never committed wholesale
 dev_validate_reports/
 
+# The master test script and its output: a LOCAL development gate, uploaded to
+# a GPU runtime by hand and never shipped. It is allowed to know things about
+# the project (milestone ids, evidence paths) that the library must not depend
+# on, which is exactly why it stays out of the distribution.
+master_test.py
+master_test_reports/
+
 # App run outputs (figures + npz + reports are regenerated, never committed)
 apps/outputs/
 

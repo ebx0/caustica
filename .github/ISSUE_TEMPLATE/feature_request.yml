@@ -1,0 +1,26 @@
+name: Feature request
+description: Propose a capability, a solver, or a validation the library is missing.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do
+      description: The physics or workflow problem, not the API you have in mind.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would it look like
+      description: Sketch the call, the job field, or the report you would want.
+
+  - type: textarea
+    id: reference
+    attributes:
+      label: Reference to validate against
+      description: >-
+        An analytic solution, a published benchmark, or another code this could
+        be checked against. Anything added here needs something to be measured
+        against before it can be trusted.

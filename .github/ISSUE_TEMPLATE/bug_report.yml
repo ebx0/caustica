@@ -1,0 +1,47 @@
+name: Bug report
+description: Something produced a wrong number, refused a valid run, or crashed.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The most useful bug report for a physics library contains a number that
+        should have been different. If you have one, lead with it.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you expected, what you got, and how far apart they were.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce
+      description: >-
+        The job file or the shortest script that shows it. If a run diverged,
+        paste the error line — it names the period and step.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: >-
+        The `environment` block from any caustica report, or the output of the
+        snippet below.
+      value: |
+        python -c "import caustica, numpy, platform; print(caustica.__version__, numpy.__version__, platform.platform())"
+      render: shell
+    validations:
+      required: true
+
+  - type: input
+    id: gpu
+    attributes:
+      label: GPU (if any)
+      placeholder: e.g. NVIDIA A100-SXM4-40GB, cupy 13.3, driver 550

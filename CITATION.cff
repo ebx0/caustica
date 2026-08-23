@@ -1,0 +1,33 @@
+cff-version: 1.2.0
+title: >-
+  caustica: GPU-accelerated nonlinear acoustic simulation for
+  focused ultrasound
+message: If you use this software, please cite it as below.
+type: software
+authors:
+  - given-names: Eren
+    family-names: Bulbul
+    email: ebulbul@yildiz.edu.tr
+    affiliation: Yildiz Technical University
+repository-code: https://github.com/ebx0/caustica
+url: https://ebx0.github.io/caustica/
+abstract: >-
+  caustica simulates nonlinear acoustic propagation for focused and therapeutic
+  ultrasound. A k-space pseudospectral time-domain engine solves the Westervelt
+  or linear continuous-wave problem on numpy or CuPy from a single set of
+  operators, a k-Wave adapter provides an independent cross-check, and a Pennes
+  bioheat solver turns the acoustic field into temperature and CEM43 thermal
+  dose. Runs are planned against the device before they start, stamped with the
+  environment and commit that produced them, and validated against analytic
+  references rather than against stored fixtures.
+keywords:
+  - HIFU
+  - focused ultrasound
+  - nonlinear acoustics
+  - acoustic simulation
+  - Westervelt equation
+  - k-space pseudospectral method
+  - thermal dose
+  - GPU computing
+license: MIT
+version: 0.1.0.dev0

@@ -1,0 +1,19 @@
+# Optional but recommended: `pip install pre-commit && pre-commit install`.
+# Deliberately narrow — these hooks run the same lint CI runs and nothing that
+# would rewrite the tree on first use.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.0
+    hooks:
+      - id: ruff
+        args: [--fix]
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-toml
+      - id: check-yaml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=512]

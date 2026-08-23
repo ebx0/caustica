@@ -26,8 +26,17 @@ keywords = [
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
     "Intended Audience :: Science/Research",
+    "Intended Audience :: Healthcare Industry",
+    "Operating System :: OS Independent",
+    "Environment :: GPU :: NVIDIA CUDA",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+    "Typing :: Typed",
 ]
 dependencies = [
     "numpy>=1.26",
@@ -35,6 +44,15 @@ dependencies = [
     "pydantic>=2.7",
     "h5py>=3.9",
 ]
+
+# What PyPI renders in the project sidebar; without these a wheel install is a
+# dead end for anyone trying to find the docs or report a bug.
+[project.urls]
+Homepage = "https://github.com/ebx0/caustica"
+Documentation = "https://ebx0.github.io/caustica/"
+Repository = "https://github.com/ebx0/caustica"
+Issues = "https://github.com/ebx0/caustica/issues"
+Changelog = "https://github.com/ebx0/caustica/blob/master/CHANGELOG.md"
 
 [project.optional-dependencies]
 gpu = ["cupy-cuda12x>=13.0"]
