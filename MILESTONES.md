@@ -372,12 +372,25 @@ yerelde ve uwcem-phantom tarafında yaşar).
   - **F6 — kalibrasyon sondası float32'de taşıyordu:** sentetik adım spektral türevle, yani
     |k| ≤ π/dx ile çarpıyor; 1e-3 katsayılarıyla adım başına kazanç 3'ün üstünde ve p, ölçüm
     döngüsünün içinde inf oluyordu
-  - **AÇIK:** 256³ NaN'inin KÖKÜ. İki kartta birebir aynı (`190.657 MPa` → NaN), numpy'de
-    aynı iş SAĞLIKLI (periyot 8'de 1.295 MPa, ölçek yasasının öngördüğü ~1.66 MPa'ya doğru).
-    Elenenler: `--preview-only` yolu (çözümden sonra çalışır), yinelenen kaynak indeksleri
-    (sıfır), ilklenmemiş tampon (hepsi `zeros`), PML yakınlığının tek başına sebep olması.
-    Ayırt edici sonda hazır; kalan adaylar süreç durumu (kalibrasyon artığı) ve
-    geometri×backend etkileşimi
+  - **KAPANDI (2026-08-24, `1a0e551`): 256³ NaN'inin KÖKÜ = kollokasyonlu birinci türevde
+    yaşayan Nyquist dalga sayısı.** `k_vectors` ham `fftfreq`/`rfftfreq` veriyordu, dolayısıyla
+    ÇİFT uzunluklu her eksende `deriv` operatörü Nyquist bin'ini taşıyordu. `i·k` saf sanal ve
+    tek fonksiyon; `j → -j` altında KENDİYLE eşleşen bin'ler (indeks n/2) ise eşlenik-çift
+    kalmak zorunda. Sonuç: `deriv * rfftn(p)` geçerli bir yarım-spektrum DEĞİLDİ — C2R'in
+    Hermityen sözleşmesini kendi büyüklüğünün ~%150'si kadar ihlal ediyordu ve gradyan
+    spektrumunun beşte biri `irfftn`'den nereye gittiği tanımsız şekilde düşüyordu.
+    numpy'nin pocketfft'i bunu sessizce simetrikleştiriyor; cuFFT girdiyi Hermityen
+    varsaydığını belgeliyor ve 256³'te başka bir seçim yapıyor — iki backend adım 2'de
+    `irfftn(deriv2*pk)` üzerinde ayrıldı (1.1e-2) ve GPU periyot 2'de NaN'e ulaşırken aynı
+    iş CPU'da 45 kPa'da kaldı. Kanıt zinciri: U1 (5 vaka) → `shape_itself`; U1b matrisi
+    (2026-08-23) → boyut 256'ya ve IŞIN eksenine (r2c/son FFT ekseni) sabitledi, genlikten
+    bağımsız; U1b operatör tarama → suçlu `grad2 = irfftn(deriv2*pk)`. Düzeltme: çift
+    eksenlerde Nyquist bin'i sıfırlanır (zaten DOĞRU türev: `cos(πx/dx)` türevini bu ızgarada
+    hepsi-sıfır örnekler; k-Wave bununla karşılaşmaz çünkü kaydırmalı ızgarası `i·k_Nyq`'i
+    reel eksene döndürür). `kappa` gerçek Nyquist `|k|`'sini korur. Kapılar CPU'da yakalanır
+    çünkü dönüşümün ÇIKTISINA değil GİRDİSİNE yazıldı: `tests/test_kspace_operators.py`,
+    37 test (çift/tek/karışık pariteli şekiller + U1b'nin iki ayırt edicisi + düzeltme
+    öncesini kanıtlayan negatif kontrol)
 - Not: dt/spp ve time-of-flight türetimi motordan `cw_discretization`/`cw_tof_periods` fonksiyonlarına çıkarıldı (tek doğruluk kaynağı; planner==engine testli). VRAM envanteri engine.py tampon listesini birebir aynalar — motora yeni kalıcı tampon eklersen `test_memory_inventory_matches_hand_count` kırılır (bilerek).
 
 ### M9 — KZK çözücüsü `[ERTELENDİ 2026-08-22]`
@@ -1345,6 +1358,12 @@ Her biri fizibilite+prototip raporu; v2 seçimi kullanıcının.
   Not: UWCEM atıf yükümlülüğü M10k ile `uwcem-phantom` repo'suna taşınıyor.
 - **Çalışma dalı:** `master` — tek trunk (2026-08-24: `library-first` ileri sarılıp silindi;
   103 commit'lik göç dalı işini bitirdi). Her iş kalemi sonunda commit, push kararı bende.
+- **MASTER TEST kapısı (kullanıcı 2026-08-24):** `master_test.py` — YEREL, git'e girmez
+  (`.gitignore`), Colab'a elle yüklenir. Ölçülebilen her milestone'u tek tabloda ve tek
+  çıkış kodunda toplar: `--profile local` (CPU, ~3.5 dk, süitin tamamı dahil) ve
+  `--profile colab` (+ GPU: numpy/cupy paritesi, 256³ regresyonu, VRAM/süre/OOM merdiveni,
+  Colab köprüsü). **Kırmızı master test'te proje ilerlemez.** Milestone kutuları da buradan
+  denetlenir; SKIP asla PASS sayılmaz.
 - M8 yerel yarısı kapandı (2026-08-11): `caustica.planner` — VRAM envanteri (engine birebir),
   a·N·log2N+b·N süre modeli, gpu_db.json (7 cihaz), cpu/cuda kalibrasyon + calibration.json,
   `estimate`/`compare`, kaynak etiketi db|calibrated|measured, OOM önerileri; 11 test.
