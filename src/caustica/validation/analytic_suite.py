@@ -30,6 +30,13 @@ under ``benchmarks/reports/analytic/<backend>-<timestamp>/``:
 4. **Fubini** — second-harmonic growth ``A2/A1`` across a range of ``sigma``
    against :func:`caustica.analytic.fubini_harmonic`.
 
+Alongside the physics the report carries a second, ungraded table: the
+**planner's estimate against what the solve actually cost**, one row per
+scenario, taken from :func:`caustica.planner.estimate` on the very objects
+the scenario is about to hand the solver — before it hands them over. Those
+rows are INFORMATIONAL and no gate reads them; :func:`planner_block` says
+why, and says it in the report too.
+
 **Every tolerance here is inherited, never invented.** Each gated number
 names, in the report and in the JSON, the test that already established its
 limit; a suite free to choose its own tolerances is a suite that can be tuned
@@ -63,6 +70,7 @@ from caustica.validation._verdict import (
     EXIT_OK,
     Check,
     Gate,
+    fmt_dev_pct,
     fmt_num,
     overall_verdict,
 )
@@ -194,6 +202,225 @@ def size_preset(name: str) -> Size:
         raise ValueError(f"unknown size {name!r}; known: {sorted(SIZES)}") from None
 
 
+# --------------------------------------------------------------- planning
+#
+# M11 asks this report to carry the planner's estimate next to what the run
+# actually cost. Every solve below therefore goes through _planned_run,
+# which takes planner.estimate() on the setup FIRST and times the solve
+# second. Nothing here is gated -- see planner_block for the reasons, which
+# the report prints rather than leaves buried in this file.
+
+#: Fields every planner row carries, present (possibly ``None``) even for a
+#: scenario that never ran. A table with a missing row invites the reader to
+#: assume the scenario was fine.
+PLAN_ROW_FIELDS = (
+    "target",
+    "source",
+    "solves",
+    "predicted_s",
+    "measured_s",
+    "predicted_steps",
+    "actual_steps",
+    "warmup_s",
+    "vram_gib",
+    "note",
+)
+
+#: Throughput placeholders for the CPU planning target. ``gpu_db.json`` is a
+#: sheet of GPU datasheets and holds no row for a CPU, so these numbers are
+#: invented -- and that is exactly why no number derived from them is ever
+#: reported: when the planner falls back to its ``db`` path on this target
+#: (i.e. this machine has no calibration entry), :func:`plan_solve` drops the
+#: predicted TIME and keeps only the device-independent half of the estimate,
+#: the step count and the memory inventory, which no datasheet touches.
+_CPU_PLACEHOLDER_TFLOPS = 1.0
+_CPU_PLACEHOLDER_BW_GBS = 1.0
+
+
+def plan_target(backend: str):
+    """The device the planner's estimates on this machine are FOR.
+
+    On a GPU that is the card in front of us, resolved by the same light
+    path :func:`caustica.runner._gpu_target` takes, so a plan here and a
+    plan printed by ``caustica run`` describe the same device.
+
+    Off the GPU the honest target is NOT the runner's ``DEFAULT_PLAN_GPU``:
+    that answers "what would this cost on an A100?", a fine question for a
+    user about to book one and the wrong one for a table whose other column
+    is a stopwatch reading from this machine. The target is this machine's
+    own ``"cpu"`` calibration entry -- the one :func:`caustica.planner.
+    calibrate` writes and :func:`caustica.planner.calibration.
+    find_calibration_for` matches by that exact key.
+    """
+    from caustica import planner  # noqa: PLC0415
+
+    if backend == "cupy":
+        try:
+            import cupy  # noqa: PLC0415
+
+            props = cupy.cuda.runtime.getDeviceProperties(cupy.cuda.Device().id)
+            _free, total = cupy.cuda.Device().mem_info
+            return planner.spec_for_device(props["name"].decode(), int(total))
+        except Exception:  # pragma: no cover - a device that cannot be asked
+            pass
+    return planner.GPUSpec(
+        key="cpu",
+        vram_gib=0.0,  # host RAM is not modeled; this target is about TIME
+        mem_bw_gbs=_CPU_PLACEHOLDER_BW_GBS,
+        fp32_tflops=_CPU_PLACEHOLDER_TFLOPS,
+        device_name="cpu",
+        source="device",
+        notes="this host's CPU; only a calibration entry gives it a time model",
+    )
+
+
+def plan_solve(
+    solver: str,
+    grid,
+    medium,
+    source,
+    spec,
+    *,
+    backend: str,
+    harmonics: tuple[int, ...] | None = None,
+    reference_point: tuple[int, ...] | None = None,
+) -> dict:
+    """The planner's verdict for one solve, ``measure=False``. Cheap arithmetic.
+
+    ``measure=True`` is deliberately not used: it would run ~20 real steps
+    per scenario to predict a run that takes hundredths of a second, i.e.
+    spend more time predicting than measuring.
+
+    On the CPU target a ``db`` label means the planner fell back to
+    datasheet arithmetic over :data:`_CPU_PLACEHOLDER_TFLOPS` -- numbers
+    nobody measured. The row keeps its step count and memory (neither reads
+    the device sheet) and reports no time at all, because a fabricated
+    number in a column the reader is invited to compare against a stopwatch
+    is worse than an empty cell.
+    """
+    from caustica import planner  # noqa: PLC0415
+
+    target = plan_target(backend)
+    est = planner.estimate(
+        grid,
+        medium,
+        source,
+        spec,
+        solver=solver,
+        gpu=target,
+        harmonics=tuple(harmonics) if harmonics is not None else (1,),
+        reference_point=reference_point,
+        measure=False,
+    )
+    predicted_s: float | None = est.t_expected_s
+    warmup_s: float | None = est.warmup_s
+    t_step_s: float | None = est.t_step_s
+    note = None
+    if target.key == "cpu" and est.source != "calibrated":
+        predicted_s = warmup_s = t_step_s = None
+        note = (
+            "no wall time: this machine has no planner calibration (run "
+            "planner.calibrate()) and gpu_db.json has no datasheet row for a CPU"
+        )
+    return {
+        "solver": solver,
+        "target": target.key,
+        "source": est.source,
+        "solves": 1,
+        "predicted_s": predicted_s,
+        "predicted_steps": int(est.steps_expected),
+        "predicted_steps_worst": int(est.steps_worst),
+        "t_step_s": t_step_s,
+        "warmup_s": warmup_s,
+        "vram_gib": float(est.vram_gib),
+        "spp": int(est.spp),
+        "note": note,
+    }
+
+
+def _planned_run(
+    solver: str,
+    grid,
+    medium,
+    source,
+    spec,
+    *,
+    backend: str,
+    harmonics: tuple[int, ...] | None = None,
+    reference_point: tuple[int, ...] | None = None,
+):
+    """One solve, planned first and timed second. Returns ``(result, row)``.
+
+    The order is the point: an estimate taken after the solve is a
+    prediction written with the answer in hand. A planner that raises costs
+    its row and nothing else -- the physics this suite exists to grade must
+    not depend on an informational table being computable.
+    """
+    import caustica.solvers as solvers  # noqa: PLC0415
+
+    try:
+        row = plan_solve(
+            solver,
+            grid,
+            medium,
+            source,
+            spec,
+            backend=backend,
+            harmonics=harmonics,
+            reference_point=reference_point,
+        )
+    except Exception as exc:  # noqa: BLE001 - an unplannable run is still a run
+        row = {"solves": 1, "note": f"planner.estimate raised {type(exc).__name__}: {exc}"}
+
+    kwargs: dict[str, Any] = {"backend": backend}
+    if harmonics is not None:
+        kwargs["harmonics"] = harmonics
+    if reference_point is not None:
+        kwargs["reference_point"] = reference_point
+
+    t0 = time.perf_counter()
+    res = solvers.get(solver)().run(grid, medium, source, spec, **kwargs)
+    row["measured_s"] = time.perf_counter() - t0
+    row["actual_steps"] = int(res.steps_total)
+    return res, row
+
+
+def merge_plan(legs: list[dict]) -> dict:
+    """Several solves into one scenario row: the scenario is what it runs.
+
+    Times and step counts add up because the legs run one after another;
+    memory does not -- the peak is the largest leg, not their sum. A leg
+    that could not be planned makes the whole row's prediction ``None``
+    rather than a partial sum that would silently read as the scenario's.
+    """
+    if not legs:
+        return {}
+
+    def total(key: str) -> float | None:
+        values = [leg.get(key) for leg in legs]
+        return None if any(v is None for v in values) else sum(values)
+
+    def one_of(key: str) -> str | None:
+        seen = sorted({str(leg[key]) for leg in legs if leg.get(key) is not None})
+        return " + ".join(seen) if seen else None
+
+    vram = [leg["vram_gib"] for leg in legs if leg.get("vram_gib") is not None]
+    notes = [leg["note"] for leg in legs if leg.get("note")]
+    row = {
+        "target": one_of("target"),
+        "source": one_of("source"),
+        "solves": len(legs),
+        "predicted_s": total("predicted_s"),
+        "measured_s": total("measured_s"),
+        "predicted_steps": total("predicted_steps"),
+        "actual_steps": total("actual_steps"),
+        "warmup_s": total("warmup_s"),
+        "vram_gib": max(vram) if vram else None,
+        "note": notes[0] if notes else None,
+    }
+    return {key: row[key] for key in PLAN_ROW_FIELDS}
+
+
 # ------------------------------------------------------------ measurements
 
 
@@ -241,8 +468,10 @@ def _run_1d(
     convergence_tol: float = 0.005,
     n_record_periods: int = 2,
 ):
-    """One 1-D CW solve. Imports stay local so `--help` builds no engine."""
-    import caustica.solvers as solvers  # noqa: PLC0415
+    """One planned, timed 1-D CW solve. Returns ``(result, planner row)``.
+
+    Imports stay local so `--help` builds no engine.
+    """
     from caustica import Grid, Medium, PMLSpec  # noqa: PLC0415
     from caustica.materials import water  # noqa: PLC0415
     from caustica.solvers import CWRunSpec  # noqa: PLC0415
@@ -257,10 +486,7 @@ def _run_1d(
         convergence_tol=convergence_tol,
         n_record_periods=n_record_periods,
     )
-    kwargs: dict[str, Any] = {"backend": backend}
-    if harmonics is not None:
-        kwargs["harmonics"] = harmonics
-    return solvers.get(solver)().run(grid, medium, source, spec, **kwargs)
+    return _planned_run(solver, grid, medium, source, spec, backend=backend, harmonics=harmonics)
 
 
 def measure_planewave(size: Size, *, backend: str = "auto") -> dict:
@@ -273,7 +499,7 @@ def measure_planewave(size: Size, *, backend: str = "auto") -> dict:
     from caustica.analytic import attenuate  # noqa: PLC0415
 
     t0 = time.perf_counter()
-    lossless = _run_1d(
+    lossless, leg_lossless = _run_1d(
         alpha=0.0, n=256, pml_vox=24, src_vox=40, min_settle=40, max_settle=90, backend=backend
     )
 
@@ -285,7 +511,7 @@ def measure_planewave(size: Size, *, backend: str = "auto") -> dict:
     ph = np.asarray(lossless.phasor[WINDOW_1D])
     k_num = float(np.angle(ph[1:] * np.conj(ph[:-1])).mean() / DX_1D)
 
-    absorbing = _run_1d(
+    absorbing, leg_absorbing = _run_1d(
         alpha=ALPHA_NP_M,
         n=288,
         pml_vox=32,
@@ -317,6 +543,7 @@ def measure_planewave(size: Size, *, backend: str = "auto") -> dict:
         "alpha_target_np_m": ALPHA_NP_M,
         "alpha_measured_np_m": alpha_measured,
         "envelope_max_rel_dev": envelope_dev,
+        "planner": merge_plan([leg_lossless, leg_absorbing]),
         "elapsed_s": time.perf_counter() - t0,
     }
 
@@ -328,7 +555,6 @@ def measure_oneill(size: Size, *, backend: str = "auto") -> dict:
     comparison is the validated one from the physics gate: normalized axial
     shape (correlation), where the peak lands, and how wide the -6 dB lobe is.
     """
-    import caustica.solvers as solvers  # noqa: PLC0415
     from caustica import Grid, Medium, PMLSpec  # noqa: PLC0415
     from caustica.analytic import axial_pressure  # noqa: PLC0415
     from caustica.materials import water  # noqa: PLC0415
@@ -346,8 +572,14 @@ def measure_oneill(size: Size, *, backend: str = "auto") -> dict:
         grid, f0=F0, amplitude=DRIVE_PA, aperture_radius=a, roc=roc, apex_vox=apex
     )
     spec = CWRunSpec(min_settle_periods=8, max_settle_periods=30, n_record_periods=2)
-    res = solvers.get("linear")().run(
-        grid, medium, source, spec, backend=backend, reference_point=size.focus_vox
+    res, leg = _planned_run(
+        "linear",
+        grid,
+        medium,
+        source,
+        spec,
+        backend=backend,
+        reference_point=size.focus_vox,
     )
     elapsed = time.perf_counter() - t0
 
@@ -393,6 +625,7 @@ def measure_oneill(size: Size, *, backend: str = "auto") -> dict:
         "width_oneill_mm": width_oneill * 1e3,
         "steps_total": int(res.steps_total),
         "converged_period": int(res.converged_period),
+        "planner": merge_plan([leg]),
         "elapsed_s": elapsed,
     }
 
@@ -410,8 +643,8 @@ def measure_linear_limit(size: Size, *, backend: str = "auto") -> dict:
     common = dict(
         alpha=0.0, n=128, pml_vox=16, src_vox=24, min_settle=20, max_settle=40, backend=backend
     )
-    linear = _run_1d(solver="linear", **common)
-    westervelt = _run_1d(solver="westervelt", **common)
+    linear, leg_linear = _run_1d(solver="linear", **common)
+    westervelt, leg_westervelt = _run_1d(solver="westervelt", **common)
     return {
         "backend": westervelt.meta.get("backend"),
         "nonlinear_active": bool(westervelt.meta.get("nonlinear_active")),
@@ -422,6 +655,7 @@ def measure_linear_limit(size: Size, *, backend: str = "auto") -> dict:
             np.max(np.abs(np.asarray(linear.p_max) - np.asarray(westervelt.p_max)))
         ),
         "pmax_scale_pa": float(np.max(np.asarray(linear.p_max))),
+        "planner": merge_plan([leg_linear, leg_westervelt]),
         "elapsed_s": time.perf_counter() - t0,
     }
 
@@ -443,7 +677,7 @@ def measure_fubini(size: Size, *, backend: str = "auto") -> dict:
     dx = C0 / (F0 * ppw)
     src_vox = 60
     t0 = time.perf_counter()
-    res = _run_1d(
+    res, leg = _run_1d(
         alpha=0.0,
         n=600,
         pml_vox=40,
@@ -493,6 +727,7 @@ def measure_fubini(size: Size, *, backend: str = "auto") -> dict:
         "shock_distance_mm": x_shock * 1e3,
         "stations": stations,
         "steps_total": int(res.steps_total),
+        "planner": merge_plan([leg]),
         "elapsed_s": elapsed,
     }
 
@@ -683,6 +918,54 @@ def evaluate(scenarios: dict[str, dict]) -> list[Gate]:
     return [planewave, oneill, linear_limit, fubini]
 
 
+# ---------------------------------------------------- the planner's own row
+
+
+def planner_block(scenarios: dict[str, dict]) -> dict:
+    """Estimate-vs-actual for every scenario. **Never gated** -- here is why.
+
+    The suite's solves are hundredths of a second on a 1-D grid and a couple
+    of seconds on the small bowl. At that size a wall-time prediction is
+    mostly a per-run constant (the planner's ``warmup_s``), the measurement
+    is competing with whatever else the machine is doing, and off the GPU
+    the model behind the number is a CPU calibration of ~20 synthetic steps
+    -- or, without one, nothing at all. Gating on any of that would grade
+    the machine's mood and call it physics; the gates in :func:`evaluate`
+    compare solver output against closed forms, which is a claim about the
+    library rather than about the afternoon.
+
+    What the rows ARE good for: the step counts, which come from the same
+    settling policy the engine runs and are exact when convergence lands
+    where the planner assumed it would, and the memory inventory, which is
+    a byte count rather than a timing guess.
+    """
+    rows: dict[str, dict] = {}
+    for name, data in scenarios.items():
+        row = {key: None for key in PLAN_ROW_FIELDS}
+        row.update({k: v for k, v in (data.get("planner") or {}).items() if k in row})
+        if row["note"] is None and row["predicted_steps"] is None:
+            row["note"] = (
+                f"the scenario raised before it could be planned: {data['error']}"
+                if data.get("error")
+                else "this scenario reported no planner estimate"
+            )
+        rows[name] = row
+
+    def shared(key: str) -> str | None:
+        seen = sorted({str(r[key]) for r in rows.values() if r.get(key) is not None})
+        return seen[0] if len(seen) == 1 else (" + ".join(seen) if seen else None)
+
+    warmup = [r["warmup_s"] for r in rows.values() if r.get("warmup_s") is not None]
+    return {
+        "informational": True,
+        "gated": False,
+        "target": shared("target"),
+        "source": shared("source"),
+        "warmup_total_s": sum(warmup) if warmup else None,
+        "scenarios": rows,
+    }
+
+
 # ----------------------------------------------------------------- report
 
 
@@ -804,6 +1087,63 @@ def render_markdown(payload: dict) -> str:
                 f"| {fmt_num(row['analytic_a2_a1'])} | {100.0 * row['rel_err']:.2f}% |"
             )
 
+    plan = payload.get("planner") or {}
+    plan_rows = plan.get("scenarios") or {}
+    if plan_rows:
+        lines += [
+            "",
+            "## Planner: estimate vs actual",
+            "",
+            f"`caustica.planner.estimate` (`measure=False`) for each scenario's setup, "
+            f"taken before the solve it describes — target `{plan.get('target')}`, "
+            f"estimate source `{plan.get('source')}`. A scenario that solves more than "
+            f"once (plane wave, linear limit) adds its solves up; the memory column is "
+            f"the largest of them, since they run one after another. Deviation is "
+            f"(predicted - measured) / |measured|.",
+            "",
+            "| scenario | predicted t [s] | measured t [s] | deviation | predicted steps "
+            "| actual steps | vram predicted [GiB] |",
+            "|---|---|---|---|---|---|---|",
+        ]
+        for name, row in plan_rows.items():
+            lines.append(
+                f"| {name} | {fmt_num(row.get('predicted_s'))} "
+                f"| {fmt_num(row.get('measured_s'))} "
+                f"| {fmt_dev_pct(row.get('predicted_s'), row.get('measured_s'))} "
+                f"| {fmt_num(row.get('predicted_steps'))} "
+                f"| {fmt_num(row.get('actual_steps'))} "
+                f"| {fmt_num(row.get('vram_gib'))} |"
+            )
+        warmup = plan.get("warmup_total_s")
+        n_solves = sum(r.get("solves") or 0 for r in plan_rows.values())
+        why = [
+            "",
+            "**Informational, not gated — no gate reads these rows.** A prediction for a "
+            "solve that takes hundredths of a second is mostly the planner's one-time "
+            f"`warmup_s` constant ({fmt_num(warmup)} s of the predicted total above, over "
+            f"the {n_solves} solves these {len(plan_rows)} scenarios run), the "
+            "measured column is wall clock on a machine that is also doing other things, "
+            "and off the GPU the model behind the time is a ~20-step CPU calibration — or, "
+            "with none on this machine, nothing at all, which is why that cell can be "
+            "empty rather than invented. The step counts are the part worth reading: they "
+            "come from the same settling policy the engine runs, so they are exact when "
+            "convergence lands where the planner assumed. Gating any of this would grade "
+            "the machine's afternoon; the gates above grade the library.",
+        ]
+        if "cpu" in str(plan.get("target")) and warmup:
+            why.append("")
+            why.append(
+                "On the `cpu` target that constant is the planner's GPU default "
+                "(`planner.model.GPU_WARMUP_S`), substituted because this machine's "
+                "calibration entry carries no measured warmup — a cuFFT-plan and "
+                "kernel-compile cost a numpy run never pays, and the single largest "
+                "reason the predicted times above run long."
+            )
+        notes_rows = [(n, r["note"]) for n, r in plan_rows.items() if r.get("note")]
+        if notes_rows:
+            why += ["", *[f"- `{n}`: {_cell(note)}" for n, note in notes_rows]]
+        lines += why
+
     lines += ["", "## Scenario runtimes", "", "| scenario | seconds | note |", "|---|---|---|"]
     for name, data in scenarios.items():
         lines.append(
@@ -885,8 +1225,18 @@ def analytic_suite(
             results[name] = {"error": message, "elapsed_s": time.perf_counter() - t0}
             continue
         for key, value in sorted(results[name].items()):
-            if key != "stations":
+            if key not in ("stations", "planner"):
                 log(f"  {key}: {value}")
+        plan_row = results[name].get("planner")
+        if plan_row:
+            log(
+                f"  planner [{plan_row.get('source')} @ {plan_row.get('target')}]: "
+                f"{fmt_num(plan_row.get('predicted_s'))} s predicted vs "
+                f"{fmt_num(plan_row.get('measured_s'))} s measured "
+                f"({fmt_dev_pct(plan_row.get('predicted_s'), plan_row.get('measured_s'))}), "
+                f"steps {fmt_num(plan_row.get('predicted_steps'))} vs "
+                f"{fmt_num(plan_row.get('actual_steps'))} (informational)"
+            )
 
     gates = evaluate(results)
     payload = {
@@ -900,6 +1250,10 @@ def analytic_suite(
         "size_preset": preset.as_dict(),
         "environment": env,
         "scenarios": results,
+        # Informational, deliberately OUTSIDE "gates": nothing in here can
+        # change the verdict, and a reader should be able to see that from
+        # the shape of the payload alone.
+        "planner": planner_block(results),
         "gates": [g.as_dict() for g in gates],
         "verdict": overall_verdict(gates),
         "elapsed_s": time.perf_counter() - started,
