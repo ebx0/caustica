@@ -2251,3 +2251,49 @@ hücrelerinde Python satırı OLAMAZ, sadece `!` ve `#`.
 - Yeni testler: `tests/test_validation_gpu_gates.py` (36), `tests/test_packaging.py` (+5),
   `tests/test_planner.py` (+4), `tests/test_runner.py` (+4).
 - Açık kalan: M7'nin üç kutusu ve M8'in üç kutusu — **ikinci Colab oturumunda** ölçülecek.
+
+## 2026-08-23 — İki GPU oturumunun hasadı: F1–F6, janitor turu #2, M11 `run-analytic`
+
+İki kapı oturumu geldi (A100-SXM4-40GB ve RTX PRO 6000 Blackwell) ve süit tam olarak
+tasarlandığı işi yaptı: **FAIL verdi ve her FAIL bir şey öğretti.** Ayrıntılar MILESTONES
+M7/M8 bloklarında; burada özet + operasyon kaydı.
+
+### Dört kusur, iki commit (`aed5088`, `e2a1a23`)
+- **F1 — NaN'lı koşu `exit 0` veriyordu.** 256³ basamağı 2. periyotta NaN'a gitti, "converged"
+  yazdı, dolu `result.h5` bıraktı, 0 döndü — ve süit onu M8.vram kanıtı saydı. Motor artık ilk
+  sonlu-olmayan periyot tepesinde `SolverDivergedError` fırlatıyor; runner `exit 4` + `error.json`.
+- **F2 — VRAM ölçümü süreç-kirliliğiydi.** cupy havuzu monoton; tek süreçli merdiven her basamağa
+  öncekinin havuzunu ekliyordu (−%2.0 → −%18.6 → −%35.3 "sapma" — planner haklıydı). Basamak
+  başına taze süreç; kullanıcının gerçek koşusu da zaten bu.
+- **F3 — kalibrasyon doymayan boylarda uyduruluyordu.** 48³/72³ ikisi de ~1.0 ms (launch-bound);
+  fit 16.8M voksele 6.8× şişkin gitti (M8.time +%154…+%308 bundan). Sonda boyları artık boş
+  VRAM'in %1/%4/%10'u; fit kendi örneklerine artığını ölçüyor; tutturamayan fit en doygun örneğe
+  demirleniyor; plan aşırı ekstrapolasyonu söylüyor. Warmup da sabit değil: süreç + şekil terimi
+  (256³+400³'e uydur → 512³'ün 20.9 s'sini +%4.3 öngörür; düz 3.0 s, sürenin %46'sını kaçırıyordu).
+- **F4 — bilinmeyen kart sessizce A100 oluyordu.** Blackwell kalibrasyon ölçtü, sonra datasheet'ten
+  plan yaptı; 95 GiB kart 38.88 GiB'a göre yargılandı, sığan 640³ reddedildi. Artık: tahmin yok,
+  `unknown:<ad>` + gerçek VRAM + canlı adla kalibrasyon; `--gpu` varsayılanı "üstündeki cihaz".
+- F5 (basamak geometrisi/PML açıklığı) 256³ NaN sondasının sonucunu bekliyor; F6 (kalibrasyon
+  sondasının float32 taşması) kapandı. **AÇIK: 256³ NaN kökü** — iki kartta bit-aynı, numpy'de yok.
+  Beş-vakalı ayrıştırma sondası hazır (`scripts/dev_validate.py` U1 aşaması).
+
+### Operasyon: Fable şef, Opus mühendis (kullanıcı talimatı)
+İki Opus kod ajanı + bir Explore denetçisi paralel; commit yetkisi ajanlarda YOK, diff'ler
+operatörce doğrulanıp commit'lendi (mutasyon-olayı dersinin devamı: yazan ile tarihe geçiren ayrı).
+- **Janitor #01+#02 kapandı** (`3238f76`): +11 koruma testi; `result.h5` tek açılışta
+  (`store._geometry` + `load_result(with_geometry=True)`). #06 fiilen kapalıydı (M10e/ef837bf) —
+  defter güncellendi; açık ticket 7→4 (hepsi düşük/kullanıcı-kararı).
+- **Ölü dosya denetimi** (`4adb0af`): ağaç temiz çıktı — setup.py/build_stamp.py/MANIFEST.in/
+  notebooks/apps yük taşıyor. Silinen: gemini1/2.md (landscape §0 zaten yanlışlamıştı).
+  Düzeltilen: apps/README hayalet Phantom Studio gövdesi + yanlış "pytest kapsamaz" iddiası;
+  CI lint'e apps/ eklendi. Denetçinin "master rozeti 404" bulgusu bayat ref çıktı — fetch'le
+  yanlışlandı; asıl bayat olan MILESTONES M10f metniydi, düzeltildi (`48745e6`).
+- **M11 ikinci kutu kapandı** (`cf2e49b`): `run-analytic` — 4 kapı, her tolerans mevcut fizik
+  testinden miras VE süit kaynaksız limiti kendisi reddediyor. Verdict cebri `_verdict.py`'a
+  mekanik çıkarıldı, gpu-gates'in 40 testi DEĞİŞMEDEN yeşil. İlk PASS raporu kanıt olarak repoda.
+- A100 kapı oturumu #1 kanıtı arşivlendi (`2ddc6e7`).
+
+### Kanıt
+- Tam süit: **537 → 574 test** yeşil (F-paketi +20, janitor +11, run-analytic +26), ruff temiz.
+- İkinci Colab oturumu için beklenti: M8.vram/M8.time artık ölçülebilir; 256³ basamağı kök
+  bulunana dek `exit 4` verecek — bu doğru davranış, süit FAIL'i saklamıyor.
