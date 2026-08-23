@@ -19,11 +19,11 @@ Colab cell — paste as ONE cell (a GPU runtime already ships cupy, so do NOT
 install the ``[gpu]`` extra; it would reinstall CUDA wheels for ten minutes)::
 
     # 1. the library, from the branch under test
-    !pip -q install "git+https://github.com/ebx0/caustica@library-first"
+    !pip -q install "git+https://github.com/ebx0/caustica@master"
 
     # 2. this script (clone: also gives you the repo for reference)
     !rm -rf /content/caustica-src
-    !git clone -q --depth 1 -b library-first \
+    !git clone -q --depth 1 -b master \
         https://github.com/ebx0/caustica /content/caustica-src
 
     # 3. run it (U1 first; ~30-60 min total, U2 dominates)
@@ -32,7 +32,7 @@ install the ``[gpu]`` extra; it would reinstall CUDA wheels for ten minutes)::
 
     # no-clone variant of step 2 — fetch just this file:
     # !curl -sLo /content/dev_validate.py https://raw.githubusercontent.com/\
-    # ebx0/caustica/library-first/scripts/dev_validate.py
+    # ebx0/caustica/master/scripts/dev_validate.py
     # !python /content/dev_validate.py --profile colab
 
     # afterwards: keep the evidence

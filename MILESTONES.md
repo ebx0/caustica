@@ -1343,8 +1343,8 @@ Her biri fizibilite+prototip raporu; v2 seçimi kullanıcının.
 - **M10e kalan kalem:** commit + push (KULLANICI ONAYI) → public CI yeşili (3.10 taban ayağı
   dahil) + temiz-ortam `pip install git+.../caustica` + UWCEM atıf son kontrol (`janitor/06`).
   Not: UWCEM atıf yükümlülüğü M10k ile `uwcem-phantom` repo'suna taşınıyor.
-- **Çalışma dalı:** `library-first` — her iş kalemi sonunda YEREL commit, push yok, `master`
-  dokunulmaz (kullanıcı 2026-08-21: karar bende).
+- **Çalışma dalı:** `master` — tek trunk (2026-08-24: `library-first` ileri sarılıp silindi;
+  103 commit'lik göç dalı işini bitirdi). Her iş kalemi sonunda commit, push kararı bende.
 - M8 yerel yarısı kapandı (2026-08-11): `caustica.planner` — VRAM envanteri (engine birebir),
   a·N·log2N+b·N süre modeli, gpu_db.json (7 cihaz), cpu/cuda kalibrasyon + calibration.json,
   `estimate`/`compare`, kaynak etiketi db|calibrated|measured, OOM önerileri; 11 test.
