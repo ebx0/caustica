@@ -1095,7 +1095,14 @@ bu harness'in İÇİNE doğar.
       SAYIDA geçen ölçüm olmadan PASS vermez)
 - [ ] `study.Study`: config + koşu(lar) + sonuç + figürler; `report()` → MD+JSON; ortam/GPU/git
       damgası; `Study.sweep(...)`
-- [ ] `python -m caustica.validation run-analytic` → damgalı rapor `benchmarks/reports/`a
+- [x] `python -m caustica.validation run-analytic` → damgalı rapor `benchmarks/reports/`a
+      (2026-08-23, `cf2e49b`): 4 kapı (planewave amplitude/dispersiyon/absorpsiyon; O'Neil
+      korelasyon/odak/genişlik; beta=0 bit-özdeşlik; Fubini A2/A1 ≥4 istasyon) — HER tolerans
+      mevcut fizik testinden miras ve süit bunu kendisi denetliyor (kaynaksız limit = kırmızı).
+      Verdict cebri `_verdict.py`'a çıktı, gpu-gates 40 testi DEĞİŞMEDEN yeşil. İlk tam koşu
+      kanıt olarak repoda: `benchmarks/reports/analytic/numpy-20260823-010211/` (PASS, 7.6 s;
+      absorpsiyon %0.334 ve dispersiyon %0.004 — 2026-08-10 raporunu yeniden üretiyor).
+      `--size quick` (2.7 s) AYNI kapıları küçük bowl'da koşar, gevşetilmiş değil (testli)
 - [ ] Çok-motor karşılaştırma: AYNI job N kayıtlı çözücüde → relL2 / r / fokal metrik tablosu.
       Eski M12 kriterleri buraya: kwave T0 sanity kapısı, normalize karşılaştırma,
       "environment-broken" damgası
