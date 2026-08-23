@@ -427,3 +427,195 @@ def test_render_html_with_no_rows_emits_no_stray_table_close(tmp_path):
     )
     html = out.read_text(encoding="utf-8")
     assert "</table>" not in html and "<table>" not in html
+
+
+# ------------------------------- janitor ticket 01 (2026-08-23): the gaps left
+
+
+def test_preview_report_without_metrics_json(runner_outdir, tmp_path):
+    """The FIRST-sync state on a Drive: preview.npz landed, nothing else has.
+
+    That is the whole reason the preview package exists — judge a Colab run
+    before the rest of the folder syncs — so the report must render from it
+    alone: header + quicklook, and no metrics section conjured out of a file
+    that is not there.
+    """
+    import shutil
+
+    lone = tmp_path / "first_sync"
+    lone.mkdir()
+    shutil.copy2(runner_outdir / "preview.npz", lone / "preview.npz")
+    assert cli_main(["report", str(lone), "--preview"]) == 0
+    assert (lone / "fig_preview.png").exists()
+    report = (lone / "REPORT.md").read_text(encoding="utf-8")
+    assert "first_sync" in report  # no job name anywhere: the folder names it
+    assert "preview package" in report
+    assert "peak pressure" not in report and "Focal spot" not in report
+    assert not (lone / "metrics.json").exists()  # the preview path invents nothing
+
+
+def test_extent_6db_reports_truncation_instead_of_a_boundary_number():
+    """A profile that never reaches -6 dB inside the recorded region.
+
+    The honest answer is "cannot measure": pinning the crossing to the
+    region boundary would quote a focal width the run never resolved.
+    """
+    from caustica.report.metrics import extent_6db
+
+    coord = np.linspace(0.0, 1e-2, 21)
+    prof = np.full(21, 1e6, dtype=np.float32)  # flat: never falls below half
+    assert extent_6db(coord, prof, 10) == {
+        "left_mm": None,
+        "right_mm": None,
+        "width_mm": None,
+        "truncated": True,
+    }
+
+
+def test_target_outside_the_recorded_region_has_no_hit_ratio():
+    """A requested focus outside the record region: no pressure to report.
+
+    The record region may be a focal box; a target outside it is a real
+    (mis)configuration, and reading it would index the wrong voxel rather
+    than fail. p_pa/hit_ratio go None, the displacement stays honest.
+    """
+    shape = (24, 24, 32)
+    result = _synthetic_result(shape)
+    m = focus_metrics(
+        result,
+        dx=0.5e-3,
+        grid_shape=(40, 40, 60),
+        pml_vox=2,
+        apex_vox=(12, 12, 2),
+        focus_vox=(12, 12, shape[2] + 10),
+    )
+    assert m["target"]["p_pa"] is None and m["target"]["hit_ratio"] is None
+    assert m["target"]["displacement_norm_mm"] > 0.0  # geometry still measurable
+
+
+def test_write_preview_coarsens_further_until_the_package_actually_fits(tmp_path, monkeypatch):
+    """The budget is a MEASUREMENT, not an estimate — the retry loop proves it.
+
+    ``_coarse_step`` sizes the volume from raw float16 bytes; when
+    compression undershoots that guess the package is rebuilt one step
+    coarser. Here the estimate is pinned to a step whose package is measured
+    first, then the budget is set one byte below it — so the loop MUST run.
+    """
+    from caustica.report import preview as pv
+
+    shape = (48, 48, 48)
+    result = _synthetic_result(shape)
+    geo = {
+        "dx": 0.5e-3,
+        "grid_shape": shape,
+        "pml_vox": 2,
+        "apex_vox": (24, 24, 4),
+        "focus_vox": None,
+    }
+    monkeypatch.setattr(pv, "_coarse_step", lambda shape, budget: 2)
+    too_big = len(pv.build_preview(result, max_bytes=10**9, **geo))
+
+    path = write_preview(tmp_path, result, metrics={"job": "tight"}, max_bytes=too_big - 1, **geo)
+    assert path.stat().st_size <= too_big - 1
+    assert load_preview(path)["meta"]["coarse_step"] > 2  # step+1 until it fit
+
+
+def _capture_figures(monkeypatch) -> dict:
+    """Keep the Figure objects ``figures._save`` writes out.
+
+    A decoration that was NOT drawn is invisible in the PNG; the artists on
+    the axes are the only place the contract can be read back.
+    """
+    from caustica.report import figures as hfig
+
+    kept: dict = {}
+    real_save = hfig._save
+
+    def spy(fig, outdir, name):
+        kept[name] = fig
+        return real_save(fig, outdir, name)
+
+    monkeypatch.setattr(hfig, "_save", spy)
+    return kept
+
+
+def test_field_maps_without_source_indices_draws_no_source_dots(tmp_path, monkeypatch):
+    """FigureContext's optional fields DROP a decoration, never fail.
+
+    ``caustica report`` always has the source voxels (result.h5 stores
+    them), but a context built by hand — a GUI, an app, a preview-only
+    caller — may not, and the figure must still render.
+    """
+    from dataclasses import replace
+
+    from caustica.report import figures as hfig
+    from caustica.report.metrics import axial_profiles
+
+    shape = (24, 24, 32)
+    result = _synthetic_result(shape)
+    geo = {"dx": 0.5e-3, "grid_shape": shape, "pml_vox": 2, "apex_vox": (12, 12, 2)}
+    prof = axial_profiles(result, **geo)
+    kept = _capture_figures(monkeypatch)
+
+    ctx = hfig.FigureContext(title="no source", **geo)  # source_indices/focus_vox: None
+    assert hfig.field_maps(ctx, result, prof, tmp_path) == "fig_field.png"
+    assert [ln.get_marker() for ln in kept["fig_field"].axes[0].lines] == ["x"]  # peak only
+
+    src = np.array([[12, 12, 4], [13, 12, 4]], dtype=np.int32)
+    hfig.field_maps(replace(ctx, source_indices=src), result, prof, tmp_path)
+    assert sorted(ln.get_marker() for ln in kept["fig_field"].axes[0].lines) == [".", "x"]
+
+
+def test_medium_figure_drops_the_sound_speed_panel_when_there_is_none(tmp_path, monkeypatch):
+    """Labels alone still earn a figure; no labels earn none at all."""
+    from dataclasses import replace
+
+    from caustica.report import figures as hfig
+
+    shape = (16, 16, 20)
+    labels = np.zeros(shape, np.int32)
+    labels[:, :, 10:] = 1
+    kept = _capture_figures(monkeypatch)
+    ctx = hfig.FigureContext(
+        dx=0.5e-3,
+        grid_shape=shape,
+        pml_vox=2,
+        apex_vox=(8, 8, 2),
+        title="labels only",
+        labels=labels,
+        label_names={0: "water", 1: "fat"},
+    )
+    assert hfig.medium_plot(ctx, tmp_path) == "fig_medium.png"
+    fig = kept["fig_medium"]
+    assert fig.axes[0].images and not fig.axes[1].images  # c panel never drawn
+    assert len(fig.axes) == 2  # ...so no colorbar axes came with it either
+    assert hfig.medium_plot(replace(ctx, labels=None), tmp_path) is None
+
+
+def test_convergence_figure_is_skipped_when_no_history_was_recorded(tmp_path):
+    """No recorded periods (a resumed run, a single-period solve) -> no figure.
+
+    ``make_all`` filters the None out, so an empty axes pair never reaches
+    the report; that filtering only works if the plot admits it has nothing.
+    """
+    from dataclasses import replace
+
+    from caustica.report import figures as hfig
+
+    result = replace(_synthetic_result((16, 16, 20)), convergence_history=[])
+    assert hfig.convergence_plot(result, tmp_path) is None
+    assert not (tmp_path / "fig_convergence.png").exists()
+
+
+def test_record_region_entirely_inside_the_pml_is_refused():
+    """Nothing to analyze: the peak hunt must not report a sponge artefact.
+
+    A tiny record region on a big grid (a mis-set record_region_vox) lands
+    completely inside the PML margin — the honest answer is a refusal, not
+    an argmax over damped voxels.
+    """
+    from caustica.report.metrics import interior_slices
+
+    result = _synthetic_result((4, 4, 4))
+    with pytest.raises(ValueError, match="entirely inside the PML"):
+        interior_slices(result, grid_shape=(40, 40, 40), pml_vox=10)

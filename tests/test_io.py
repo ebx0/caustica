@@ -32,6 +32,7 @@ from caustica.io.store import (
 )
 from caustica.materials import water
 from caustica.solvers import CWRunSpec
+from caustica.solvers.base import SolverResult
 from caustica.sources import plane_cw_source
 
 F0, C0 = 1.0e6, 1500.0
@@ -232,6 +233,61 @@ def test_quantize_false_stores_float32_verbatim(tmp_path, mini_run):
     back = load_result(path)
     np.testing.assert_array_equal(back.p_max, res.p_max)
     np.testing.assert_array_equal(back.phasor, res.phasor)
+
+
+def test_load_result_with_geometry_opens_the_file_once(tmp_path, mini_run, monkeypatch):
+    """Fields AND the self-description out of a SINGLE open (janitor 02).
+
+    ``caustica report`` used to call ``load_result`` and then re-open
+    result.h5 to parse the same attrs from a second copy of the schema kept
+    in the report module — a copy that could drift from the writer without
+    anything noticing. The copy is gone; counting the opens keeps it gone.
+    """
+    import h5py
+
+    grid, src, res = mini_run
+    path = _save(
+        tmp_path,
+        mini_run,
+        name="geo",
+        extra_attrs={"job_name": "geo-job", "apex_vox": [18], "focus_vox": [64]},
+    )
+    opens = 0
+    real_file = h5py.File
+
+    def counting_file(*args, **kwargs):
+        nonlocal opens
+        opens += 1
+        return real_file(*args, **kwargs)
+
+    monkeypatch.setattr(h5py, "File", counting_file)
+    result, geo = load_result(path, with_geometry=True)
+
+    assert opens == 1
+    assert geo["dx"] == pytest.approx(grid.dx)
+    assert geo["grid_shape"] == grid.shape
+    assert geo["pml_vox"] == grid.pml_vox
+    assert geo["f0_hz"] == pytest.approx(F0)
+    assert geo["amplitude_pa"] == pytest.approx(src.amplitude)
+    assert geo["solver"] == "linear" and geo["job_name"] == "geo-job"
+    assert geo["apex_known"] and geo["apex_vox"] == (18,) and geo["focus_vox"] == (64,)
+    np.testing.assert_array_equal(geo["source_indices"], src.indices)
+    assert result.region == res.region  # the fields came back too
+
+
+def test_result_geometry_falls_back_when_the_apex_stamp_is_absent(tmp_path, mini_run):
+    """A pre-M10d file carries no apex/focus stamp: origin, and say so.
+
+    Every output folder written before M10d is exactly this shape, and the
+    report's "mm from the apex" caveat is driven by ``apex_known`` — so the
+    fallback is contract, not convenience.
+    """
+    path = _save(tmp_path, mini_run, name="pre_m10d")
+    _, geo = load_result(path, with_geometry=True)
+    assert geo["apex_known"] is False
+    assert geo["apex_vox"] == (0, 0, 0) and geo["focus_vox"] is None
+    assert geo["job_name"] == "" and geo["git_commit"] == ""  # unstamped, not guessed
+    assert isinstance(load_result(path), SolverResult)  # the default stays one object
 
 
 # --------------------------------------------------------------------- store

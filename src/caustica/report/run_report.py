@@ -35,30 +35,6 @@ def _read_json(path: Path) -> dict | None:
         return None
 
 
-def _h5_geometry(path: Path) -> dict:
-    """The self-description attrs a report needs, straight from the file."""
-    import h5py  # noqa: PLC0415 (lazy: keep `import caustica.report` h5py-free)
-
-    with h5py.File(path, "r") as hf:
-        a = hf.attrs
-        geo = {
-            "dx": float(a["dx_m"]),
-            "grid_shape": tuple(int(v) for v in a["grid_shape"]),
-            "pml_vox": int(a["pml_vox"]),
-            "apex_vox": tuple(int(v) for v in a["apex_vox"]) if "apex_vox" in a else (0, 0, 0),
-            "focus_vox": tuple(int(v) for v in a["focus_vox"]) if "focus_vox" in a else None,
-            "apex_known": "apex_vox" in a,
-            "job_name": str(a.get("job_name", "")),
-            "solver": str(a.get("solver", "")),
-            "backend": str(a.get("backend", "")),
-            "git_commit": str(a.get("git_commit", "")),
-            "f0_hz": float(a["f0_hz"]),
-            "amplitude_pa": float(hf["input"].attrs["amplitude_pa"]),
-            "source_indices": np.asarray(hf["input/source_indices"]),
-        }
-    return geo
-
-
 def _header_rows(name: str, meta: dict | None, geo: dict | None) -> list[hrep.Row]:
     rows: list[hrep.Row] = [("Job", "name", name)]
     if meta:
@@ -146,8 +122,9 @@ def _full_report(outdir: Path, result_path: Path, metrics: dict | None, meta: di
     from caustica.io.store import load_result  # noqa: PLC0415 (h5py lazy)
     from caustica.report import figures as hfig  # noqa: PLC0415 (matplotlib lazy)
 
-    result = load_result(result_path)
-    geo = _h5_geometry(result_path)
+    # ONE open for the fields and the geometry: the parsing of the result
+    # attrs belongs to the module that writes them (janitor ticket 02).
+    result, geo = load_result(result_path, with_geometry=True)
     name = geo["job_name"] or (metrics or {}).get("job") or outdir.name
     notes: list[str] = []
     if metrics is None:
