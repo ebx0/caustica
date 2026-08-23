@@ -1,0 +1,528 @@
+{
+  "format": "caustica-gpu-gates/1",
+  "generated": "2026-08-22T22:25:19+00:00",
+  "caustica": "0.1.0.dev0",
+  "git_commit": "cc3046d31357031ee03fb20e5da4e021c039db9b",
+  "device": "NVIDIA A100-SXM4-40GB",
+  "gpu_key": "A100-40GB",
+  "free_vram_gib_at_start": 39.076,
+  "environment": {
+    "caustica": "0.1.0.dev0",
+    "python": "3.13.15",
+    "platform": "Linux-6.6.122+-x86_64-with-glibc2.35",
+    "numpy": "2.1.3",
+    "scipy": "1.16.3",
+    "pydantic": "2.13.4",
+    "h5py": "3.16.0",
+    "resolved_backend": "cupy",
+    "gpu_name": "NVIDIA A100-SXM4-40GB",
+    "driver_version": 13000,
+    "cuda_runtime_version": 12090,
+    "cupy_version": "14.0.1",
+    "vram_total_gib": 39.494,
+    "vram_free_gib": 39.076
+  },
+  "calibration": {
+    "a": 0.0,
+    "b": 3.2385727459167544e-09,
+    "warmup_s": 2.4874118249997537,
+    "warmup_source": "probe",
+    "backend": "cupy",
+    "n_steps": 20,
+    "nonlinear": false,
+    "samples": [
+      [
+        110592,
+        0.0010611400000470894
+      ],
+      [
+        373248,
+        0.0010005005001403333
+      ]
+    ],
+    "shapes": [
+      "48x48x48",
+      "72x72x72"
+    ],
+    "vram_peak_bytes_by_shape": {
+      "48x48x48": 9734656,
+      "72x72x72": 42311680
+    },
+    "calibrated_at": "2026-08-22T22:25:22+00:00"
+  },
+  "rungs": [
+    {
+      "name": "vram-2gib-256",
+      "shape": [
+        256,
+        256,
+        256
+      ],
+      "dx_mm": 0.3,
+      "solver": "westervelt",
+      "target_gib": 2.0,
+      "predicted_gib": 1.7294921875,
+      "preview_only": false,
+      "expect_fit": true,
+      "note": "",
+      "exit_code": 0,
+      "plan": {
+        "source": "calibrated",
+        "spp": 20,
+        "t_step_s": 0.054334234489958506,
+        "warmup_s": 2.487,
+        "steps_expected": 260,
+        "steps_worst": 260,
+        "t_expected_s": 16.6,
+        "vram_gib": 1.729
+      },
+      "actual": {
+        "elapsed_solve_s": 6.54,
+        "steps_total": 260,
+        "t_step_measured_s": 0.025171,
+        "t_step_steady_s": 0.0077,
+        "warmup_s": 4.542,
+        "steady_samples": 13,
+        "vram_pool_peak_gib": 1.764,
+        "converged_period": 12
+      },
+      "error": {
+        "stage": null,
+        "error_class": null,
+        "message": null,
+        "advice": null
+      }
+    },
+    {
+      "name": "vram-8gib-400",
+      "shape": [
+        400,
+        400,
+        400
+      ],
+      "dx_mm": 0.3,
+      "solver": "westervelt",
+      "target_gib": 8.0,
+      "predicted_gib": 6.591320037841797,
+      "preview_only": true,
+      "expect_fit": true,
+      "note": "",
+      "exit_code": 0,
+      "plan": {
+        "source": "calibrated",
+        "spp": 20,
+        "t_step_s": 0.20726865573867229,
+        "warmup_s": 2.487,
+        "steps_expected": 360,
+        "steps_worst": 360,
+        "t_expected_s": 77.1,
+        "vram_gib": 6.591
+      },
+      "actual": {
+        "elapsed_solve_s": 22.68,
+        "steps_total": 360,
+        "t_step_measured_s": 0.063001,
+        "t_step_steady_s": 0.0341,
+        "warmup_s": 10.405,
+        "steady_samples": 18,
+        "vram_pool_peak_gib": 8.096,
+        "converged_period": 17
+      },
+      "error": {
+        "stage": null,
+        "error_class": null,
+        "message": null,
+        "advice": null
+      }
+    },
+    {
+      "name": "vram-14gib-512",
+      "shape": [
+        512,
+        512,
+        512
+      ],
+      "dx_mm": 0.3,
+      "solver": "westervelt",
+      "target_gib": 14.0,
+      "predicted_gib": 13.817968750372529,
+      "preview_only": true,
+      "expect_fit": true,
+      "note": "M7 full-size class (512^3)",
+      "exit_code": 0,
+      "plan": {
+        "source": "calibrated",
+        "spp": 20,
+        "t_step_s": 0.43467387591966805,
+        "warmup_s": 2.487,
+        "steps_expected": 420,
+        "steps_worst": 420,
+        "t_expected_s": 185.1,
+        "vram_gib": 13.818
+      },
+      "actual": {
+        "elapsed_solve_s": 45.4,
+        "steps_total": 420,
+        "t_step_measured_s": 0.108089,
+        "t_step_steady_s": 0.0583,
+        "warmup_s": 20.912,
+        "steady_samples": 21,
+        "vram_pool_peak_gib": 21.369,
+        "converged_period": 20
+      },
+      "error": {
+        "stage": null,
+        "error_class": null,
+        "message": null,
+        "advice": null
+      }
+    },
+    {
+      "name": "vram-28gib-640",
+      "shape": [
+        640,
+        640,
+        640
+      ],
+      "dx_mm": 0.3,
+      "solver": "westervelt",
+      "target_gib": 28.0,
+      "predicted_gib": 26.981201171875,
+      "preview_only": true,
+      "expect_fit": true,
+      "note": "",
+      "exit_code": 3,
+      "plan": {
+        "source": "calibrated",
+        "spp": 20,
+        "t_step_s": 0.8489724139056016,
+        "warmup_s": 2.487,
+        "steps_expected": 500,
+        "steps_worst": 500,
+        "t_expected_s": 427.0,
+        "vram_gib": 26.981
+      },
+      "actual": {
+        "elapsed_solve_s": null,
+        "steps_total": null,
+        "t_step_measured_s": null,
+        "t_step_steady_s": null,
+        "warmup_s": null,
+        "steady_samples": null,
+        "vram_pool_peak_gib": null,
+        "converged_period": null
+      },
+      "error": {
+        "stage": "gate",
+        "error_class": "VramRefusal",
+        "message": "REFUSED before solving: this run needs 26.98 GiB but free device VRAM (NVIDIA A100-SXM4-40GB) is 17.63 GiB.",
+        "advice": [
+          "coarsen dx, shrink the record region, or switch to the linear solver"
+        ]
+      }
+    },
+    {
+      "name": "oom-750",
+      "shape": [
+        750,
+        750,
+        750
+      ],
+      "dx_mm": 0.3,
+      "solver": "westervelt",
+      "target_gib": 39.076,
+      "predicted_gib": 43.41490566730499,
+      "preview_only": true,
+      "expect_fit": false,
+      "note": "43.4 GiB against 39.1 GiB free: must be REFUSED (exit 3)",
+      "exit_code": 3,
+      "plan": {
+        "source": "calibrated",
+        "spp": 20,
+        "t_step_s": 1.3662728771836308,
+        "warmup_s": 2.487,
+        "steps_expected": 560,
+        "steps_worst": 560,
+        "t_expected_s": 767.6,
+        "vram_gib": 43.415
+      },
+      "actual": {
+        "elapsed_solve_s": null,
+        "steps_total": null,
+        "t_step_measured_s": null,
+        "t_step_steady_s": null,
+        "warmup_s": null,
+        "steady_samples": null,
+        "vram_pool_peak_gib": null,
+        "converged_period": null
+      },
+      "error": {
+        "stage": "gate",
+        "error_class": "VramRefusal",
+        "message": "REFUSED before solving: this run needs 43.41 GiB but free device VRAM (NVIDIA A100-SXM4-40GB) is 17.63 GiB.",
+        "advice": [
+          "increase dx by >= x1.04 (same physical extent at grid ~(722, 722, 722); voxel count scales 1/m^3)",
+          "shrink the record region (AOI): record buffers are 4.71 GiB \u2014 pass record_region=... to run()",
+          "the 'linear' solver drops the beta map and nonlinear temporaries (~4.71 GiB) \u2014 valid only if harmonics are not needed",
+          "or pick a larger device: A100-80GB, H100-PCIe, H100-SXM"
+        ]
+      }
+    }
+  ],
+  "parity": {
+    "backends": [
+      "numpy",
+      "cupy"
+    ],
+    "measured_on": "in-memory fp32 SolverResult fields, same process, no result.h5 round trip",
+    "phasor": {
+      "rel_l2": 2.502949783194254e-06,
+      "rel_linf": 1.4705654512741247e-06
+    },
+    "p_max": {
+      "rel_l2": 1.7618138882867492e-06,
+      "rel_linf": 1.1956094828570524e-06
+    },
+    "stored_float16_reference": {
+      "note": "INFORMATIONAL, not gated: the same two fields after the store's float16 quantization. ~4.9e-4 relative L-infinity is one float16 ULP and is what comparing two result.h5 files looks like when the solvers agree exactly.",
+      "phasor": {
+        "rel_l2": 3.2804528061750495e-05,
+        "rel_linf": 0.00023960468581974638
+      },
+      "p_max": {
+        "rel_l2": 2.6990576421740608e-05,
+        "rel_linf": 0.00024420323687355296
+      }
+    }
+  },
+  "gates": [
+    {
+      "id": "M7.parity",
+      "criterion": "numpy vs cupy on a mini 3-D scenario: field relative error < 1e-05",
+      "required": 4,
+      "verdict": "PASS",
+      "n_pass": 4,
+      "checks": [
+        {
+          "name": "parity phasor: relative L2",
+          "verdict": "PASS",
+          "detail": "2.503e-06 (limit 1.000e-05)",
+          "value": 2.502949783194254e-06,
+          "limit": 1e-05,
+          "unit": ""
+        },
+        {
+          "name": "parity phasor: relative Linf",
+          "verdict": "PASS",
+          "detail": "1.471e-06 (limit 1.000e-05)",
+          "value": 1.4705654512741247e-06,
+          "limit": 1e-05,
+          "unit": ""
+        },
+        {
+          "name": "parity p_max: relative L2",
+          "verdict": "PASS",
+          "detail": "1.762e-06 (limit 1.000e-05)",
+          "value": 1.7618138882867492e-06,
+          "limit": 1e-05,
+          "unit": ""
+        },
+        {
+          "name": "parity p_max: relative Linf",
+          "verdict": "PASS",
+          "detail": "1.196e-06 (limit 1.000e-05)",
+          "value": 1.1956094828570524e-06,
+          "limit": 1e-05,
+          "unit": ""
+        }
+      ]
+    },
+    {
+      "id": "M7.fullsize",
+      "criterion": "a full-size run (dx=0.30 mm, 512^3 FFT class) completes without OOM",
+      "required": 1,
+      "verdict": "FAIL",
+      "n_pass": 1,
+      "checks": [
+        {
+          "name": "vram-14gib-512: completed",
+          "verdict": "PASS",
+          "detail": "shape (512, 512, 512) at dx=0.3 mm exited 0 (0 = solved, 3 = refused for memory)",
+          "observed": 0,
+          "expected": 0
+        },
+        {
+          "name": "vram-28gib-640: completed",
+          "verdict": "FAIL",
+          "detail": "shape (640, 640, 640) at dx=0.3 mm exited 3 (0 = solved, 3 = refused for memory)",
+          "observed": 3,
+          "expected": 0
+        }
+      ]
+    },
+    {
+      "id": "M8.vram",
+      "criterion": "VRAM prediction within +/-10% of the measured mempool peak, on at least 2 grid sizes",
+      "required": 2,
+      "verdict": "FAIL",
+      "n_pass": 1,
+      "checks": [
+        {
+          "name": "vram-2gib-256: VRAM",
+          "verdict": "PASS",
+          "detail": "predicted 1.729 GiB vs actual 1.764 GiB (-2.0%, tolerance +/-10%)",
+          "predicted": 1.729,
+          "actual": 1.764,
+          "tol_pct": 10.0,
+          "unit": " GiB",
+          "deviation_pct": -1.9841269841269795
+        },
+        {
+          "name": "vram-8gib-400: VRAM",
+          "verdict": "FAIL",
+          "detail": "predicted 6.591 GiB vs actual 8.096 GiB (-18.6%, tolerance +/-10%)",
+          "predicted": 6.591,
+          "actual": 8.096,
+          "tol_pct": 10.0,
+          "unit": " GiB",
+          "deviation_pct": -18.589426877470355
+        },
+        {
+          "name": "vram-14gib-512: VRAM",
+          "verdict": "FAIL",
+          "detail": "predicted 13.82 GiB vs actual 21.37 GiB (-35.3%, tolerance +/-10%)",
+          "predicted": 13.818,
+          "actual": 21.369,
+          "tol_pct": 10.0,
+          "unit": " GiB",
+          "deviation_pct": -35.336234732556505
+        },
+        {
+          "name": "vram-28gib-640: VRAM",
+          "verdict": "SKIP",
+          "detail": "not measured",
+          "predicted": null,
+          "actual": null,
+          "tol_pct": 10.0,
+          "unit": " GiB",
+          "deviation_pct": null
+        }
+      ]
+    },
+    {
+      "id": "M8.time",
+      "criterion": "post-calibration wall-time prediction within +/-25% of actual, on at least 2 scenarios (same device); a plan whose source is not 'calibrated' does not count",
+      "required": 2,
+      "verdict": "FAIL",
+      "n_pass": 0,
+      "checks": [
+        {
+          "name": "vram-2gib-256: wall time",
+          "verdict": "FAIL",
+          "detail": "predicted 16.6 s vs actual 6.54 s (+153.8%, tolerance +/-25%)",
+          "predicted": 16.6,
+          "actual": 6.54,
+          "tol_pct": 25.0,
+          "unit": " s",
+          "deviation_pct": 153.82262996941898
+        },
+        {
+          "name": "vram-8gib-400: wall time",
+          "verdict": "FAIL",
+          "detail": "predicted 77.1 s vs actual 22.68 s (+239.9%, tolerance +/-25%)",
+          "predicted": 77.1,
+          "actual": 22.68,
+          "tol_pct": 25.0,
+          "unit": " s",
+          "deviation_pct": 239.94708994708992
+        },
+        {
+          "name": "vram-14gib-512: wall time",
+          "verdict": "FAIL",
+          "detail": "predicted 185.1 s vs actual 45.4 s (+307.7%, tolerance +/-25%)",
+          "predicted": 185.1,
+          "actual": 45.4,
+          "tol_pct": 25.0,
+          "unit": " s",
+          "deviation_pct": 307.70925110132157
+        },
+        {
+          "name": "vram-28gib-640: wall time",
+          "verdict": "SKIP",
+          "detail": "not measured",
+          "predicted": null,
+          "actual": null,
+          "tol_pct": 25.0,
+          "unit": " s",
+          "deviation_pct": null
+        }
+      ]
+    },
+    {
+      "id": "M8.oom",
+      "criterion": "a run larger than the device is REFUSED before solving (exit 3) with advice",
+      "required": 2,
+      "verdict": "PASS",
+      "n_pass": 2,
+      "checks": [
+        {
+          "name": "oom-750: refused with exit 3",
+          "verdict": "PASS",
+          "detail": "a 43.4 GiB run on this device exited 3",
+          "observed": 3,
+          "expected": 3
+        },
+        {
+          "name": "oom-750: refusal carries advice",
+          "verdict": "PASS",
+          "detail": "increase dx by >= x1.04 (same physical extent at grid ~(722, 722, 722); voxel count scales 1/m^3); shrink the record region (AOI): record buffers are 4.71 GiB \u2014 pass record_region=... to run(); the 'linear' solver drops the beta map and nonlinear temporaries (~4.71 GiB) \u2014 valid only if harmonics are not needed; or pick a larger device: A100-80GB, H100-PCIe, H100-SXM",
+          "observed": true,
+          "expected": true
+        }
+      ]
+    }
+  ],
+  "step_time_baseline": [
+    {
+      "shape": [
+        256,
+        256,
+        256
+      ],
+      "voxels": 16777216,
+      "solver": "westervelt",
+      "t_step_steady_s": 0.0077,
+      "t_step_measured_s": 0.025171,
+      "warmup_s": 4.542
+    },
+    {
+      "shape": [
+        400,
+        400,
+        400
+      ],
+      "voxels": 64000000,
+      "solver": "westervelt",
+      "t_step_steady_s": 0.0341,
+      "t_step_measured_s": 0.063001,
+      "warmup_s": 10.405
+    },
+    {
+      "shape": [
+        512,
+        512,
+        512
+      ],
+      "voxels": 134217728,
+      "solver": "westervelt",
+      "t_step_steady_s": 0.0583,
+      "t_step_measured_s": 0.108089,
+      "warmup_s": 20.912
+    }
+  ],
+  "verdict": "FAIL",
+  "notes": [
+    "recorded warmup 20.91 s into the calibration for NVIDIA A100-SXM4-40GB; it applies to the NEXT plan, not to the numbers graded above"
+  ],
+  "recorded_warmup_s": 20.912
+}

@@ -1,0 +1,48 @@
+{
+  "format": "caustica-job/1",
+  "kind": "explicit",
+  "name": "parity-mini",
+  "medium": {
+    "kind": "homogeneous"
+  },
+  "grid": {
+    "ndim": 3,
+    "dx_mm": 0.6,
+    "size_mm": [
+      24.0,
+      24.0,
+      24.0
+    ],
+    "pml": {
+      "thickness_mm": 3.0
+    }
+  },
+  "source": {
+    "kind": "array",
+    "array": {
+      "kind": "bowl",
+      "d_outer_mm": 8.399999999999999,
+      "roc_mm": 9.600000000000001
+    },
+    "apex_mm": [
+      12.0,
+      12.0,
+      2.4000000000000004
+    ]
+  },
+  "drive": {
+    "f0_mhz": 0.5,
+    "amplitude_kpa": 100.0
+  },
+  "run": {
+    "spec": {
+      "min_settle_periods": 2,
+      "max_settle_periods": 2,
+      "n_record_periods": 1
+    },
+    "harmonics": [
+      1
+    ]
+  },
+  "solver": "linear"
+}
