@@ -1,0 +1,411 @@
+{
+  "format": "caustica-analytic/1",
+  "generated": "2026-08-23T07:39:10+00:00",
+  "caustica": "0.1.0.dev0",
+  "git_commit": "cbec29f777fd0ca82e325d388ae1fffb733cf201",
+  "backend": "numpy",
+  "host": "LOQ",
+  "size": "full",
+  "size_preset": {
+    "name": "full",
+    "bowl_shape": [
+      80,
+      80,
+      120
+    ],
+    "dx_mm": 0.375,
+    "aperture_mm": 7.5,
+    "roc_mm": 18.0,
+    "apex_vox": [
+      40,
+      40,
+      16
+    ],
+    "pml_mm": 5.0
+  },
+  "environment": {
+    "caustica": "0.1.0.dev0",
+    "python": "3.12.10",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "numpy": "2.2.6",
+    "scipy": "1.15.3",
+    "pydantic": "2.13.4",
+    "h5py": "3.16.0",
+    "resolved_backend": "numpy"
+  },
+  "scenarios": {
+    "planewave": {
+      "backend": "numpy",
+      "spp": 8,
+      "steps_total": 1640,
+      "p0_pa": 100000.0,
+      "realized_pa": 108244.953125,
+      "amplitude_ratio": 1.08244953125,
+      "k_analytic_rad_m": 4188.790204786391,
+      "k_measured_rad_m": 4188.62353515625,
+      "alpha_target_np_m": 30.0,
+      "alpha_measured_np_m": 30.100129582733274,
+      "envelope_max_rel_dev": 0.03903602302515498,
+      "planner": {
+        "target": "cpu",
+        "source": "calibrated",
+        "solves": 2,
+        "predicted_s": 0.010262328894565857,
+        "measured_s": 0.07345200004056096,
+        "predicted_steps": 1640,
+        "actual_steps": 1640,
+        "warmup_s": 0.0,
+        "vram_gib": 2.102646976709366e-05,
+        "note": null
+      },
+      "elapsed_s": 0.10171399998944253
+    },
+    "oneill": {
+      "backend": "numpy",
+      "shape": [
+        80,
+        80,
+        120
+      ],
+      "dx_mm": 0.375,
+      "aperture_mm": 7.5,
+      "roc_mm": 18.0,
+      "f_number": 1.2000000000000002,
+      "n_axial_samples": 48,
+      "axial_corr": 0.99923016395011,
+      "peak_vox": [
+        40,
+        40,
+        57
+      ],
+      "oneill_peak_z_vox": 56.0,
+      "focus_pos_err_vox": 1.0,
+      "lateral_pos_err_vox": 0.0,
+      "width_solver_mm": 16.077144567894205,
+      "width_oneill_mm": 15.972790512139499,
+      "steps_total": 184,
+      "converged_period": 21,
+      "planner": {
+        "target": "cpu",
+        "source": "calibrated",
+        "solves": 1,
+        "predicted_s": 7.822131046327085,
+        "measured_s": 7.017204400035553,
+        "predicted_steps": 184,
+        "actual_steps": 184,
+        "warmup_s": 0.0,
+        "vram_gib": 0.06953239440917969,
+        "note": null
+      },
+      "elapsed_s": 7.0245687999995425
+    },
+    "linear_limit": {
+      "backend": "numpy",
+      "nonlinear_active": false,
+      "phasor_max_abs_diff_pa": 0.0,
+      "pmax_max_abs_diff_pa": 0.0,
+      "pmax_scale_pa": 112933.25,
+      "planner": {
+        "target": "cpu",
+        "source": "calibrated",
+        "solves": 2,
+        "predicted_s": 0.0019482824716214211,
+        "measured_s": 0.02797839988488704,
+        "predicted_steps": 768,
+        "actual_steps": 768,
+        "warmup_s": 0.0,
+        "vram_gib": 9.373761713504791e-06,
+        "note": null
+      },
+      "elapsed_s": 0.029582399991340935
+    },
+    "fubini": {
+      "backend": "numpy",
+      "nonlinear_active": true,
+      "ppw": 16.0,
+      "p0_effective_pa": 2005997.8627613771,
+      "shock_distance_mm": 76.50598279811157,
+      "stations": [
+        {
+          "index": 150,
+          "sigma": 0.11028549260343945,
+          "measured_a2_a1": 0.05674721420516747,
+          "analytic_a2_a1": 0.05500310309220608,
+          "rel_err": 0.03170932210929259
+        },
+        {
+          "index": 250,
+          "sigma": 0.2328249288294833,
+          "measured_a2_a1": 0.11767861594438586,
+          "analytic_a2_a1": 0.11510135106983023,
+          "rel_err": 0.022391265181518547
+        },
+        {
+          "index": 350,
+          "sigma": 0.3553643650555271,
+          "measured_a2_a1": 0.17479445076530295,
+          "analytic_a2_a1": 0.17303693446703391,
+          "rel_err": 0.01015688531285133
+        },
+        {
+          "index": 450,
+          "sigma": 0.4779038012815709,
+          "measured_a2_a1": 0.23069553779245316,
+          "analytic_a2_a1": 0.22771120493796834,
+          "rel_err": 0.013105779556600193
+        },
+        {
+          "index": 540,
+          "sigma": 0.5881892938850104,
+          "measured_a2_a1": 0.27572671370413543,
+          "analytic_a2_a1": 0.2732606192598409,
+          "rel_err": 0.009024697561522885
+        }
+      ],
+      "steps_total": 2673,
+      "planner": {
+        "target": "cpu",
+        "source": "calibrated",
+        "solves": 1,
+        "predicted_s": 0.04190627094837097,
+        "measured_s": 0.10999799997080117,
+        "predicted_steps": 2673,
+        "actual_steps": 2673,
+        "warmup_s": 0.0,
+        "vram_gib": 6.174296140670776e-05,
+        "note": null
+      },
+      "elapsed_s": 0.1106054000556469
+    }
+  },
+  "planner": {
+    "informational": true,
+    "gated": false,
+    "target": "cpu",
+    "source": "calibrated",
+    "warmup_total_s": 0.0,
+    "scenarios": {
+      "planewave": {
+        "target": "cpu",
+        "source": "calibrated",
+        "solves": 2,
+        "predicted_s": 0.010262328894565857,
+        "measured_s": 0.07345200004056096,
+        "predicted_steps": 1640,
+        "actual_steps": 1640,
+        "warmup_s": 0.0,
+        "vram_gib": 2.102646976709366e-05,
+        "note": null
+      },
+      "oneill": {
+        "target": "cpu",
+        "source": "calibrated",
+        "solves": 1,
+        "predicted_s": 7.822131046327085,
+        "measured_s": 7.017204400035553,
+        "predicted_steps": 184,
+        "actual_steps": 184,
+        "warmup_s": 0.0,
+        "vram_gib": 0.06953239440917969,
+        "note": null
+      },
+      "linear_limit": {
+        "target": "cpu",
+        "source": "calibrated",
+        "solves": 2,
+        "predicted_s": 0.0019482824716214211,
+        "measured_s": 0.02797839988488704,
+        "predicted_steps": 768,
+        "actual_steps": 768,
+        "warmup_s": 0.0,
+        "vram_gib": 9.373761713504791e-06,
+        "note": null
+      },
+      "fubini": {
+        "target": "cpu",
+        "source": "calibrated",
+        "solves": 1,
+        "predicted_s": 0.04190627094837097,
+        "measured_s": 0.10999799997080117,
+        "predicted_steps": 2673,
+        "actual_steps": 2673,
+        "warmup_s": 0.0,
+        "vram_gib": 6.174296140670776e-05,
+        "note": null
+      }
+    }
+  },
+  "gates": [
+    {
+      "id": "M4.planewave",
+      "criterion": "1-D plane wave: the realized drive amplitude honours the mass-source contract, the numerical phase speed matches k = omega/c, and the decay exponent matches the configured alpha of analytic.attenuate",
+      "required": 3,
+      "verdict": "PASS",
+      "n_pass": 3,
+      "checks": [
+        {
+          "name": "planewave: realized amplitude / p0",
+          "verdict": "PASS",
+          "detail": "1.08245 (band 0.9..1.12)",
+          "value": 1.08244953125,
+          "low": 0.9,
+          "high": 1.12,
+          "unit": "",
+          "source": "tests/test_review_hardening.py::test_mass_source_normalization_and_phase_convention"
+        },
+        {
+          "name": "planewave: phase speed (k)",
+          "verdict": "PASS",
+          "detail": "predicted 4189 rad/m vs actual 4189 rad/m (-0.0%, tolerance +/-0.1%)",
+          "predicted": 4188.62353515625,
+          "actual": 4188.790204786391,
+          "tol_pct": 0.1,
+          "unit": " rad/m",
+          "deviation_pct": -0.003978944325032354,
+          "source": "tests/test_linear_planewave.py::test_plane_wave_dispersion_below_0p1_percent"
+        },
+        {
+          "name": "planewave: absorption exponent",
+          "verdict": "PASS",
+          "detail": "predicted 30.1 Np/m vs actual 30 Np/m (+0.3%, tolerance +/-1%)",
+          "predicted": 30.100129582733274,
+          "actual": 30.0,
+          "tol_pct": 1.0,
+          "unit": " Np/m",
+          "deviation_pct": 0.33376527577758,
+          "source": "tests/test_linear_planewave.py::test_absorption_matches_configured_alpha_within_1_percent"
+        }
+      ]
+    },
+    {
+      "id": "M4.oneill",
+      "criterion": "3-D focused bowl vs analytic.axial_pressure (O'Neil): normalized axial profile correlation, focal peak position, and -6 dB axial width",
+      "required": 3,
+      "verdict": "PASS",
+      "n_pass": 3,
+      "checks": [
+        {
+          "name": "oneill: axial profile correlation r",
+          "verdict": "PASS",
+          "detail": "0.99923 (floor 0.99)",
+          "value": 0.99923016395011,
+          "floor": 0.99,
+          "unit": "",
+          "source": "tests/test_linear_oneill_3d.py::test_axial_profile_matches_oneill"
+        },
+        {
+          "name": "oneill: focal peak position error",
+          "verdict": "PASS",
+          "detail": "1.000e+00 vox (limit 1.000e+00 vox)",
+          "value": 1.0,
+          "limit": 1.0,
+          "unit": " vox",
+          "source": "tests/test_linear_oneill_3d.py::test_focus_lands_within_one_voxel"
+        },
+        {
+          "name": "oneill: -6 dB axial width",
+          "verdict": "PASS",
+          "detail": "predicted 16.08 mm vs actual 15.97 mm (+0.7%, tolerance +/-5%)",
+          "predicted": 16.077144567894205,
+          "actual": 15.972790512139499,
+          "tol_pct": 5.0,
+          "unit": " mm",
+          "deviation_pct": 0.6533238864893158,
+          "source": "tests/test_linear_oneill_3d.py::test_axial_profile_matches_oneill"
+        }
+      ]
+    },
+    {
+      "id": "M5.linear_limit",
+      "criterion": "westervelt with beta = 0 is bit-identical to the linear solver, and says so in its metadata",
+      "required": 3,
+      "verdict": "PASS",
+      "n_pass": 3,
+      "checks": [
+        {
+          "name": "linear limit: max |phasor difference|",
+          "verdict": "PASS",
+          "detail": "0.000e+00 Pa (limit 0.000e+00 Pa)",
+          "value": 0.0,
+          "limit": 0.0,
+          "unit": " Pa",
+          "source": "tests/test_westervelt.py::test_beta_zero_is_bitwise_identical_to_linear"
+        },
+        {
+          "name": "linear limit: max |p_max difference|",
+          "verdict": "PASS",
+          "detail": "0.000e+00 Pa (limit 0.000e+00 Pa)",
+          "value": 0.0,
+          "limit": 0.0,
+          "unit": " Pa",
+          "source": "tests/test_westervelt.py::test_beta_zero_is_bitwise_identical_to_linear"
+        },
+        {
+          "name": "linear limit: westervelt reports nonlinear_active",
+          "verdict": "PASS",
+          "detail": "nonlinear_active is False in linear water (expected False)",
+          "observed": false,
+          "expected": false,
+          "source": "tests/test_westervelt.py::test_beta_zero_is_bitwise_identical_to_linear"
+        }
+      ]
+    },
+    {
+      "id": "M5.fubini",
+      "criterion": "second-harmonic ratio A2/A1 within 5% of analytic.fubini_harmonic at >= 4 pre-shock sigma stations",
+      "required": 4,
+      "verdict": "PASS",
+      "n_pass": 5,
+      "checks": [
+        {
+          "name": "fubini: A2/A1 at sigma=0.110",
+          "verdict": "PASS",
+          "detail": "3.171e-02 (limit 5.000e-02)",
+          "value": 0.03170932210929259,
+          "limit": 0.05,
+          "unit": "",
+          "source": "tests/test_westervelt.py::test_fubini_second_harmonic_within_5_percent"
+        },
+        {
+          "name": "fubini: A2/A1 at sigma=0.233",
+          "verdict": "PASS",
+          "detail": "2.239e-02 (limit 5.000e-02)",
+          "value": 0.022391265181518547,
+          "limit": 0.05,
+          "unit": "",
+          "source": "tests/test_westervelt.py::test_fubini_second_harmonic_within_5_percent"
+        },
+        {
+          "name": "fubini: A2/A1 at sigma=0.355",
+          "verdict": "PASS",
+          "detail": "1.016e-02 (limit 5.000e-02)",
+          "value": 0.01015688531285133,
+          "limit": 0.05,
+          "unit": "",
+          "source": "tests/test_westervelt.py::test_fubini_second_harmonic_within_5_percent"
+        },
+        {
+          "name": "fubini: A2/A1 at sigma=0.478",
+          "verdict": "PASS",
+          "detail": "1.311e-02 (limit 5.000e-02)",
+          "value": 0.013105779556600193,
+          "limit": 0.05,
+          "unit": "",
+          "source": "tests/test_westervelt.py::test_fubini_second_harmonic_within_5_percent"
+        },
+        {
+          "name": "fubini: A2/A1 at sigma=0.588",
+          "verdict": "PASS",
+          "detail": "9.025e-03 (limit 5.000e-02)",
+          "value": 0.009024697561522885,
+          "limit": 0.05,
+          "unit": "",
+          "source": "tests/test_westervelt.py::test_fubini_second_harmonic_within_5_percent"
+        }
+      ]
+    }
+  ],
+  "verdict": "PASS",
+  "elapsed_s": 7.580663500004448,
+  "notes": []
+}

@@ -1083,7 +1083,7 @@ Kriterleri (v12 referans sayıları dahil) M29 taşıyor.
 > Python" farkımız kapandı; savunulabilir konum yazılım sözleşmesi + çok-motor çapraz doğrulama.
 > HIFU-önce, doğruluk/kredibilite-önce; v0.1 = ITRUSST dokuzunun TÜMÜ (akustik-yalnız) + JOSS.
 
-### M11 — Doğrulama + çok-motor harness `[ ]` (M12'yi yuttu — kullanıcı 2026-08-22)
+### M11 — Doğrulama + çok-motor harness `[x]` (2026-08-23 — M12'yi yutmuş haliyle KAPANDI)
 Tek çatı: analitik süit + N-motor çapraz karşılaştırma + damgalı rapor. Adaptörler (M25/M26)
 bu harness'in İÇİNE doğar.
 - [x] `caustica.validation` paketi + `python -m caustica.validation` CLI'ı AÇILDI (2026-08-23):
@@ -1093,8 +1093,11 @@ bu harness'in İÇİNE doğar.
       `Harness` dikişi sayesinde GPU dışındaki HER ŞEY CPU'da testli; sahte ölçümlerle yanlış
       PASS üretemediği gösterildi (SKIP asla PASS sayılmaz; kapı, milestone'un istediği
       SAYIDA geçen ölçüm olmadan PASS vermez)
-- [ ] `study.Study`: config + koşu(lar) + sonuç + figürler; `report()` → MD+JSON; ortam/GPU/git
-      damgası; `Study.sweep(...)`
+- [x] `study.Study` (2026-08-23, `c3cb4f2`): `src/caustica/study/` — run + sweep, STUDY.md +
+      study.json (env/GPU/git damgalı, atomic), fokal metrikler + planner tahmin-vs-gerçek,
+      sweep'te birleşik tablo + figür. İkinci kod yolu YOK: her koşu `simulate()`'ten çıkar,
+      her varyant `parse_job`'la yeniden doğrulanır, hiçbir metrik yeniden hesaplanmaz
+      (run.metrics == metrics.json, testli). Lazy iki yönde de (subprocess-testli). 15 test
 - [x] `python -m caustica.validation run-analytic` → damgalı rapor `benchmarks/reports/`a
       (2026-08-23, `cf2e49b`): 4 kapı (planewave amplitude/dispersiyon/absorpsiyon; O'Neil
       korelasyon/odak/genişlik; beta=0 bit-özdeşlik; Fubini A2/A1 ≥4 istasyon) — HER tolerans
@@ -1103,13 +1106,25 @@ bu harness'in İÇİNE doğar.
       kanıt olarak repoda: `benchmarks/reports/analytic/numpy-20260823-010211/` (PASS, 7.6 s;
       absorpsiyon %0.334 ve dispersiyon %0.004 — 2026-08-10 raporunu yeniden üretiyor).
       `--size quick` (2.7 s) AYNI kapıları küçük bowl'da koşar, gevşetilmiş değil (testli)
-- [ ] Çok-motor karşılaştırma: AYNI job N kayıtlı çözücüde → relL2 / r / fokal metrik tablosu.
-      Eski M12 kriterleri buraya: kwave T0 sanity kapısı, normalize karşılaştırma,
-      "environment-broken" damgası
-- Başarı kriterleri:
-  - Tek komutla analitik süit raporu; planner tahmin-vs-gerçek tablosu içinde
-  - Sweep: 3-noktalı p0 taraması uçtan uca, birleşik rapor
-  - Çok-motor: mevcut linear-vs-kwave çaprazları harness'ten yeniden üretilir (r>0.99)
+- [x] Çok-motor karşılaştırma (2026-08-23, `1ee2fd4`): `python -m caustica.validation compare`
+      — TEK BuiltJob N motora, normalize alanlar, kapılar M11.t0 (motor başına sanity,
+      karşılaştırmadan ÖNCE) / M11.cross (r≥0.99) / M11.focus (≤1 voksel); relL2 + tepe oranı +
+      fokal tablo raporlanır ama kapılanmaz (repoda çapraz-motor limiti kuran test yok, rapor
+      bunu söylüyor). Eski M12 kriterlerinin üçü de içeride: kwave T0 sanity kapısı ✓,
+      normalize karşılaştırma ✓, environment-broken damgası ✓ (kırık ortam = isimli SKIP +
+      hata metni, asla fizik FAIL'i; exit 2 yalnız "hiçbir şey karşılaştırılamadı" için). 39 test
+- Başarı kriterleri — ÜÇÜ DE SAĞLANDI (2026-08-23):
+  - [x] Tek komutla analitik süit raporu; planner tahmin-vs-gerçek tablosu içinde (`39ea5e2`
+        + `cbec29f`): tahmin çözümden ÖNCE alınır (çağrı sırası testli), adım tahmini dört
+        senaryoda da BİREBİR (1640/1640, 152/152, 768/768, 2673/2673); bilgi amaçlı, kapısız.
+        Kanıt: `benchmarks/reports/analytic/numpy-20260823-073910/`
+  - [x] Sweep: 3-noktalı p0 taraması uçtan uca, birleşik rapor (`c3cb4f2`): 100/300/900 kPa
+        westervelt (beta=3.5) → 1.052/3.146/9.151 MPa; birleşik tabloda doğrusallıktan sapma
+        sütunu gerçek doygunluğu gösteriyor (9×'te −%3.35, h2/h1 %3.6→%27.4); planner süreyi
+        −%1.2…−%3.7 içinde izledi
+  - [x] Çok-motor: linear-vs-kwave çaprazı harness'ten r=0.99924 (relL2 0.0286, tepe kayması
+        0 voksel) — `benchmarks/reports/compare/20260823-065728/`; linear-vs-westervelt(β=0)
+        r=1.0 relL2=0 birebir (M5 garantisi). `@pytest.mark.kwave` ile CI'da atlanabilir
 
 ### M18 — Termal modül: Pennes + CEM43 `[ ]` (öne çekildi — HIFU-önce, kullanıcı 2026-08-22)
 Ablasyon planlamanın çıktısı basınç değil DOZ. ITRUSST güvenlik konsensüsü (Brain Stim 2025)

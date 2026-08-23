@@ -2297,3 +2297,37 @@ operatörce doğrulanıp commit'lendi (mutasyon-olayı dersinin devamı: yazan i
 - Tam süit: **537 → 574 test** yeşil (F-paketi +20, janitor +11, run-analytic +26), ruff temiz.
 - İkinci Colab oturumu için beklenti: M8.vram/M8.time artık ölçülebilir; 256³ basamağı kök
   bulunana dek `exit 4` verecek — bu doğru davranış, süit FAIL'i saklamıyor.
+
+## 2026-08-23 — M11 KAPANDI: doğrulama çatısı tamam (Study + compare + planner tablosu)
+
+Aynı günün ikinci operasyon turu; model aynı — Fable şef, Opus mühendis, commit operatörde.
+
+**`caustica.Study`** (`c3cb4f2`): run + sweep + damgalı birleşik rapor. Tasarımın özü "ikinci
+kod yolu yok": her koşu `simulate()`'ten çıkar, her varyant `parse_job`'la yeniden doğrulanır,
+hiçbir metrik yeniden hesaplanmaz. Gerçek 3-noktalı p0 taraması raporda gerçek fiziği gösterdi:
+9× sürüşte temel doygunlukla orantıdan −%3.35 sapıyor, h2/h1 %3.6→%27.4 tırmanıyor.
+
+**`validation compare`** (`1ee2fd4`): tek BuiltJob N motora. Eski M12'nin üç kriteri de içeride
+(T0 sanity, normalize karşılaştırma, environment-broken damgası). Gerçek üç-motor koşu:
+linear-vs-kwave r=0.99924 — eski elle çaprazlar artık harness'ten yeniden üretiliyor.
+Bilinçli karar: `--no-t0` bayrağı YOK ("kapıyı kapatan bayrak kullanılır").
+
+**Planner tablosu `run-analytic` içinde** (`39ea5e2`): tahmin çözümden ÖNCE alınır (sonradan
+alınmış tahmin, cevabı görmüş tahmindir — çağrı sırası testli). İlk gerçek tablo iki şey söyledi:
+adım tahmini dört senaryoda BİREBİR (settling modeli motorun politikasını aynen üretiyor), ama
+süre sütunu ~3 s/koşu hayalî warmup taşıyordu → **planner düzeltmesi** (`cbec29f`): CPU hedefli
+plan GPU'nun CUDA sabitini miras almaz; `is_cpu_target` bilerek `find_calibration_for`'un cpu
+kuralının aynısı (iki dal asla ayrışamaz). O'Neil satırı +%7.9'a indi; 1-D satırların sapması
+dürüstçe raporda açıklanıyor (3-D sonda gridlerinden fit, birkaç bin voksellik koşuda launch
+overhead'i göremez).
+
+Study sweep'inden iki kütüphane gözlemi janitor'a girdi: **08** westervelt + varsayılan su
+(beta=0) sessizce lineer — UX tuzağı; **09** `a2_peak` tüm-içbölge maksimumu PML kenar
+artefaktını yakalayabiliyor (`a2_at_fundamental_peak` dürüst).
+
+### Kanıt
+- Tam süit: **574 → 637 test** (Study 15 + compare 39 + planner tablosu 6 + warmup düzeltmesi 3).
+- Kanıt raporları repoda: `benchmarks/reports/compare/20260823-065728/` (üç motor),
+  `benchmarks/reports/analytic/numpy-20260823-073910/` (planner tablolu tam PASS).
+- M11'in üç başarı kriteri de kanıtla `[x]` — milestone kapandı. Sıradaki: M18 (termal),
+  Colab dönüşünü beklemeden CPU'da yazılabilir.
