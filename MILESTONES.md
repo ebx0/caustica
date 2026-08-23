@@ -1129,8 +1129,16 @@ bu harness'in İÇİNE doğar.
 ### M18 — Termal modül: Pennes + CEM43 `[ ]` (öne çekildi — HIFU-önce, kullanıcı 2026-08-22)
 Ablasyon planlamanın çıktısı basınç değil DOZ. ITRUSST güvenlik konsensüsü (Brain Stim 2025)
 eşikleri rapora girer: ≤2 CEM43 beyin / ≤16 kemik / ≤21 deri; ΔT≤2°C.
-- [ ] `sensors.HeatingSource` (Q = 2·α·I; harmonik katkılar) → `thermal.PennesSolver` (GPU
-      difüzyon+perfüzyon) → CEM43 doz haritası; rapora doz/eşik özeti
+- [~] `sensors.HeatingSource` (Q = 2·α·I; harmonik katkılar) → `thermal.PennesSolver` (GPU
+      difüzyon+perfüzyon) → CEM43 doz haritası; rapora doz/eşik özeti — **FAZ 1 TAMAM**
+      (2026-08-23, `08c4ffb`, 54 test): HeatingSource (harmonik-α dürüstlük sözleşmesi: n≥2
+      için y üssü YA DA açık α listesi, yoksa RET), PennesSolver (korunumlu FD + harmonik-
+      ortalama yüzey iletkenlikleri, Gershgorin kararlılık sınırı, NaN koruması; float32
+      durumu referans-üstü-YÜKSELİŞ — mutlak derecede aynı çözüm 0.039 K profilin %8.4'ünü
+      iptale kaybediyor, yükseliş olarak %0.006), CEM43 çözüm SIRASINDA birikir (son-T'den
+      doz 2.55 vs gerçek 0.35 — tuzak testli). Analitik kapılar: Gaussian %0.12, Green %0.75,
+      perfüzyon %0.10, kararlı durum %0.033, iki-katman %0.006 — hepsi <%2 ölçütünde.
+      KALAN (Faz 2): rapora doz/eşik özeti + bağımsız-implicit çaprazı + sorumluluk notu
 - Başarı kriterleri:
   - Analitik nokta-kaynak/Gaussian difüzyon rel err < %2; perfüzyon kararlı-durum < %2
   - Uçtan uca sonication → T(r,t) → CEM43; **bağımsız-gerçekleştirme çaprazı < %5**
