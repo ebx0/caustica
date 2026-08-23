@@ -5,9 +5,11 @@ the public API (`caustica`, `caustica.solvers`, `caustica.geometry`, …) and ne
 reach into internals, so they are the honest end-to-end check that what the
 milestones claim is actually usable.
 
-Apps are not part of the library: they are not packaged by `pip install -e .`
-and they are not covered by `pytest`. They are covered by `ruff` (`ruff check
-apps src tests`). Run outputs land in `apps/outputs/`, which is git-ignored.
+Apps are not part of the library: they are not packaged by `pip install -e .`.
+They ARE reached by `pytest` since M10d — tests/test_report.py imports
+`apps.focus_study.{scenarios,analysis}` for the metric-single-source parity
+tests — and covered by `ruff` (`ruff check apps src tests`). Run outputs land
+in `apps/outputs/`, which is git-ignored.
 
 ---
 
@@ -73,36 +75,6 @@ apps/outputs/<scenario>-<timestamp>/
   is and what `--dx` would fix it, then runs anyway.
 
 ---
-
-## What it shows
-
-- **3-D** — a ray-cast volume with per-tissue visibility, opacity and shading,
-  and a corner cutaway whose three exposed faces ARE the three slice planes
-  below it. Drag to orbit, wheel to zoom.
-- **Cross-sections** — axial / coronal / sagittal, each with its own slider,
-  hover readout (tissue name, or the interpolated property value), and the
-  slice position in mm.
-- **Any field** — the label map, or `c`, `rho`, `alpha`, `beta`, `rho·c`, on a
-  colour scale fixed over the whole volume so dragging a slider never rescales
-  the colours out from under you.
-- **The build itself** — voxel counts and per-tissue fractions, the acoustic
-  table actually in use, every warning the build produced, the full build log,
-  and the exact Python needed to import the result.
-
-### Deliberate design choices
-
-- **No dependencies.** Stdlib `http.server` plus hand-written WebGL2 — no web
-  framework to install, no CDN to reach, so it works on an offline machine.
-- **Preview vs full build.** Interactive edits build at a coarsened `dx` that
-  fits a voxel budget, and the UI says so *and* refuses to export a preview.
-  "Build full" runs the resolution you actually asked for.
-- **The server owns physics, the browser owns pixels.** Slices and volumes go
-  over the wire as raw `uint8` plus a value range; colour mapping happens in
-  JS, so switching field or colour ramp is instant and never rebuilds.
-- **One palette everywhere.** Tissue colours come from
-  `uwcem_phantoms.tissue.DEFAULT_COLORS` — five family hues validated for
-  colour-vision separation against this exact dark surface, with lightness
-  ramps inside the two graded families.
 
 > The phantom launcher and Phantom Studio moved to the `uwcem-phantom`
 > repository at M10k, together with the `uwcem_phantoms` package.

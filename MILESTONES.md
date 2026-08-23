@@ -7,7 +7,9 @@
 > Colab entegrasyon katmanı (M10b–M10g) GUI'nin ileride üstüne oturacağı kontratları hazırlar,
 > **M10l** bunları yazıya döküp katmanlamayı testle kilitler. GUI **ayrı repoda** olacak
 > (`caustica-gui`) ve teknolojisi seçilmedi. Planner/CLI çıktıları metin+figür tabanlı kalır.
-> Kaynaklar: PLAN.md (mimari), gemini1/2.md (araştırma — doğrulanmadan güvenilmez; şüpheli noktalar milestone içinde "VERIFY" olarak işaretli).
+> Kaynaklar: PLAN.md (mimari); erken araştırma raporları gemini1/2.md repodan çıkarıldı
+> (2026-08-23 temizlik — iddiaları landscape_2026.md §0'da denetlenip yanlışlanmıştı;
+> şüpheli noktalar milestone içinde "VERIFY" olarak işaretli kalır).
 
 ---
 
@@ -235,7 +237,8 @@ kararıyla ön pay 20 mm'ye, tavan 120 mm'ye çıkarıldı: doku kapsamı 100 mm
 
 ### M6f — depolanmış kurulumlar: dokuz koşu, yüklemeye hazır `[x]` (2026-08-19, kullanıcı talebi)
 Dataset ortamdan ibaret; bir koşu ayrıca sığan bir transducer, onu yutmayan bir sınır ve dokuya
-düşen bir odak istiyor. Bu karar artık `data/setups/`ta yazılı (fantom başına ~1.8 KB JSON, git'te).
+düşen bir odak istiyor. Bu karar artık `data/setups/`ta yazılı (fantom başına ~1.8 KB JSON; M10k'da git'ten çıktı,
+yerelde ve uwcem-phantom tarafında yaşar).
 - [x] `uwcem_phantoms/setup.py`: `ArraySpec` (tarif) + `build_setups` / `load_setup` /
       `verify_setups` / `setup_names`; CLI `setup [--list|--verify|--json|--amplitude|--pml]`
 - [x] Standart dizilim **S1**: 64 elemanlı Arşimet spirali, D=60 mm (iç 26.4), ROC=60 mm,
@@ -1078,7 +1081,7 @@ Kriterleri (v12 referans sayıları dahil) M29 taşıyor.
 
 ## Faz Grubu D — Doğrulama çatısı ve HIFU fiziği (yeniden plan 2026-08-22, K18–K21)
 
-> Yeniden planlama: 24 kullanıcı sorusu + research/landscape_2026.md (+iki alt-rapor).
+> Yeniden planlama: 24 kullanıcı sorusu + research/landscape_2026.md (+alt-rapor gemini3_gpu.md).
 > Kimlik: **sözleşmeli çok-motor çatı + native aile** — "bir API, N motor, damgalı/tekrarlanabilir
 > koşular". Landscape gerçeği: k-wave-python v0.6 (2026-03) saf CuPy çözücü yayınladı — "saf
 > Python" farkımız kapandı; savunulabilir konum yazılım sözleşmesi + çok-motor çapraz doğrulama.
@@ -1271,7 +1274,7 @@ Her biri fizibilite+prototip raporu; v2 seçimi kullanıcının.
   (4) **M16** power-law → (5) **M25** jwave + **M26** stride adaptörleri → (6) **M27** [imaging]
   köprüsü → (7) **M19** GPU perf → (8) **M21 ITRUSST dokuzun tümü → v0.1 + JOSS + PyPI** →
   İkinci faz (M22 elastik, M17 broadband, M28 adjoint fizibilite, M20, M23) → Vitrin (M29, M24).
-  Araştırma temeli: research/landscape_2026.md + iki alt-rapor (2026-08-22).
+  Araştırma temeli: research/landscape_2026.md + alt-rapor gemini3_gpu.md (2026-08-22).
 - **Yalınlaştırma (kalan küçük işler; uygun milestone'a iliştirilir):** `data/` kökünün checkout
   dışına taşınması (env var kurulu, acele yok) · `janitor/` defterinin işlenmesi.
   (README'nin yeni kind'larla güncellenmesi M10m'de yapıldı.)
