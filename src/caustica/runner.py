@@ -425,14 +425,20 @@ def _cpu_time_estimate(est, grid_shape: tuple[int, ...], opts: RunnerOptions):
     """
     if opts.measure:
         return est.t_expected_s, est.source
-    from caustica.planner.calibration import find_calibration_for  # noqa: PLC0415
-    from caustica.planner.model import fft_sizes, step_time  # noqa: PLC0415
+    from caustica.planner.calibration import (  # noqa: PLC0415
+        find_calibration_for,
+        predict_step_time,
+    )
+    from caustica.planner.model import fft_sizes  # noqa: PLC0415
 
     entry = find_calibration_for("cpu")
     if entry is None:
         return None
     _, p_elems, _ = fft_sizes(tuple(grid_shape))
-    return est.steps_expected * step_time(entry["a"], entry["b"], p_elems), "calibrated"
+    # predict_step_time interpolates the entry's own samples when it has
+    # them and falls back to the stored (a, b) otherwise - the same rule
+    # estimate() uses, so the CPU gate cannot disagree with the planner.
+    return est.steps_expected * predict_step_time(entry, p_elems), "calibrated"
 
 
 def _ppw_warnings_for(built: BuiltJob) -> list[str]:

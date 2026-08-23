@@ -452,6 +452,431 @@ def test_a_fit_that_cannot_reproduce_its_samples_is_flagged():
     assert cal.fit_max_rel_residual(good, ga, gb) < cal.FIT_RESIDUAL_LIMIT
 
 
+# ------------------------------- the time curve is interpolated (M8.time)
+#
+# A device's per-element cost is a curve, and a two-parameter global law
+# cannot bend the way a real one does. On an RTX PRO 6000 Blackwell (95 GiB,
+# 2026-08-23) `calibrate()` probed three SATURATING sizes -- 216^3, 320^3,
+# 432^3 -- and still could not fit a*P*log2(P) + b*P: residual 0.705, the
+# throughput-anchored fallback engaged, and every plan carried "the
+# calibration's time model misses its own samples by up to 70%".
+#
+# BLACKWELL_PROBES is that session's own curve, recovered from the report it
+# wrote (benchmarks/reports/dev_validate/blackwell-20260823-131456):
+#   432^3 -- t = b*P for the b it stored, which IS the anchored rate;
+#   320^3 -- the stage-2 spot check measured this shape: 10.937 ms;
+#   216^3 -- b*P / (1 + 0.7046), the only value consistent with the stored
+#            residual once monotonicity settles the sign (the alternative
+#            has a 216^3 step costing 12.6 ms while 320^3 costs 10.9).
+# The rate RISES with size: small grids are disproportionately fast on this
+# card, which is exactly the shape a*P*log2(P) + b*P cannot take.
+
+BLACKWELL_B = 3.695926690488404e-10  # s/element, the anchored fallback it stored
+BLACKWELL_PROBES = [
+    (216**3, 0.002185085),  # rate 2.168e-10
+    (320**3, 0.010937260),  # rate 3.338e-10  (measured, stage-2 spot check)
+    (432**3, 0.029797141),  # rate 3.696e-10  (== BLACKWELL_B * P)
+]
+#: Per-step cost of the ladder rungs, wall minus the run's own measured
+#: warmup: (13.66-4.389)/360, (34.97-12.838)/420, (83.93-32.375)/500. The
+#: probes above never saw these sizes, so they grade the extrapolation.
+BLACKWELL_LADDER = {400: 0.02575, 512: 0.05270, 640: 0.10311}
+
+
+def test_a_curved_device_defeats_the_global_fit_but_not_the_interpolator():
+    """The measured failure, and the fix, in one place."""
+    rates = [t / p for p, t in BLACKWELL_PROBES]
+    assert rates == sorted(rates)  # per-element cost RISES with size
+    assert rates[-1] / rates[0] == pytest.approx(1.70, abs=0.01)
+
+    # (a) no two-parameter global law survives this shape.
+    a, b = cal.fit_time_model(BLACKWELL_PROBES)
+    assert b == 0.0  # the nonnegativity clip, on the other coefficient this time
+    assert cal.fit_max_rel_residual(BLACKWELL_PROBES, a, b) == pytest.approx(0.495, abs=0.01)
+    anchored = cal.fit_max_rel_residual(BLACKWELL_PROBES, 0.0, BLACKWELL_B)
+    assert anchored == pytest.approx(0.7045755942641264, abs=1e-4)  # the stored number
+    assert min(anchored, cal.fit_max_rel_residual(BLACKWELL_PROBES, a, b)) > cal.FIT_RESIDUAL_LIMIT
+
+    # (b) the interpolator passes through every measurement exactly.
+    for p_elems, t in BLACKWELL_PROBES:
+        assert cal.interp_step_time(BLACKWELL_PROBES, p_elems) == pytest.approx(t, rel=1e-12)
+
+    # (c) an unprobed size in between lands between its neighbours' RATES.
+    # 256^3 is 4.38 ms/step here; the anchored law says 6.20 ms, because it
+    # applies the SLOWEST measured per-element rate at every size.
+    p256 = 256**3
+    t256 = cal.interp_step_time(BLACKWELL_PROBES, p256)
+    assert t256 == pytest.approx(0.004383, rel=1e-3)
+    assert rates[0] < t256 / p256 < rates[1]
+    assert BLACKWELL_PROBES[0][1] < t256 < BLACKWELL_PROBES[1][1]
+    assert model.step_time(0.0, BLACKWELL_B, p256) == pytest.approx(0.006200, rel=1e-3)
+
+    # (d) the honest quality number is leave-one-out, not the residual
+    # against knots it is guaranteed to hit. 12% held-out against a 70%
+    # global miss -- inside M8's +/-25% gate, still above the recalibrate
+    # threshold, and the plan says so rather than pretending.
+    loo = cal.interp_loo_rel_err(BLACKWELL_PROBES)
+    assert loo == pytest.approx(0.121, abs=0.001)
+    assert cal.FIT_RESIDUAL_LIMIT < loo < 0.25
+    assert cal.interp_loo_rel_err(BLACKWELL_PROBES[:2]) is None  # nothing to hold out
+
+
+def test_the_ladder_the_gate_measured_is_predicted_within_the_m8_tolerance():
+    """The rungs are genuinely out of sample: probes at 216/320/432^3,
+    rungs at 400/512/640^3. Two of the three EXTRAPOLATE above the probes.
+
+    This is the M8.time per-step half, which the session already passed on
+    the anchored model (-6..-9%); interpolation must not lose that.
+    """
+    for side, steady in BLACKWELL_LADDER.items():
+        interp = cal.interp_step_time(BLACKWELL_PROBES, side**3)
+        assert abs(interp - steady) / steady < 0.25, side
+    # measured: -10.5% at 400^3 (interpolated), -0.3% at 512^3 and +7.4% at
+    # 640^3 (both extrapolated), against -8.1%/-5.9%/-6.0% for the anchor.
+    assert cal.interp_step_time(BLACKWELL_PROBES, 512**3) == pytest.approx(0.05270, rel=0.01)
+
+
+def test_a_well_behaved_device_gets_the_same_answer_as_before():
+    """No regression where the global law was never the problem.
+
+    Near-constant per-element rate (an A100's shape): fit and interpolation
+    have to agree, or this change would trade one device's accuracy for
+    another's.
+    """
+    a100 = [(4_096_000, 0.00205), (16_777_216, 0.0082), (32_768_000, 0.0158)]
+    a, b = cal.fit_time_model(a100)
+    assert cal.fit_max_rel_residual(a100, a, b) < cal.FIT_RESIDUAL_LIMIT  # a healthy fit
+
+    for p_elems, tol in ((8_000_000, 0.03), (20_000_000, 0.03)):
+        fitted = model.step_time(a, b, p_elems)
+        interp = cal.interp_step_time(a100, p_elems)
+        assert interp == pytest.approx(fitted, rel=tol)
+    # measured: 3.870 vs 3.959 ms (2.3%) at 8.0e6, 9.675 vs 9.740 ms (0.7%) at 2.0e7
+    assert cal.interp_loo_rel_err(a100) == pytest.approx(0.0016, abs=0.001)
+
+
+def test_extrapolation_never_claims_a_rate_the_device_has_never_shown():
+    """Above the top probe the last segment's slope continues -- until it
+    would imply the card is faster per element than its best measurement."""
+    p_top, t_top = BLACKWELL_PROBES[-1]
+    best_rate = t_top / p_top
+    for side in (440, 480, 512, 640, 800):
+        p_elems = side**3
+        t = cal.interp_step_time(BLACKWELL_PROBES, p_elems)
+        assert t / p_elems >= best_rate - 1e-18, side
+        assert t >= t_top
+    # This curve's top segment is SUPERLINEAR (slope 1.11), so the floor does
+    # not bind and the slope is what predicts -- 52.55 ms at 512^3 against a
+    # measured 52.70. The rule is a floor on cost, never a cap.
+    rising = [(1_000_000, 1e-3), (2_000_000, 3e-3)]
+    assert cal.interp_step_time(rising, 4_000_000) == pytest.approx(9e-3, rel=1e-9)
+
+    # A sublinear top segment IS floored, at the top sample's own rate:
+    # continuing 'twice the work for 1.2x the time' would eventually claim an
+    # unbounded throughput.
+    flattening = [(1_000_000, 1e-3), (2_000_000, 1.2e-3)]
+    assert cal.interp_step_time(flattening, 4_000_000) == pytest.approx(2.4e-3, rel=1e-9)
+    assert cal.interp_step_time(flattening, 10_000_000) == pytest.approx(6.0e-3, rel=1e-9)
+
+
+def test_below_the_smallest_probe_the_step_time_is_clamped():
+    """Downward log-log extrapolation runs off toward absurdly fast.
+
+    A step has a floor -- the launch, and the fixed per-kernel cost -- which
+    the first A100 probe measured directly: 1.061 ms at 110,592 elements and
+    1.001 ms at 373,248, 3.4x the work for the same time.
+    """
+    p_small, t_small = BLACKWELL_PROBES[0]
+    for p_elems in (p_small // 2, p_small // 8, 1024, 1):
+        assert cal.interp_step_time(BLACKWELL_PROBES, p_elems) == pytest.approx(t_small, rel=1e-12)
+    # ... where continuing the first segment's slope (1.366) predicts 0.128 ms
+    # for a grid an eighth the size: a 17x better per-element rate than
+    # anything this device has ever shown.
+    slope = math.log(BLACKWELL_PROBES[1][1] / t_small) / math.log(BLACKWELL_PROBES[1][0] / p_small)
+    naive = t_small * ((p_small // 8) / p_small) ** slope
+    assert naive * 1e3 == pytest.approx(0.128, abs=0.002)
+    assert cal.interp_step_time(BLACKWELL_PROBES, p_small // 8) > 15 * naive
+
+
+def test_a_plan_reads_the_samples_not_the_stored_coefficients(tmp_path):
+    """The interpolator wins whenever the entry carries samples."""
+    grid, med, src = tiny_setup()
+    _, n, _ = model.fft_sizes(grid.shape)
+    calfile = tmp_path / "calibration.json"
+    entry = {
+        # (a, b) that would predict something quite different, on purpose.
+        "a": 1e-9,
+        "b": 2e-10,
+        "fit_mode": "interpolated",
+        "global_fit_mode": "throughput-anchored",
+        "fit_max_rel_residual": 0.705,  # the global law's number: must NOT warn now
+        "interp_loo_rel_err": 0.04,
+        "backend": "cupy",
+        "warmup_s": 3.0,
+        "p_max_probe": 4 * n,
+        "samples": [[n // 2, 5e-4], [4 * n, 5e-3]],
+        "shapes": [],
+    }
+    calfile.write_text(json.dumps({"version": 1, "devices": {"NVIDIA A100-SXM4-40GB": entry}}))
+    est = planner.estimate(grid, med, src, gpu="A100", calibration_path=calfile)
+    assert est.source == "calibrated"
+    assert est.t_step_s == pytest.approx(cal.interp_step_time([(n // 2, 5e-4), (4 * n, 5e-3)], n))
+    assert est.t_step_s != pytest.approx(model.step_time(1e-9, 2e-10, n))
+    # the GLOBAL fit's 70% miss is a diagnostic about a model nothing is
+    # using any more; the interpolator's own 4% held-out error is fine.
+    assert not any("misses" in w for w in est.warnings), est.warnings
+
+    # Raise the leave-one-out error past the limit and the plan says so.
+    entry["interp_loo_rel_err"] = 0.31
+    calfile.write_text(json.dumps({"version": 1, "devices": {"NVIDIA A100-SXM4-40GB": entry}}))
+    est = planner.estimate(grid, med, src, gpu="A100", calibration_path=calfile)
+    assert any("HELD-OUT probe by up to 31%" in w for w in est.warnings), est.warnings
+    assert any("leave-one-out" in w for w in est.warnings)
+
+
+def test_an_interpolating_entry_still_says_when_it_extrapolates(tmp_path):
+    """Rule 3: the extrapolation warning is untouched by any of this."""
+    grid, med, src = tiny_setup()
+    _, n, _ = model.fft_sizes(grid.shape)
+    calfile = tmp_path / "calibration.json"
+    entry = {
+        "a": 0.0,
+        "b": 2e-10,
+        "backend": "cupy",
+        "warmup_s": 3.0,
+        "samples": [[n // 32, 3.2e-8], [n // 16, 6.4e-8]],
+        "shapes": [],
+        "p_max_probe": n // 16,  # the plan is 16x the biggest probe
+        "fit_mode": "interpolated",
+        "interp_loo_rel_err": None,  # two samples: nothing to hold out
+    }
+    calfile.write_text(json.dumps({"version": 1, "devices": {"NVIDIA A100-SXM4-40GB": entry}}))
+    est = planner.estimate(grid, med, src, gpu="A100", calibration_path=calfile)
+    assert est.source == "calibrated"
+    assert any("extrapolated" in w for w in est.warnings), est.warnings
+    assert not any("misses" in w for w in est.warnings), est.warnings
+    # ... and the extrapolated number is the floored one: the top segment is
+    # sublinear (2x the size for 2x the time is slope 1.0 -- exactly the
+    # floor), so the rate stays at the best measured.
+    assert est.t_step_s / n == pytest.approx(6.4e-8 / (n // 16), rel=1e-9)
+
+    entry["p_max_probe"] = n
+    calfile.write_text(json.dumps({"version": 1, "devices": {"NVIDIA A100-SXM4-40GB": entry}}))
+    est = planner.estimate(grid, med, src, gpu="A100", calibration_path=calfile)
+    assert not any("extrapolated" in w for w in est.warnings), est.warnings
+
+
+def test_an_old_style_entry_behaves_exactly_as_it_did(tmp_path):
+    """Stores written before the interpolator carry (a, b) and no samples.
+
+    Pinned byte for byte: same t_step, same warning, same everything. A
+    silent change of meaning for entries already on disk would be the worst
+    possible way to ship an accuracy fix.
+    """
+    grid, med, src = tiny_setup()
+    _, n, _ = model.fft_sizes(grid.shape)
+    calfile = tmp_path / "calibration.json"
+    for samples in ([], None):  # missing key and empty list are both "old"
+        entry = {
+            "a": 1e-9,
+            "b": 2e-10,
+            "backend": "cupy",
+            "warmup_s": 3.0,
+            "fit_max_rel_residual": 0.42,
+            "fit_mode": "throughput-anchored",
+        }
+        if samples is not None:
+            entry["samples"] = samples
+        calfile.write_text(json.dumps({"version": 1, "devices": {"NVIDIA A100-SXM4-40GB": entry}}))
+        est = planner.estimate(grid, med, src, gpu="A100", calibration_path=calfile)
+        assert est.source == "calibrated"
+        assert est.t_step_s == model.step_time(1e-9, 2e-10, n)  # exactly, not approx
+        assert cal.time_model_quality(entry) == ("fit", 0.42)
+        assert any("misses its own samples by up to 42%" in w for w in est.warnings), est.warnings
+        assert not any("leave-one-out" in w for w in est.warnings)
+
+    # A single sample is not enough to interpolate either.
+    assert cal.time_model_quality({"a": 1.0, "b": 2.0, "samples": [[1024, 1e-3]]})[0] == "fit"
+
+
+def test_calibrate_records_the_interpolated_mode_and_its_loo(tmp_path):
+    calfile = tmp_path / "calibration.json"
+    entry = planner.calibrate(
+        shapes=((16, 16), (24, 24), (32, 32)), backend="numpy", n_steps=4, path=calfile
+    )
+    assert entry["fit_mode"] == "interpolated"
+    assert entry["global_fit_mode"] in ("nnls", "throughput-anchored")
+    assert entry["a"] >= 0.0 and entry["b"] >= 0.0  # kept, for older readers
+    assert entry["fit_max_rel_residual"] >= 0.0  # kept, as the global law's diagnostic
+    loo = entry["interp_loo_rel_err"]
+    assert loo is not None and math.isfinite(loo) and loo >= 0.0
+    assert len(entry["samples"]) == 3
+
+    # It survives the JSON round-trip and drives the plan.
+    stored = json.loads(calfile.read_text())["devices"]["cpu"]
+    assert cal.time_model_quality(stored) == ("interpolated", pytest.approx(loo))
+    grid, med, src = tiny_setup()
+    _, n, _ = model.fft_sizes(grid.shape)
+    est = planner.estimate(grid, med, src, gpu=cpu_target(), calibration_path=calfile)
+    assert est.source == "calibrated"
+    assert est.t_step_s == pytest.approx(cal.predict_step_time(stored, n))
+
+    # Two shapes -- the default cpu probe -- still calibrates; there is just
+    # no interior sample to hold out, and it says None rather than 0.
+    two = planner.calibrate(shapes=((16, 16), (24, 24)), backend="numpy", n_steps=4, path=calfile)
+    assert two["fit_mode"] == "interpolated"
+    assert two["interp_loo_rel_err"] is None
+    assert cal.time_model_quality(two) == ("interpolated", None)
+
+
+def test_a_bigger_grid_is_never_predicted_cheaper_than_a_smaller_one():
+    """The first A100 calibration measured 1.061 ms at 110,592 elements and
+    1.001 ms at 373,248 -- both latency-bound, the difference pure noise.
+    Interpolating that verbatim would have a 3.4x bigger grid running faster."""
+    noisy = [(110_592, 0.0010611400000470894), (373_248, 0.0010005005001403333)]
+    predictions = [cal.interp_step_time(noisy, p) for p, _ in noisy]
+    assert predictions[0] == pytest.approx(0.00106114, rel=1e-6)
+    assert predictions[1] == pytest.approx(predictions[0])  # clamped up, not down
+    assert cal.interp_step_time(noisy, 200_000) == pytest.approx(predictions[0])
+
+
+# ----------------------------- the warmup curve is interpolated too (M8.time)
+#
+# Subtracting each rung's measured warmup from its wall time, the anchored
+# per-step model was only -6..-9% out. M8.time failed on the OTHER half: the
+# plans used the probe's warmup (0.2/0.6/1.2/2.3 s) while the real runs paid
+# 4.389/12.838/32.375 s, and those are superlinear in P. record_warmup_model
+# wrote them back, the linear refit landed on a NEGATIVE context -- clamped
+# to zero -- and the next check (a real 192^3 run) caught it over-predicting
+# 2x. Same disease as the step curve, same medicine.
+
+BLACKWELL_WARMUPS = [(400**3, 4.389), (512**3, 12.838), (640**3, 32.375)]  # measured
+BLACKWELL_WARMUP_SLOPE = 1.4264024314884076e-07  # what the linear refit stored
+
+
+def test_the_warmup_curve_is_superlinear_and_the_linear_model_cannot_bend(tmp_path):
+    device = "NVIDIA RTX PRO 6000 Blackwell Server Edition"
+    calfile = tmp_path / "calibration.json"
+    calfile.write_text(
+        json.dumps({"version": 1, "devices": {device: {"a": 0.0, "b": BLACKWELL_B}}})
+    )
+    entry = cal.record_warmup_model(device, BLACKWELL_WARMUPS, path=calfile)
+
+    rates = [w / p for p, w in BLACKWELL_WARMUPS]
+    assert rates == sorted(rates)  # 0.069 -> 0.096 -> 0.124 us/element
+    assert rates[-1] / rates[0] == pytest.approx(1.80, abs=0.01)
+
+    # (a) the linear refit, and what it costs. Both numbers are the session's.
+    assert entry["warmup_per_elem_s"] == pytest.approx(BLACKWELL_WARMUP_SLOPE, rel=1e-6)
+    assert entry["warmup_context_s"] == 0.0  # the intercept went negative (-5.35 s)
+    assert entry["warmup_fit_max_rel_residual"] == pytest.approx(1.080, abs=0.005)
+    assert BLACKWELL_WARMUP_SLOPE * 400**3 == pytest.approx(9.129, abs=0.01)  # vs 4.389 measured
+
+    # (b) interpolation reproduces every measured warmup exactly, and says so
+    # with a held-out number instead of a residual it cannot fail.
+    assert entry["warmup_mode"] == "interpolated"
+    assert entry["warmup_loo_rel_err"] == pytest.approx(0.0235, abs=0.001)
+    for p_elems, w in BLACKWELL_WARMUPS:
+        assert cal.calibrated_warmup(entry, p_elems) == pytest.approx(w, rel=1e-12)
+    assert cal.warmup_model_quality(entry) == ("interpolated", pytest.approx(0.0235, abs=0.001))
+
+
+def test_below_the_smallest_warmup_sample_the_per_element_rate_is_held():
+    """The one measurement below the sampled range decides this rule.
+
+    A real 192^3 run paid 0.501 s of warmup. Holding the smallest sample's
+    per-element rate predicts 0.485 s (-3.1%). Holding its VALUE -- the rule
+    the step curve uses -- would say 4.389 s (+776%), and the linear two-term
+    model said 1.010 s (+101%), which is what caught the defect.
+    """
+    p192 = 192**3
+    predicted = cal.interp_warmup(BLACKWELL_WARMUPS, p192)
+    assert predicted == pytest.approx(0.4854, abs=0.001)
+    assert predicted == pytest.approx(0.501, rel=0.05)
+    assert BLACKWELL_WARMUP_SLOPE * p192 == pytest.approx(1.010, abs=0.005)
+    assert predicted < BLACKWELL_WARMUPS[0][1]  # never MORE than the smallest sample
+    # proportional below the range, so half the grid is half the plan cost
+    assert cal.interp_warmup(BLACKWELL_WARMUPS, p192 // 2) == pytest.approx(predicted / 2, rel=1e-9)
+    assert cal.interp_warmup(BLACKWELL_WARMUPS, 0) == 0.0
+
+
+def test_the_two_curves_clamp_differently_below_their_samples_on_purpose():
+    """Step time is floored, warmup is not -- because they are different
+    costs. A kernel launch costs what it costs however small the grid; a
+    cuFFT plan for a smaller transform is simply a smaller plan."""
+    tiny = 64**3
+    assert cal.interp_step_time(BLACKWELL_PROBES, tiny) == BLACKWELL_PROBES[0][1]
+    assert cal.interp_warmup(BLACKWELL_WARMUPS, tiny) < 0.1 * BLACKWELL_WARMUPS[0][1]
+    # ... and above their samples they share one rule: never a better
+    # per-element rate than the best measured.
+    for samples, fn in (
+        (BLACKWELL_PROBES, cal.interp_step_time),
+        (BLACKWELL_WARMUPS, cal.interp_warmup),
+    ):
+        p_top, c_top = samples[-1]
+        huge = 4 * p_top
+        assert fn(samples, huge) / huge >= c_top / p_top - 1e-18
+
+
+def test_a_plan_reads_the_warmup_samples_not_the_stored_two_term_model(tmp_path):
+    grid, med, src = tiny_setup()
+    _, n, _ = model.fft_sizes(grid.shape)
+    calfile = tmp_path / "calibration.json"
+    entry = {
+        "a": 0.0,
+        "b": 2e-10,
+        "backend": "cupy",
+        "samples": [],
+        "shapes": [],
+        # a two-term model that would say something quite different (7.5 s)
+        "warmup_context_s": 5.0,
+        "warmup_per_elem_s": 2.44e-3,
+        "warmup_s": 99.0,
+        "warmup_samples": [[n // 2, 0.4], [2 * n, 2.0]],
+    }
+    calfile.write_text(json.dumps({"version": 1, "devices": {"NVIDIA A100-SXM4-40GB": entry}}))
+    est = planner.estimate(grid, med, src, gpu="A100", calibration_path=calfile)
+    assert est.source == "calibrated"
+    assert est.warmup_s == pytest.approx(cal.interp_warmup([(n // 2, 0.4), (2 * n, 2.0)], n))
+    assert est.warmup_s == pytest.approx(0.8944, abs=0.001)  # not 7.5, and not 99.0
+    assert est.t_expected_s == pytest.approx(est.warmup_s + est.t_step_s * est.steps_expected)
+
+
+def test_asserting_one_flat_warmup_retires_the_curve_it_contradicts(tmp_path):
+    """record_warmup() is the caller saying "it cost THIS". Leaving a stale
+    multi-sample curve behind would silently outrank that assertion, since
+    the samples are what predicts now."""
+    device = "cpu"
+    calfile = tmp_path / "calibration.json"
+    calfile.write_text(json.dumps({"version": 1, "devices": {device: {"a": 0.0, "b": 1e-10}}}))
+    cal.record_warmup_model(device, [(1_000_000, 1.0), (8_000_000, 12.0)], path=calfile)
+    assert cal.find_calibration_for(device, calfile)["warmup_samples"] == [
+        [1_000_000, 1.0],
+        [8_000_000, 12.0],
+    ]
+
+    flat = cal.record_warmup(device, 3.0, path=calfile)
+    assert "warmup_samples" not in flat
+    assert cal.calibrated_warmup(flat, 8_000_000) == pytest.approx(3.0)  # the assertion wins
+
+    sized = cal.record_warmup(device, 5.0, p_elems=4_000_000, path=calfile)
+    assert sized["warmup_samples"] == [[4_000_000, 5.0]]  # one point is not a curve
+    assert cal.calibrated_warmup(sized, 4_000_000) == pytest.approx(5.0)
+
+
+def test_entry_samples_survives_whatever_is_on_disk():
+    assert cal.entry_samples({}) == []
+    assert cal.entry_samples({"samples": None}) == []
+    assert cal.entry_samples({"samples": [[1024, 1e-3], [512, 2e-3]]}) == [
+        (512, 2e-3),
+        (1024, 1e-3),
+    ]  # sorted by P
+    junk = {"samples": [[0, 1e-3], [1024, 0.0], [2048, "x"], [4096], None, [8192, 1e-3]]}
+    assert cal.entry_samples(junk) == [(8192, 1e-3)]
+    # a size measured twice keeps the slower time
+    assert cal.entry_samples({"samples": [[1024, 1e-3], [1024, 3e-3]]}) == [(1024, 3e-3)]
+
+
 def test_a_calibrated_plan_says_when_it_is_extrapolating(tmp_path):
     """'calibrated' is a promise about accuracy; this is where it lapses."""
     calfile = tmp_path / "calibration.json"
@@ -633,7 +1058,21 @@ def test_real_runs_refit_both_warmup_terms(tmp_path):
     assert entry["warmup_context_s"] == pytest.approx(c0, rel=1e-3)
     assert entry["warmup_per_elem_s"] == pytest.approx(c1, rel=1e-3)
     assert entry["warmup_source"] == "measured"
-    assert cal.calibrated_warmup(entry, 640**3) == pytest.approx(c0 + c1 * 640**3, rel=1e-3)
+    assert entry["warmup_samples"] == [[n**3, c0 + c1 * n**3] for n in (256, 400, 512)]
+
+    # The samples are also what PREDICTS now (see the warmup-curve tests
+    # below): on a device that really is linear the two agree, so recording
+    # them costs nothing here. Above the top sample the interpolator's
+    # per-element floor makes it the more conservative of the two.
+    for n in (256, 400, 512):
+        assert cal.calibrated_warmup(entry, n**3) == pytest.approx(c0 + c1 * n**3, rel=1e-9)
+    assert cal.calibrated_warmup(entry, 640**3) == pytest.approx(c0 + c1 * 640**3, rel=0.05)
+    assert cal.calibrated_warmup(entry, 640**3) >= c0 + c1 * 640**3
+
+    # ... and the two-term model itself is untouched for an entry without
+    # samples, which is what every store written before today looks like.
+    two_term = {"warmup_context_s": c0, "warmup_per_elem_s": c1}
+    assert cal.calibrated_warmup(two_term, 640**3) == pytest.approx(c0 + c1 * 640**3, rel=1e-12)
 
 
 def test_one_warmup_sample_moves_the_constant_and_keeps_the_slope(tmp_path):

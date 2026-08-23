@@ -11,9 +11,13 @@ Three estimate sources, always labeled on the result (M8 gate):
 
 * ``"db"`` — datasheet numbers from ``gpu_db.json``; coarse (~2x), for
   device comparison before touching hardware.
-* ``"calibrated"`` — ``t_step = a*P*log2(P) + b*P`` coefficients fitted by
-  :func:`caustica.planner.calibrate` (~20 real steps on the device, persisted
-  in ``~/.caustica/calibration.json``). The ±25% accuracy gate applies here.
+* ``"calibrated"`` — interpolated through the ``(P, t_step)`` samples
+  :func:`caustica.planner.calibrate` measured on the device (~20 real steps
+  per size, persisted in ``~/.caustica/calibration.json``); stores too old to
+  carry samples fall back to their ``t_step = a*P*log2(P) + b*P`` fit. The
+  ±25% accuracy gate applies here — and it is why prediction interpolates:
+  one global law through a real device's per-element cost curve missed its
+  own probes by 70% on a Blackwell card.
 * ``"measured"`` — ``measure=True`` times the step composition on the
   CURRENT machine right now (~20 steps).
 
@@ -23,7 +27,11 @@ first allocations — dropping it made the first real Colab session look like a
 25.9x miss when the per-step accounting was in fact correct (see
 ``model.GPU_WARMUP_S``). ``t_expected_s`` therefore INCLUDES the warmup, and
 ``Estimate.warmup_s`` says how much of it that is -- zero by default on a
-cpu target, which pays no CUDA context and no cuFFT plan.
+cpu target, which pays no CUDA context and no cuFFT plan. It is NOT a
+constant and not linear in the grid either: like the per-step cost it is
+interpolated from measured runs when the calibration carries them (see
+:func:`caustica.planner.calibrated_warmup`); a real card's warmup is
+superlinear in the element count.
 
 VRAM comes from a byte-level inventory of the engine's buffers
 (:mod:`caustica.planner.model`); when it does not fit, ``advice`` carries
@@ -52,8 +60,11 @@ from caustica.planner.calibration import (
     default_probe_shapes,
     find_calibration_for,
     measure_step_time,
+    predict_step_time,
     record_warmup,
     record_warmup_model,
+    time_model_quality,
+    warmup_model_quality,
 )
 from caustica.solvers.base import CWRunSpec
 from caustica.solvers.kspace.engine import (
@@ -78,9 +89,12 @@ __all__ = [
     "load_gpu_db",
     "default_probe_shapes",
     "measure_step_time",
+    "predict_step_time",
     "spec_for_device",
     "record_warmup",
     "record_warmup_model",
+    "time_model_quality",
+    "warmup_model_quality",
 ]
 
 _GIB = 2**30
@@ -343,7 +357,9 @@ def estimate(
             gpu_spec.key, calibration_path, device_name=gpu_spec.device_name
         )
         if entry is not None:
-            t_step = model.step_time(entry["a"], entry["b"], p_elems)
+            # Interpolation through the measured sizes when the entry carries
+            # them; the global (a, b) law only for stores too old to.
+            t_step = predict_step_time(entry, p_elems)
             # Entries written before fix A2 carry no warmup at all; a GPU
             # entry without one gets the constant rather than a silent zero,
             # which is the term the whole fix exists to stop dropping. A cpu
@@ -359,13 +375,24 @@ def estimate(
                     f"grid the calibration measured ({int(p_probe):,} elements) — the step "
                     f"cost is extrapolated, not measured; recalibrate nearer this size"
                 )
-            residual = entry.get("fit_max_rel_residual")
-            if residual is not None and float(residual) > FIT_RESIDUAL_LIMIT:
-                warnings.append(
-                    f"the calibration's time model misses its own samples by up to "
-                    f"{100 * float(residual):.0f}% — recalibrate (the probe grids were "
-                    f"probably too small to saturate this device)"
-                )
+            # Grade whatever actually predicted: an interpolator's residual
+            # against its own knots is 0 by construction, so the number that
+            # can lapse is its leave-one-out error.
+            mode, worst = time_model_quality(entry)
+            if worst is not None and float(worst) > FIT_RESIDUAL_LIMIT:
+                if mode == "interpolated":
+                    warnings.append(
+                        f"the calibration's time curve misses a HELD-OUT probe by up to "
+                        f"{100 * float(worst):.0f}% (leave-one-out) — the probed sizes are "
+                        f"too far apart to interpolate between; recalibrate with more grid "
+                        f"sizes, nearer this one"
+                    )
+                else:
+                    warnings.append(
+                        f"the calibration's time model misses its own samples by up to "
+                        f"{100 * float(worst):.0f}% — recalibrate (the probe grids were "
+                        f"probably too small to saturate this device)"
+                    )
         else:
             a, b = model.db_time_coeffs(
                 gpu_spec.fp32_tflops, gpu_spec.mem_bw_gbs, grid.ndim, nonlinear
