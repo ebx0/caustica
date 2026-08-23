@@ -275,8 +275,19 @@ düşen bir odak istiyor. Bu karar artık `data/setups/`ta yazılı (fantom baş
         ALTINDA uyuşuyor; 1e-5 kapısını float16 depolamaya bakarak kurmak kusursuz bir çözücüye
         YANLIŞ FAIL verirdi. Depolama tabanı raporda ayrı başlıkta (`stored_float16_reference`,
         bilgi amaçlı, kapıya girmez)
-  - [ ] Colab T4 VE A100'de tam boy (dx=0.30, 512³ FFT sınıfı) koşu OOM'suz tamamlanır —
-        süitte `M7.fullsize` kapısı; merdivenin 14 GiB basamağı tam olarak 512³/dx=0.30
+  - [ ] **EN AZ İKİ FARKLI MİMARİDE** tam boy (dx=0.30, 512³ FFT sınıfı) koşu OOM'suz
+        tamamlanır — süitte `M7.fullsize` kapısı; merdivenin 14 GiB basamağı tam olarak
+        512³/dx=0.30. **Ölçüt değişti (kullanıcı kararı, 2026-08-23):** eski metin "T4 VE
+        A100" diyordu; elde A100-SXM4-40GB (Ampere) ve RTX PRO 6000 Blackwell var, T4 yok.
+        Kanıtın özü belirli bir ürün adı değil, **aynı sonucun birden çok mimaride
+        çıkması**: 400³ ve 512³ basamakları iki kartta periyot periyot aynı değerleri verdi
+        (2.596 / 3.317 MPa, her `d` dahil), ve tepe basınç açıklık oranını %2'den iyi takip
+        etti (400³→512³→640³ = 1.000/1.278/1.625 ölçülen, 1.000/1.280/1.600 beklenen).
+        T4 sınıfı küçük kart davranışı M19'a taşındı.
+        **Bu ölçütün hangi yarısı makine-kontrollü:** süit TEK cihazda koşar, dolayısıyla
+        `M7.fullsize` kapısı "bu cihazda 512³ tamamlandı"yı kanıtlar; "en az iki mimari"
+        şartı iki ayrı rapor klasörü karşılaştırılarak KAPATILIR (operatör işi, kanıt =
+        `benchmarks/reports/gpu_gates/` altındaki iki damgalı rapor)
   - [ ] Adım süresi ölçülür ve `benchmarks/`e damgalanır (baseline; M19 bunu referans alır) —
         süit `step_time_baseline` bölümünü yazar; ısınma AYRIŞTIRILMIŞ (`t_step_steady_s`)
   - [x] GPU yokken testler otomatik SKIP (CI kırılmaz) — süit de dahil:
@@ -285,7 +296,15 @@ düşen bir odak istiyor. Bu karar artık `data/setups/`ta yazılı (fantom baş
 ### M8 — Planner v1 (süre + VRAM tahmini) `[~]` — yerel yarısı tamam (2026-08-11), Colab kapıları açık
 - [x] Statik VRAM modeli (tampon dökümü + cuFFT workspace payı + %15 marj); süre modeli a·N·logN + b·N; `gpu_db.json` (T4/L4/V100/A100/H100); cihazda kalibrasyon (~20 adım) → `~/.caustica/calibration.json`; `planner.estimate(gpu=...)` + `planner.compare(...)` — `src/caustica/planner/`, 11 test (`tests/test_planner.py`)
 - Başarı kriterleri:
-  - [ ] VRAM tahmini, Colab'da ölçülen mempool tepe değerinin ±%10'u içinde (≥2 farklı grid boyutunda) — **Colab kapısı, ikinci oturumda ölçülecek**; süitte `M8.vram`: merdiven ≥2 basamak üretir ve tek iyi ölçüm PASS saydırmaz (`test_one_measurement_is_not_two`)
+  - [ ] VRAM tahmini, ölçülen mempool tepe değerinin ±%10'u içinde (≥2 farklı grid
+        boyutunda) — süitte `M8.vram`: merdiven ≥2 basamak üretir ve tek iyi ölçüm PASS
+        saydırmaz (`test_one_measurement_is_not_two`). **Ölçümün tanımı değişti (kullanıcı
+        kararı, 2026-08-23):** "mempool tepesi" = **o basamağın KENDİ sürecinin** tepesi.
+        cupy havuzu süreç genelinde ve monoton olduğu için tek süreçte koşan merdiven, her
+        basamağa bir öncekinin tuttuğu belleği ekliyordu (1.729+6.591 → ölçülen 8.096;
+        8.096+13.818 → ölçülen 21.369) ve planner −%2.0 → −%18.6 → −%35.3 sapıyor gibi
+        görünüyordu. Sapma yoktu, ölçüm kirliydi. Her basamak artık kendi sürecinde koşuyor
+        (F2) — kullanıcının kendi koşusu da zaten budur
   - [ ] Kalibrasyon SONRASI süre tahmini gerçekleşenin ±%25'i içinde (aynı cihaz, ≥2 senaryo) — **Colab kapısı** (mekanik yerelde testli: cpu kalibrasyonu → fit → estimate zinciri); süitte `M8.time`: süit kendi `planner.calibrate()`ini koşarak "kalibrasyon sonrası" şartını ÜRETİR, varsaymaz
   - [ ] OOM reddi cihazda kanıtlanır: merdivenin bir üstü (cihaza SIĞMAYAN en küçük şekil) çıkış 3 ile reddedilir ve öneri metni rapora kanıt olarak girer — süitte `M8.oom` (**ikinci Colab oturumu**)
   - [x] Tahmin kaynağı raporda etiketli: `db` | `calibrated` | `measured` (testli; cpu kalibrasyonu GPU anahtarıyla asla eşleşmez)
@@ -298,6 +317,43 @@ düşen bir odak istiyor. Bu karar artık `data/setups/`ta yazılı (fantom baş
   gerçek koşunun ödediğini geri yazıyor. run_meta.actual'a EKLENEN alanlar: `warmup_s`,
   `t_step_steady_s`, `steady_samples` — mevcut anahtarların hiçbiri değişmedi
   (`t_step_measured_s` dahil; M8'in Colab kapıları ve gui_contract onu okuyor)
+- **İlk iki GPU kapı oturumu dört kusur açığa çıkardı (2026-08-22 A100-SXM4-40GB ve
+  RTX PRO 6000 Blackwell; düzeltmeler `aed5088` + `e2a1a23`, 2026-08-23):**
+  - **F1 — NaN üreten koşu `exit 0` veriyordu.** 256³ basamağı 2. periyottan itibaren `nan`
+    okudu, "converged at period 12 (SETTLE CAP HIT)" yazdı, dolu bir `result.h5` bıraktı ve
+    0 döndü; süit de onu M8.vram kanıtı saydı — o kapıda geçen TEK kontrol oydu. inf/NaN her
+    adımda yayılır, `nan < tol` asla doğru olmaz, döngü tavana çarpar. Motor artık ilk
+    sonlu-olmayan periyot tepesinde `SolverDivergedError` fırlatıyor (bedelsiz: o değer zaten
+    host'ta) ve kayıt penceresini de denetliyor; runner `exit 4` + `error.json`'a çeviriyor.
+    `tests/test_divergence_guard.py`
+  - **F2 — VRAM ölçümü kirliydi** (yukarıda, M8.vram ölçütünde).
+  - **F3 — süre modeli cihazın doymadığı yerde uyduruluyordu.** Sabit 48³/72³ sonda çifti
+    A100'de her iki boyda da ~1.0 ms/adım veriyor; negatiflik kırpması `a`yı sıfırlıyor ve
+    kalan tek parametre kendi örneklerinden geçemiyor. 16.8M voksele uzatınca adım maliyetini
+    **6.8×** fazla söylüyordu — M8'in üç süre kontrolünün +%154…+%308 sapmasının sebebi bu.
+    Sonda boyları artık boş VRAM'in %1/%4/%10'una göre seçiliyor (T4→96/180/240,
+    A100-40→160/256/320, 95 GiB→216/320/432), uyumun kendi örneklerine artığı ölçülüp
+    saklanıyor, örneklerini tutturamayan uyum en doygun örneğe demirleniyor, ve plan çok
+    uzağa ekstrapole ediyorsa bunu açıkça söylüyor.
+    **Ayrıca warmup sabit değil:** süreç başına maliyet + şekil başına (cuFFT plan) maliyet.
+    İki terim oturumun 256³ ve 400³ basamaklarına uydurulunca 512³'ün 20.9 s'sini **+%4.3**
+    ile öngörüyor; eski düz 3.0 s, o koşunun süresinin %46'sını oluşturan terimi tamamen
+    kaçırıyordu. Süit artık her basamaktan bir (boy, warmup) örneği geri yazıyor
+  - **F4 — tanınmayan cihaz sessizce A100 oluyordu.** Blackwell kalibrasyonunu ölçtü ve yine
+    datasheet'ten planladı (`[db]`), çünkü kalibrasyon araması cihaz adında "a100" arıyordu;
+    95 GiB'lık kart A100'ün 38.88 GiB'ı üzerinden yargılandı ve M8.time hiç notlanamadı
+    (INCOMPLETE). `gpu_key_for_device` artık tahmin yerine `None`, `spec_for_device` kartı
+    kendi bildirdiğinden tarif ediyor (`unknown:<ad>`), kalibrasyon canlı ürün adıyla
+    bulunuyor; `--gpu` varsayılanı "üstünde koştuğun cihaz" oldu
+  - **F6 — kalibrasyon sondası float32'de taşıyordu:** sentetik adım spektral türevle, yani
+    |k| ≤ π/dx ile çarpıyor; 1e-3 katsayılarıyla adım başına kazanç 3'ün üstünde ve p, ölçüm
+    döngüsünün içinde inf oluyordu
+  - **AÇIK:** 256³ NaN'inin KÖKÜ. İki kartta birebir aynı (`190.657 MPa` → NaN), numpy'de
+    aynı iş SAĞLIKLI (periyot 8'de 1.295 MPa, ölçek yasasının öngördüğü ~1.66 MPa'ya doğru).
+    Elenenler: `--preview-only` yolu (çözümden sonra çalışır), yinelenen kaynak indeksleri
+    (sıfır), ilklenmemiş tampon (hepsi `zeros`), PML yakınlığının tek başına sebep olması.
+    Ayırt edici sonda hazır; kalan adaylar süreç durumu (kalibrasyon artığı) ve
+    geometri×backend etkileşimi
 - Not: dt/spp ve time-of-flight türetimi motordan `cw_discretization`/`cw_tof_periods` fonksiyonlarına çıkarıldı (tek doğruluk kaynağı; planner==engine testli). VRAM envanteri engine.py tampon listesini birebir aynalar — motora yeni kalıcı tampon eklersen `test_memory_inventory_matches_hand_count` kırılır (bilerek).
 
 ### M9 — KZK çözücüsü `[ERTELENDİ 2026-08-22]`

@@ -778,7 +778,8 @@ def evaluate(results: list[RungResult], parity: dict | None) -> list[Gate]:
     vram = Gate(
         id="M8.vram",
         criterion=(
-            "VRAM prediction within +/-10% of the measured mempool peak, on at least 2 grid sizes"
+            "VRAM prediction within +/-10% of the mempool peak measured in the rung's "
+            "OWN process, on at least 2 grid sizes"
         ),
         required=2,
     )
