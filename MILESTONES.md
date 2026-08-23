@@ -999,15 +999,11 @@ hücre, tek düzenlenen satır CONFIG yolu; gerisi `from caustica.colab import r
       DEĞİL). Gerçek bir Drive mount'u üstünde koşu ilk Colab oturumunun işi. Kabul edilen risk:
       oturum çökerse `/content` gider — checkpoint oturum-içi restart'ı kurtarır, VM teardown'ı
       kurtarmaz
-- [~] `notebooks/colab_run.ipynb` repoda ve README'de "Run on Colab" rozeti var; ama link
-      HENÜZ ÇALIŞMIYOR ve bu M10e'ye bağlı sert bir engel. `origin/master` hâlâ f0bff2f'te
-      (yeniden adlandırma ÖNCESİ): `notebooks/` dizini orada yok, `src/caustica` da yok. Yani
-      `master`'a bakan ÜÇ şey birden bugün kırık: (1) rozetin
-      `…/blob/master/notebooks/colab_run.ipynb` hedefi 404; (2) notebook'un kurulum hücresi
-      `git+https://github.com/ebx0/caustica` ile VARSAYILAN dalı kuruyor, o dal hâlâ `hifusim`
-      paketini taşıyor, dolayısıyla `from caustica.colab import run_job` ModuleNotFoundError
-      verirdi; (3) varsayılan `CONFIG` ham URL'si 404. Üçü de `library-first` master'a
-      MERGE edilince düzelir — "push" yetmez. Colab kapısı bu yüzden denenemez bile
+- [x] `notebooks/colab_run.ipynb` repoda ve README'de "Run on Colab" rozeti ÇALIŞIYOR
+      (2026-08-22'de `ef837bf` merge'iyle kapandı; 2026-08-23'te `origin/master` fetch'lenip
+      yeniden doğrulandı). Merge öncesi üç kırık şeyin üçü de doğrulanarak kapatıldı:
+      (1) rozet hedefi 200; (2) temiz ortamda `pip install git+https://github.com/ebx0/caustica`
+      → `from caustica.colab import run_job` çalışıyor; (3) varsayılan `CONFIG` ham URL'si 200
       (aşağıdaki iki açık ölçütün ön koşulu)
 - Başarı kriterleri:
   - [x] Notebook sözleşmesi: CONFIG satırı dışında düzenleme gerektirmez; mantık değişikliği
