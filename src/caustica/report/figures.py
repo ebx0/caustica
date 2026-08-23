@@ -36,6 +36,7 @@ from matplotlib.colors import (  # noqa: E402
 
 from caustica.report.metrics import (  # noqa: E402
     HALF_PRESSURE,
+    FieldFrame,
     interior_slices,
     mm_axes,
     region_origin,
@@ -101,15 +102,15 @@ class FigureContext:
     from the ``caustica-result/1`` attrs. Optional fields simply drop the
     corresponding decoration (no source dots, no medium figure) instead of
     failing.
+
+    The grid frame itself (dx, shape, PML, apex, requested focus) is the same
+    :class:`~caustica.report.metrics.FieldFrame` the metrics are computed in,
+    so a figure and a metric table can never be drawn in different frames.
     """
 
-    dx: float
-    grid_shape: tuple[int, ...]
-    pml_vox: int
-    apex_vox: tuple[int, int, int]
+    frame: FieldFrame
     title: str
     solver: str = ""
-    focus_vox: tuple[int, int, int] | None = None
     source_indices: np.ndarray | None = None  # (n, 3) grid-frame voxels
     labels: np.ndarray | None = None  # integer label map (full grid)
     label_names: dict[int, str] = field(default_factory=dict)
@@ -128,7 +129,7 @@ def _extent(h_mm: np.ndarray, v_mm: np.ndarray) -> list[float]:
 
 
 def _mm_axes(ctx: FigureContext, result: SolverResult) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    return mm_axes(result, dx=ctx.dx, apex_vox=ctx.apex_vox)
+    return mm_axes(result, ctx.frame)
 
 
 def field_maps(ctx: FigureContext, result: SolverResult, prof: dict, outdir: Path) -> str:
@@ -149,16 +150,16 @@ def field_maps(ctx: FigureContext, result: SolverResult, prof: dict, outdir: Pat
         src = np.asarray(ctx.source_indices)
         sel = np.abs(src[:, 1] - (pk[1] + region_origin(result)[1])) <= 1
         axes[0].plot(
-            (src[sel, 2] - ctx.apex_vox[2]) * ctx.dx * 1e3,
-            (src[sel, 0] - ctx.apex_vox[0]) * ctx.dx * 1e3,
+            (src[sel, 2] - ctx.frame.apex_vox[2]) * ctx.frame.dx * 1e3,
+            (src[sel, 0] - ctx.frame.apex_vox[0]) * ctx.frame.dx * 1e3,
             ".",
             ms=1.6,
             color=INK2,
             alpha=0.75,
         )
-    if ctx.focus_vox is not None:
-        tz = (ctx.focus_vox[2] - ctx.apex_vox[2]) * ctx.dx * 1e3
-        tx = (ctx.focus_vox[0] - ctx.apex_vox[0]) * ctx.dx * 1e3
+    if ctx.frame.focus_vox is not None:
+        tz = (ctx.frame.focus_vox[2] - ctx.frame.apex_vox[2]) * ctx.frame.dx * 1e3
+        tx = (ctx.frame.focus_vox[0] - ctx.frame.apex_vox[0]) * ctx.frame.dx * 1e3
         axes[0].plot([tz], [tx], "+", ms=11, mew=1.4, color=CAT[1], label="requested focus")
     axes[0].plot([z[pk[2]]], [x[pk[0]]], "x", ms=9, mew=1.4, color=INK, label="realized peak")
     axes[0].set(xlabel="z from apex [mm]", ylabel="x [mm]", title="|p| at f0 — beam plane (x-z)")
@@ -190,9 +191,9 @@ def profile_plot(ctx: FigureContext, prof: dict, outdir: Path) -> str:
         axes[0].plot(z, scaled, color=INK2, ls=":", lw=1.5, label="O'Neil (scaled to peak)")
     if "axial_h2" in prof:
         axes[0].plot(z, prof["axial_h2"] / 1e6, color=CAT[2], lw=1.3, label="2nd harmonic")
-    if ctx.focus_vox is not None:
+    if ctx.frame.focus_vox is not None:
         axes[0].axvline(
-            (ctx.focus_vox[2] - ctx.apex_vox[2]) * ctx.dx * 1e3,
+            (ctx.frame.focus_vox[2] - ctx.frame.apex_vox[2]) * ctx.frame.dx * 1e3,
             color=CAT[1],
             lw=1.0,
             ls="--",
@@ -218,7 +219,7 @@ def harmonic_plot(ctx: FigureContext, result: SolverResult, prof: dict, outdir: 
     a1, a2 = result.amp, result.harmonic_amp(2)
     x, y, z = _mm_axes(ctx, result)
     pk = tuple(int(i) for i in prof["peak_idx"])
-    interior = interior_slices(result, grid_shape=ctx.grid_shape, pml_vox=ctx.pml_vox)
+    interior = interior_slices(result, ctx.frame)
 
     fig, axes = plt.subplots(1, 2, figsize=(12.0, 3.9), width_ratios=[1.3, 1.0])
     # Scale to the INTERIOR maximum: the sponge edge can hold a numerical
@@ -277,10 +278,10 @@ def medium_plot(ctx: FigureContext, outdir: Path) -> str | None:
     """Label map + sound speed, for heterogeneous scenarios only."""
     if ctx.labels is None:
         return None
-    dx, apex = ctx.dx, ctx.apex_vox
+    dx, apex = ctx.frame.dx, ctx.frame.apex_vox
     lab = ctx.labels[:, apex[1], :]
-    x = (np.arange(ctx.grid_shape[0]) - apex[0]) * dx * 1e3
-    z = (np.arange(ctx.grid_shape[2]) - apex[2]) * dx * 1e3
+    x = (np.arange(ctx.frame.grid_shape[0]) - apex[0]) * dx * 1e3
+    z = (np.arange(ctx.frame.grid_shape[2]) - apex[2]) * dx * 1e3
     ids = sorted(ctx.label_names)
     cmap = ListedColormap([CAT[i % len(CAT)] for i in range(len(ids))])
     norm = BoundaryNorm([*[i - 0.5 for i in range(len(ids))], len(ids) - 0.5], cmap.N)

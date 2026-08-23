@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from apps.focus_study.analysis import field_frame
 from apps.focus_study.scenarios import Setup
 from caustica.report import figures as _fig
 from caustica.report.figures import FigureContext
@@ -20,13 +21,9 @@ __all__ = ["FigureContext", "make_all"]
 
 def _ctx(setup: Setup) -> FigureContext:
     return FigureContext(
-        dx=setup.grid.dx,
-        grid_shape=setup.grid.shape,
-        pml_vox=setup.grid.pml_vox,
-        apex_vox=setup.apex_vox,
+        frame=field_frame(setup),
         title=setup.title,
         solver=setup.knobs.solver,
-        focus_vox=setup.focus_vox,
         source_indices=setup.source.indices,
         labels=setup.labels,
         label_names=setup.label_names,

@@ -274,6 +274,54 @@ def test_validate_fast_defers_medium_checks(tmp_path):
     assert any("deferred" in w for w in rep.warnings)
 
 
+# ------------------------- janitor ticket 08 (2026-08-23): the beta=0 trap
+
+
+def test_validate_warns_that_westervelt_on_a_beta_zero_medium_is_a_linear_solve(tmp_path):
+    """The UX trap: a nonlinear solver over water() runs linear physics.
+
+    beta=0 everywhere means the westervelt engine has no nonlinear term to
+    apply, so the solve is bit-identical to `linear` (the M5 guarantee) — a
+    run labelled "westervelt" whose harmonics are numerical residue. Loud,
+    but never a block: a linear reference run through the nonlinear engine is
+    a legitimate thing to ask for.
+    """
+    d = scene_job_dict(solver="westervelt")  # every material in it has beta=0
+    rep = validate_job(write_job(tmp_path, d))
+    assert rep.ok  # a warning, not an error
+    hits = [w for w in rep.warnings if "BIT-IDENTICAL" in w]
+    assert len(hits) == 1
+    assert "medium.material.beta" in hits[0] and "3.5" in hits[0]
+
+
+def test_validate_stays_quiet_when_the_pairing_is_honest(tmp_path):
+    """No warning for a run that never claimed nonlinearity, nor for a real one.
+
+    The `linear` solver on a beta=0 medium is exactly what it says, and
+    westervelt on beta>0 is the nonlinear run the warning asks for; a warning
+    that fired for those would be noise, and noise gets filtered out.
+    """
+    honest_linear = scene_job_dict(solver="linear")
+    rep = validate_job(write_job(tmp_path, honest_linear, "linear.json"))
+    assert not any("BIT-IDENTICAL" in w for w in rep.warnings)
+
+    nonlinear = scene_job_dict(solver="westervelt")
+    nonlinear["medium"]["materials"]["2"] = FAT  # beta = 4.5
+    rep = validate_job(write_job(tmp_path, nonlinear, "nonlinear.json"))
+    assert rep.ok
+    assert not any("BIT-IDENTICAL" in w for w in rep.warnings)
+
+
+def test_cli_validate_prints_the_beta_zero_warning(tmp_path, capsys):
+    """The other surface: `caustica validate` shows it, and still exits 0."""
+    from caustica.__main__ import main
+
+    path = write_job(tmp_path, scene_job_dict(solver="westervelt"), "beta0.json")
+    assert main(["validate", str(path)]) == 0
+    out = capsys.readouterr().out
+    assert "WARNING" in out and "BIT-IDENTICAL" in out and "medium.material.beta" in out
+
+
 # ----------------------------------------------------------------------- CLI
 
 

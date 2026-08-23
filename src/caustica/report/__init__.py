@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from caustica.report.metrics import (
     HALF_PRESSURE,
+    FieldFrame,
     argmax_interior,
     axial_profiles,
     extent_6db,
@@ -47,6 +48,7 @@ _LAZY = {
 
 __all__ = [
     "HALF_PRESSURE",
+    "FieldFrame",
     "argmax_interior",
     "axial_profiles",
     "extent_6db",

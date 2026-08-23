@@ -18,7 +18,7 @@ import numpy as np
 import pytest
 
 from caustica.__main__ import main as cli_main
-from caustica.report.metrics import focus_metrics
+from caustica.report.metrics import FieldFrame, focus_metrics
 from caustica.report.preview import (
     DEFAULT_MAX_BYTES,
     block_mean,
@@ -94,11 +94,13 @@ def test_focus_study_and_library_compute_identical_metrics(water_setup_result):
     via_app = analysis.analyze(setup, result)
     via_lib = focus_metrics(
         result,
-        dx=setup.grid.dx,
-        grid_shape=setup.grid.shape,
-        pml_vox=setup.grid.pml_vox,
-        apex_vox=setup.apex_vox,
-        focus_vox=setup.focus_vox,
+        FieldFrame(
+            dx=setup.grid.dx,
+            grid_shape=setup.grid.shape,
+            pml_vox=setup.grid.pml_vox,
+            apex_vox=setup.apex_vox,
+            focus_vox=setup.focus_vox,
+        ),
         source_amplitude=setup.knobs.amplitude,
         medium=setup.medium,
         solver=setup.knobs.solver,
@@ -113,7 +115,15 @@ def test_analyze_keeps_the_pre_refactor_shape(water_setup_result):
 
     setup, result = water_setup_result
     m = analysis.analyze(setup, result)
-    assert list(m) == ["peak", "target", "focal_spot", "run", "harmonics", "vs_oneill"]
+    assert list(m) == [
+        "peak",
+        "target",
+        "focal_spot",
+        "run",
+        "harmonics",
+        "warnings",  # janitor ticket 09: the metrics' own caveat channel
+        "vs_oneill",
+    ]
     assert m["peak"]["gain_vs_source"] is not None
     assert m["peak"]["isppa_w_cm2"] is not None  # medium was available
 
@@ -136,11 +146,13 @@ def test_metrics_from_result_file_match_the_runner_metrics(runner_outdir):
         amplitude = float(hf["input"].attrs["amplitude_pa"])
     m = focus_metrics(
         result,
-        dx=float(a["dx_m"]),
-        grid_shape=tuple(int(v) for v in a["grid_shape"]),
-        pml_vox=int(a["pml_vox"]),
-        apex_vox=tuple(int(v) for v in a["apex_vox"]),
-        focus_vox=tuple(int(v) for v in a["focus_vox"]),
+        FieldFrame(
+            dx=float(a["dx_m"]),
+            grid_shape=tuple(int(v) for v in a["grid_shape"]),
+            pml_vox=int(a["pml_vox"]),
+            apex_vox=tuple(int(v) for v in a["apex_vox"]),
+            focus_vox=tuple(int(v) for v in a["focus_vox"]),
+        ),
         source_amplitude=amplitude,
         medium=None,
     )
@@ -194,11 +206,13 @@ def test_preview_stays_under_10mb_on_a_full_grid(tmp_path):
     path = write_preview(
         tmp_path,
         result,
-        dx=0.25e-3,
-        grid_shape=shape,
-        pml_vox=8,
-        apex_vox=(128, 128, 12),
-        focus_vox=(128, 128, 150),
+        FieldFrame(
+            dx=0.25e-3,
+            grid_shape=shape,
+            pml_vox=8,
+            apex_vox=(128, 128, 12),
+            focus_vox=(128, 128, 150),
+        ),
         metrics={"format": "caustica-metrics/1", "job": "synthetic"},
     )
     size = path.stat().st_size
@@ -357,21 +371,15 @@ def test_preview_roundtrip_with_offset_record_region(tmp_path):
         meta=base.meta,
     )
     apex = (off[0] + shape[0] // 2, off[1] + shape[1] // 2, off[2] + 2)
-    m = focus_metrics(result, dx=0.5e-3, grid_shape=grid_shape, pml_vox=4, apex_vox=apex)
+    frame = FieldFrame(dx=0.5e-3, grid_shape=grid_shape, pml_vox=4, apex_vox=apex)
+    m = focus_metrics(result, frame)
     pk_grid = m["peak"]["voxel_grid"]
     # The stored voxel is in the GRID frame: region-frame argmax + offset.
     pk_region = np.unravel_index(int(np.argmax(result.amp)), shape)
     assert pk_grid == [int(i) + o for i, o in zip(pk_region, off, strict=True)]
 
     path = write_preview(
-        tmp_path,
-        result,
-        dx=0.5e-3,
-        grid_shape=grid_shape,
-        pml_vox=4,
-        apex_vox=apex,
-        focus_vox=None,
-        metrics={"format": "caustica-metrics/1", "job": "offset"},
+        tmp_path, result, frame, metrics={"format": "caustica-metrics/1", "job": "offset"}
     )
     pre = load_preview(path)
     assert pre["meta"]["peak_voxel_grid"] == pk_grid
@@ -483,11 +491,13 @@ def test_target_outside_the_recorded_region_has_no_hit_ratio():
     result = _synthetic_result(shape)
     m = focus_metrics(
         result,
-        dx=0.5e-3,
-        grid_shape=(40, 40, 60),
-        pml_vox=2,
-        apex_vox=(12, 12, 2),
-        focus_vox=(12, 12, shape[2] + 10),
+        FieldFrame(
+            dx=0.5e-3,
+            grid_shape=(40, 40, 60),
+            pml_vox=2,
+            apex_vox=(12, 12, 2),
+            focus_vox=(12, 12, shape[2] + 10),
+        ),
     )
     assert m["target"]["p_pa"] is None and m["target"]["hit_ratio"] is None
     assert m["target"]["displacement_norm_mm"] > 0.0  # geometry still measurable
@@ -505,17 +515,11 @@ def test_write_preview_coarsens_further_until_the_package_actually_fits(tmp_path
 
     shape = (48, 48, 48)
     result = _synthetic_result(shape)
-    geo = {
-        "dx": 0.5e-3,
-        "grid_shape": shape,
-        "pml_vox": 2,
-        "apex_vox": (24, 24, 4),
-        "focus_vox": None,
-    }
+    frame = FieldFrame(dx=0.5e-3, grid_shape=shape, pml_vox=2, apex_vox=(24, 24, 4))
     monkeypatch.setattr(pv, "_coarse_step", lambda shape, budget: 2)
-    too_big = len(pv.build_preview(result, max_bytes=10**9, **geo))
+    too_big = len(pv.build_preview(result, frame, max_bytes=10**9))
 
-    path = write_preview(tmp_path, result, metrics={"job": "tight"}, max_bytes=too_big - 1, **geo)
+    path = write_preview(tmp_path, result, frame, metrics={"job": "tight"}, max_bytes=too_big - 1)
     assert path.stat().st_size <= too_big - 1
     assert load_preview(path)["meta"]["coarse_step"] > 2  # step+1 until it fit
 
@@ -553,11 +557,11 @@ def test_field_maps_without_source_indices_draws_no_source_dots(tmp_path, monkey
 
     shape = (24, 24, 32)
     result = _synthetic_result(shape)
-    geo = {"dx": 0.5e-3, "grid_shape": shape, "pml_vox": 2, "apex_vox": (12, 12, 2)}
-    prof = axial_profiles(result, **geo)
+    frame = FieldFrame(dx=0.5e-3, grid_shape=shape, pml_vox=2, apex_vox=(12, 12, 2))
+    prof = axial_profiles(result, frame)
     kept = _capture_figures(monkeypatch)
 
-    ctx = hfig.FigureContext(title="no source", **geo)  # source_indices/focus_vox: None
+    ctx = hfig.FigureContext(frame=frame, title="no source")  # no source_indices, no focus_vox
     assert hfig.field_maps(ctx, result, prof, tmp_path) == "fig_field.png"
     assert [ln.get_marker() for ln in kept["fig_field"].axes[0].lines] == ["x"]  # peak only
 
@@ -577,10 +581,7 @@ def test_medium_figure_drops_the_sound_speed_panel_when_there_is_none(tmp_path, 
     labels[:, :, 10:] = 1
     kept = _capture_figures(monkeypatch)
     ctx = hfig.FigureContext(
-        dx=0.5e-3,
-        grid_shape=shape,
-        pml_vox=2,
-        apex_vox=(8, 8, 2),
+        frame=FieldFrame(dx=0.5e-3, grid_shape=shape, pml_vox=2, apex_vox=(8, 8, 2)),
         title="labels only",
         labels=labels,
         label_names={0: "water", 1: "fat"},
@@ -618,4 +619,124 @@ def test_record_region_entirely_inside_the_pml_is_refused():
 
     result = _synthetic_result((4, 4, 4))
     with pytest.raises(ValueError, match="entirely inside the PML"):
-        interior_slices(result, grid_shape=(40, 40, 40), pml_vox=10)
+        interior_slices(
+            result,
+            FieldFrame(dx=0.5e-3, grid_shape=(40, 40, 40), pml_vox=10, apex_vox=(20, 20, 20)),
+        )
+
+
+# ------------------------ janitor ticket 09 (2026-08-23): the a2 edge caveat
+
+
+def _result_with_a2_spike_at(shape: tuple[int, int, int], spike: tuple[int, int, int]):
+    """A two-harmonic solve whose a2 maximum sits exactly on ``spike``.
+
+    The fundamental keeps its own focal blob in the middle, so the a2 peak and
+    the fundamental peak are deliberately different voxels — which is the whole
+    situation the caveat is about.
+    """
+    from dataclasses import replace
+
+    base = _synthetic_result(shape)
+    a2 = np.full(shape, 1.0, dtype=np.float32)
+    a2[spike] = 5e4
+    return replace(base, phasors={1: base.phasor, 2: a2.astype(np.complex64)})
+
+
+def test_pml_edge_distance_is_measured_to_the_nearest_sponge_face():
+    """Distance 0 means "on the first non-absorbing plane", and it is a MIN.
+
+    One axis sitting against the sponge is enough to make the voxel suspect,
+    however deep in the grid the other two are.
+    """
+    from caustica.report.metrics import pml_edge_distance
+
+    frame = FieldFrame(dx=0.5e-3, grid_shape=(40, 40, 60), pml_vox=6, apex_vox=(20, 20, 2))
+    assert pml_edge_distance((6, 20, 30), frame) == 0  # first interior plane
+    assert pml_edge_distance((10, 20, 30), frame) == 4
+    assert pml_edge_distance((20, 20, 53), frame) == 0  # far face: 60 - 6 - 1
+    # x is 13 from its nearest face, z is 23 from its own: the MIN is reported.
+    assert pml_edge_distance((20, 20, 30), frame) == 13
+
+
+def test_a2_peak_on_the_pml_edge_is_flagged_without_changing_its_value():
+    """The number is contractual; the caveat next to it is the fix (ticket 09).
+
+    A beta=0 run reported an a2 maximum at 6.5% of the fundamental from a
+    voxel 4 steps inside the sponge — harmonic-DFT edge residue, not physics.
+    """
+    shape = (30, 30, 40)
+    frame = FieldFrame(dx=0.5e-3, grid_shape=shape, pml_vox=6, apex_vox=(15, 15, 2))
+    near = _result_with_a2_spike_at(shape, (15, 15, 9))  # 3 voxels from the PML
+    m = focus_metrics(near, frame)
+
+    assert m["harmonics"]["a2_peak_voxel_grid"] == [15, 15, 9]
+    assert m["harmonics"]["a2_peak_pa"] == pytest.approx(5e4, rel=1e-6)  # untouched
+    assert m["harmonics"]["a2_peak_distance_to_pml_vox"] == 3
+    assert len(m["warnings"]) == 1
+    assert "PML edge" in m["warnings"][0] and "a2_at_fundamental_peak_pa" in m["warnings"][0]
+
+
+def test_an_a2_peak_in_the_middle_of_the_grid_earns_no_caveat():
+    """Far from the sponge: the distance is still reported, the channel is empty.
+
+    The spike sits as deep as this grid allows — exactly ON the threshold,
+    which is the boundary the rule must not warn about (``< 8``, not ``<=``).
+    """
+    from caustica.report.metrics import A2_PML_MARGIN_WARN_VOX
+
+    shape = (30, 30, 40)
+    frame = FieldFrame(dx=0.5e-3, grid_shape=shape, pml_vox=6, apex_vox=(15, 15, 2))
+    far = _result_with_a2_spike_at(shape, (15, 15, 20))
+    m = focus_metrics(far, frame)
+
+    dist = m["harmonics"]["a2_peak_distance_to_pml_vox"]
+    assert dist == A2_PML_MARGIN_WARN_VOX == 8
+    assert m["warnings"] == []
+
+
+def test_the_a2_caveat_reaches_the_report_row_and_only_when_it_applies():
+    """REPORT.md/index.html carry the caveat on the A2 maximum row itself."""
+    from caustica.report.html import harmonics_rows
+
+    shape = (30, 30, 40)
+    frame = FieldFrame(dx=0.5e-3, grid_shape=shape, pml_vox=6, apex_vox=(15, 15, 2))
+    near = focus_metrics(_result_with_a2_spike_at(shape, (15, 15, 9)), frame)
+    far = focus_metrics(_result_with_a2_spike_at(shape, (15, 15, 20)), frame)
+
+    def a2_max_row(m: dict) -> str:
+        return next(v for sec, label, v in harmonics_rows(m) if label == "A2 maximum")
+
+    assert "edge artifact" in a2_max_row(near)
+    assert "edge artifact" not in a2_max_row(far)
+    # A metrics.json written before the field existed still renders, uncaveated.
+    legacy = {"harmonics": {k: v for k, v in near["harmonics"].items() if "distance" not in k}}
+    assert "edge artifact" not in a2_max_row(legacy)
+
+
+def test_the_new_harmonics_field_is_purely_additive(runner_outdir):
+    """A real run's metrics.json gains the field and nothing else moves.
+
+    The pre-ticket key order and values are pinned here so a later edit to
+    focus_metrics cannot quietly reshuffle a published contract.
+    """
+    metrics = json.loads((runner_outdir / "metrics.json").read_text(encoding="utf-8"))
+    assert list(metrics["harmonics"]) == [
+        "a2_at_fundamental_peak_pa",
+        "a2_over_a1_at_peak_pct",
+        "a2_peak_pa",
+        "a2_peak_voxel_grid",
+        "a2_peak_distance_to_pml_vox",  # the only addition, and it is last
+    ]
+    assert list(metrics)[:-1] == [
+        "format",
+        "job",
+        "generated",
+        "peak",
+        "target",
+        "focal_spot",
+        "run",
+        "harmonics",
+    ]
+    assert list(metrics)[-1] == "warnings"
+    assert isinstance(metrics["warnings"], list)

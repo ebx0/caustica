@@ -13,6 +13,8 @@ numbers stay in the grid frame.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -20,6 +22,55 @@ import numpy as np
 from caustica.solvers.base import SolverResult
 
 HALF_PRESSURE = 0.5  # -6 dB in pressure
+
+#: An ``a2`` maximum closer than this (in voxels) to the PML face is reported
+#: as suspect. ``a2_peak_pa`` is a whole-interior maximum, and the harmonic
+#: DFT leaves a residue against the absorber that can beat the real focal
+#: second harmonic outright in a weakly nonlinear run — 6.5% of the
+#: fundamental, 4 voxels from the edge, in the beta=0 sweep that found this
+#: (janitor ticket 09). The value stays as measured; only the caveat is new.
+A2_PML_MARGIN_WARN_VOX = 8
+
+
+@dataclass(frozen=True)
+class FieldFrame:
+    """Where a solved field sits on the grid — the frame every metric needs.
+
+    ``dx``/``grid_shape``/``pml_vox``/``apex_vox`` (plus the requested
+    ``focus_vox``) used to travel as four or five separate keyword arguments
+    through every metric, preview and figure signature; ``focus_metrics``
+    alone reached eight parameters and every caller had to re-spell the same
+    quartet. One frozen object instead: adding a member (an origin, say) is
+    one field, not six signatures (janitor ticket 03).
+
+    ``apex_vox`` is the voxel that mm positions are measured FROM (the
+    transducer apex; the grid origin when a result file predates the stamp),
+    ``focus_vox`` the REQUESTED focus — ``None`` when nothing was asked for,
+    which is what makes the ``target`` metrics section optional.
+    """
+
+    dx: float
+    grid_shape: tuple[int, ...]
+    pml_vox: int
+    apex_vox: tuple[int, int, int]
+    focus_vox: tuple[int, int, int] | None = None
+
+    @classmethod
+    def from_geometry(cls, geo: Mapping[str, Any]) -> FieldFrame:
+        """Build from a geometry mapping (``store._geometry``, the facade's).
+
+        A result file's self-description and a built job's geometry carry
+        exactly these keys (among others), so every reader spells the frame
+        the same way instead of unpacking the mapping by hand five times.
+        """
+        focus = geo.get("focus_vox")
+        return cls(
+            dx=float(geo["dx"]),
+            grid_shape=tuple(int(v) for v in geo["grid_shape"]),
+            pml_vox=int(geo["pml_vox"]),
+            apex_vox=tuple(int(v) for v in geo["apex_vox"]),  # type: ignore[arg-type]
+            focus_vox=None if focus is None else tuple(int(v) for v in focus),  # type: ignore[arg-type]
+        )
 
 
 def region_origin(result: SolverResult) -> tuple[int, ...]:
@@ -39,9 +90,8 @@ def to_grid(idx: tuple[int, ...], result: SolverResult) -> tuple[int, ...]:
 
 def interior_slices(
     result: SolverResult,
+    frame: FieldFrame,
     *,
-    grid_shape: tuple[int, ...],
-    pml_vox: int,
     extra: int = 2,
 ) -> tuple[slice, ...]:
     """Record-region slices with the PML (plus a margin) shaved off.
@@ -51,7 +101,8 @@ def interior_slices(
     argmax can report a "harmonic maximum" sitting on the PML edge.
     """
     org = region_origin(result)
-    margin = pml_vox + extra
+    grid_shape = frame.grid_shape
+    margin = frame.pml_vox + extra
     out = []
     for d, (o, n) in enumerate(zip(org, result.amp.shape, strict=True)):
         lo = max(0, margin - o)
@@ -106,26 +157,45 @@ def intensity_w_cm2(pressure_pa: float, rho: float, c: float) -> float:
     return float(pressure_pa**2 / (2.0 * rho * c) / 1e4)
 
 
-def mm_axes(
-    result: SolverResult, *, dx: float, apex_vox: tuple[int, int, int]
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def mm_axes(result: SolverResult, frame: FieldFrame) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Region-frame voxel coordinates in mm, measured from the apex voxel."""
     org = region_origin(result)
     shp = result.amp.shape
+    dx, apex_vox = frame.dx, frame.apex_vox
     x = (np.arange(shp[0]) + org[0] - apex_vox[0]) * dx * 1e3
     y = (np.arange(shp[1]) + org[1] - apex_vox[1]) * dx * 1e3
     z = (np.arange(shp[2]) + org[2] - apex_vox[2]) * dx * 1e3
     return x, y, z
 
 
+def pml_edge_distance(voxel_grid: tuple[int, ...], frame: FieldFrame) -> int:
+    """Voxels between a GRID-frame voxel and the nearest PML face (min over axes).
+
+    The sponge occupies ``[0, pml_vox)`` and ``[n - pml_vox, n)`` on each
+    axis, so a voxel sitting on the first non-absorbing plane is at distance
+    0 and the number grows towards the middle of the grid.
+    """
+    pml = frame.pml_vox
+    return min(
+        min(int(i) - pml, (n - pml - 1) - int(i))
+        for i, n in zip(voxel_grid, frame.grid_shape, strict=True)
+    )
+
+
+def a2_edge_warning(distance_vox: int) -> str:
+    """The text for an a2 maximum that is sitting on the absorber (ticket 09)."""
+    return (
+        f"the a2 peak lies {distance_vox} voxels from the PML edge "
+        f"(< {A2_PML_MARGIN_WARN_VOX}) — likely a harmonic-DFT edge artifact rather "
+        f"than physics (an edge residue grows LINEARLY with drive, a real second "
+        f"harmonic quadratically); a2_at_fundamental_peak_pa is the trustworthy number."
+    )
+
+
 def focus_metrics(
     result: SolverResult,
+    frame: FieldFrame,
     *,
-    dx: float,
-    grid_shape: tuple[int, ...],
-    pml_vox: int,
-    apex_vox: tuple[int, int, int],
-    focus_vox: tuple[int, int, int] | None = None,
     source_amplitude: float | None = None,
     medium: Any | None = None,
     solver: str | None = None,
@@ -134,15 +204,16 @@ def focus_metrics(
 
     The optional inputs degrade honestly instead of guessing:
 
-    * ``focus_vox`` absent  -> no ``target`` section (nothing was requested)
+    * ``frame.focus_vox`` absent -> no ``target`` section (none was requested)
     * ``source_amplitude``  -> ``gain_vs_source`` is ``None``
     * ``medium`` absent     -> ``isppa_w_cm2`` is ``None`` (rho/c unknown —
       a result file does not carry the medium)
     """
     amp = result.amp
+    dx, apex_vox, focus_vox = frame.dx, frame.apex_vox, frame.focus_vox
     apex_z = apex_vox[2]
 
-    interior = interior_slices(result, grid_shape=grid_shape, pml_vox=pml_vox)
+    interior = interior_slices(result, frame)
     pk_r = argmax_interior(amp, interior)
     pk_g = to_grid(pk_r, result)
     p_peak = float(amp[pk_r])
@@ -218,32 +289,36 @@ def focus_metrics(
         "harmonics_recorded": sorted(result.phasors),
     }
 
+    warns: list[str] = []
     if 2 in result.phasors:
         a2 = result.harmonic_amp(2)
         a1 = result.harmonic_amp(1) if 1 in result.phasors else amp
         pk2 = argmax_interior(a2, interior)
+        pk2_g = to_grid(pk2, result)
+        edge_vox = pml_edge_distance(pk2_g, frame)
         metrics["harmonics"] = {
             "a2_at_fundamental_peak_pa": round(float(a2[pk_r]), 1),
             "a2_over_a1_at_peak_pct": round(100.0 * float(a2[pk_r]) / float(a1[pk_r]), 2),
             "a2_peak_pa": round(float(a2[pk2]), 1),
-            "a2_peak_voxel_grid": [int(i) for i in to_grid(pk2, result)],
+            "a2_peak_voxel_grid": [int(i) for i in pk2_g],
+            "a2_peak_distance_to_pml_vox": edge_vox,
         }
+        if edge_vox < A2_PML_MARGIN_WARN_VOX:
+            warns.append(a2_edge_warning(edge_vox))
 
+    # Always written, even when empty: a reader must be able to tell "nothing
+    # to warn about" from "this file predates the channel" (D31, as plan.json
+    # writes its ppw_warnings unconditionally).
+    metrics["warnings"] = warns
     return metrics
 
 
-def axial_profiles(
-    result: SolverResult,
-    *,
-    dx: float,
-    grid_shape: tuple[int, ...],
-    pml_vox: int,
-    apex_vox: tuple[int, int, int],
-) -> dict[str, np.ndarray]:
+def axial_profiles(result: SolverResult, frame: FieldFrame) -> dict[str, np.ndarray]:
     """Coordinate/profile arrays used by the figures (mm, Pa)."""
     amp = result.amp
     org = region_origin(result)
-    pk = argmax_interior(amp, interior_slices(result, grid_shape=grid_shape, pml_vox=pml_vox))
+    dx, apex_vox, pml_vox = frame.dx, frame.apex_vox, frame.pml_vox
+    pk = argmax_interior(amp, interior_slices(result, frame))
     z = (np.arange(amp.shape[2]) + org[2] - apex_vox[2]) * dx * 1e3
     x = (np.arange(amp.shape[0]) + org[0] - apex_vox[0]) * dx * 1e3
     out = {
