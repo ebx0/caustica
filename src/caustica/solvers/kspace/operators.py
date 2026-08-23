@@ -87,9 +87,44 @@ def kappa_sinc(ks: list, c_ref: float, dt: float, xp: ModuleType):
     return xp.sinc(c_ref * xp.sqrt(k2) * (dt / (2.0 * np.pi))).astype(xp.float32)
 
 
-def spectral_derivative_factors(ks: list, kappa, xp: ModuleType) -> list:
-    """Per-axis complex factors ``i k_ax kappa`` (complex64) for grad/div."""
-    return [(1j * k * kappa).astype(xp.complex64) for k in ks]
+def spectral_derivative_factors(
+    ks: list, kappa, shape: tuple[int, ...], xp: ModuleType
+) -> list:
+    """Per-axis complex factors ``i k_ax kappa`` (complex64) for grad/div.
+
+    The Nyquist wavenumber is DROPPED on every even-length axis. That is one
+    fix with two faces, and both of them matter here:
+
+    * Numerically, the Nyquist mode ``cos(pi x / dx)`` has a derivative that
+      samples to all zeros on this grid, so a collocated spectral first
+      derivative cannot represent it and the textbook remedy is to zero that
+      wavenumber. (k-Wave never meets this because it is staggered: the
+      half-sample shift ``exp(i k dx/2)`` rotates ``i k_Nyq`` onto the real
+      axis. This engine is collocated, so it must zero explicitly.)
+    * Structurally, ``i k`` is purely imaginary and odd in the index, while
+      the bins that pair with THEMSELVES under ``j -> -j`` -- index ``n/2`` of
+      an even axis -- have to stay conjugate-symmetric or ``irfftn`` has no
+      real inverse to return. Leaving them in handed the C2R transform an
+      input violating its Hermitian contract by ~150% of its own magnitude,
+      which every FFT backend is free to resolve differently. They do: at
+      256^3 cuFFT and pocketfft parted company at step 2 (1.1e-2 on
+      ``irfftn(deriv2*pk)``), and by period 2 the GPU run was at NaN while the
+      identical CPU run sat at 45 kPa -- the 256^3 divergence that outlived
+      three GPU sessions (2026-08-23, dev_validate U1b).
+
+    ``kappa`` keeps the true Nyquist ``|k|``: the dispersion correction is an
+    even function of a magnitude, not an odd derivative, and zeroing it there
+    would change the physics rather than repair a contract.
+    """
+    out = []
+    for ax, k in enumerate(ks):
+        if shape[ax] % 2 == 0:
+            k = k.copy()
+            idx = [0] * k.ndim
+            idx[ax] = shape[ax] // 2  # rfft or fft layout: the Nyquist bin either way
+            k[tuple(idx)] = 0.0
+        out.append((1j * k * kappa).astype(xp.complex64))
+    return out
 
 
 def sponge_volume(shape: tuple[int, ...], width: int, edge: float, xp: ModuleType):

@@ -198,7 +198,7 @@ def measure_step_time(
     beta2_dt = xp.full(padded, coef, dtype=xp.float32) if nonlinear else None
     ks = ops.k_vectors(padded, 1e-3, xp)
     kappa = ops.kappa_sinc(ks, c_ref=1500.0, dt=1e-7, xp=xp)
-    deriv = ops.spectral_derivative_factors(ks, kappa, xp)
+    deriv = ops.spectral_derivative_factors(ks, kappa, padded, xp)
     del ks, kappa
 
     pool = None

@@ -250,7 +250,7 @@ def run_cw_kspace_pstd(
 
     ks = ops.k_vectors(padded, dx, xp)
     kappa = ops.kappa_sinc(ks, c_ref=c_max, dt=dt, xp=xp)
-    deriv = ops.spectral_derivative_factors(ks, kappa, xp)
+    deriv = ops.spectral_derivative_factors(ks, kappa, padded, xp)
     del ks, kappa
 
     pml_edge = grid.pml.edge if grid.pml is not None else 2.0
@@ -445,10 +445,15 @@ def run_cw_kspace_pstd(
         if stop:
             raise RunInterrupted(checkpoint.path, "settle", periods_done, n)
 
+    # numpy 2 deprecates `s` without `axes` and warns that a future release
+    # will read them pairwise; spelling the axes out keeps today's meaning
+    # (transform every axis) the one a later numpy will also read.
+    fft_axes = tuple(range(nd))
+
     def step(n: int) -> None:
         pk = fft.rfftn(p)
         for i in range(nd):
-            grad_i = fft.irfftn(deriv[i] * pk, s=padded)
+            grad_i = fft.irfftn(deriv[i] * pk, s=padded, axes=fft_axes)
             u[i] -= dt_over_rho * grad_i
             u[i] *= absorb
             u[i] *= sponge
@@ -456,7 +461,7 @@ def run_cw_kspace_pstd(
         for i in range(nd):
             term = deriv[i] * fft.rfftn(u[i])
             acc = term if acc is None else acc + term
-        divu = fft.irfftn(acc, s=padded)
+        divu = fft.irfftn(acc, s=padded, axes=fft_axes)
         p_local = p
         if beta2_dt is None:
             p_local -= rhoc2_dt * divu

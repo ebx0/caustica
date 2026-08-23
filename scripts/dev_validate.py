@@ -1335,7 +1335,7 @@ class _StepMirror:
 
         ks = ops.k_vectors(padded, dx, xp)
         kappa = ops.kappa_sinc(ks, c_ref=medium.c_max, dt=dt, xp=xp)
-        self.deriv = ops.spectral_derivative_factors(ks, kappa, xp)
+        self.deriv = ops.spectral_derivative_factors(ks, kappa, padded, xp)
         # The engine deletes ks and kappa here; keep only the scalars the
         # sanity dump asks for, so this mirror does not carry a shadow copy.
         self.max_kappa = float(abs(kappa).max())
@@ -1406,9 +1406,10 @@ class _StepMirror:
     def step(self, n: int) -> None:
         fft = self.fft
         p, u, padded, deriv = self.p, self.u, self.padded, self.deriv
+        axes = tuple(range(self.nd))
         pk = fft.rfftn(p)
         for i in range(self.nd):
-            grad_i = fft.irfftn(deriv[i] * pk, s=padded)
+            grad_i = fft.irfftn(deriv[i] * pk, s=padded, axes=axes)
             u[i] -= self.dt_over_rho * grad_i
             u[i] *= self.absorb
             u[i] *= self.sponge
@@ -1416,7 +1417,7 @@ class _StepMirror:
         for i in range(self.nd):
             term = deriv[i] * fft.rfftn(u[i])
             acc = term if acc is None else acc + term
-        divu = fft.irfftn(acc, s=padded)
+        divu = fft.irfftn(acc, s=padded, axes=axes)
         if self.beta2_dt is None:
             p -= self.rhoc2_dt * divu
         else:
@@ -1434,12 +1435,13 @@ class _StepMirror:
         """
         fft = self.fft
         p, u, padded, deriv = self.p, self.u, self.padded, self.deriv
+        axes = tuple(range(self.nd))
         pk = fft.rfftn(p)
         yield "pk = rfftn(p)", pk
         for i in range(self.nd):
             dpk = deriv[i] * pk
             yield f"deriv{i} * pk", dpk
-            grad_i = fft.irfftn(dpk, s=padded)
+            grad_i = fft.irfftn(dpk, s=padded, axes=axes)
             del dpk
             yield f"grad{i} = irfftn(deriv{i}*pk)", grad_i
             u[i] -= self.dt_over_rho * grad_i
@@ -1454,7 +1456,7 @@ class _StepMirror:
             del uk
             yield f"deriv{i} * rfftn(u{i})", term
             acc = term if acc is None else acc + term
-        divu = fft.irfftn(acc, s=padded)
+        divu = fft.irfftn(acc, s=padded, axes=axes)
         del acc
         yield "divu = irfftn(sum)", divu
         if self.beta2_dt is None:
