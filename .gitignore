@@ -51,6 +51,7 @@ janitor/
 # phantom, so `scripts/make_howto.py` can redraw the medium thumbnail without
 # the multi-GB (git-ignored) dataset under data/.
 !docs/assets/howto-phantom.npz
+!docs/assets/hero-field.npz
 
 # The rendered documentation site (mkdocs build) — deployed by CI, never committed.
 site/

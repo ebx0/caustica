@@ -3,6 +3,11 @@ hide:
   - navigation
 ---
 
+<div class="hero-field" markdown>
+![A focused ultrasound beam converging in water: one plane of a real caustica solve, with the wavefronts animated over one acoustic period](assets/hero-field.svg#only-light)
+![A focused ultrasound beam converging in water: one plane of a real caustica solve, with the wavefronts animated over one acoustic period](assets/hero-field-dark.svg#only-dark)
+</div>
+
 # caustica
 
 <p class="hero-tagline" markdown>
@@ -14,6 +19,13 @@ and the same four commands on a laptop and in a Colab cell.
 [Get started](#quickstart){ .md-button .md-button--primary }
 [Write a job](job_reference.md){ .md-button }
 [GitHub](https://github.com/ebx0/caustica){ .md-button }
+
+<small markdown>
+Above: one x–z plane of a real solve — a 1 MHz focused bowl in water, run by the k-space
+solver this library ships. The envelope is |P|; the moving fronts are Re{P·e^(−iωt)} over one
+acoustic period, so the loop closes on itself exactly. `python scripts/make_hero.py --resolve`
+re-solves it.
+</small>
 
 !!! warning "Pre-alpha, and honest about it"
 

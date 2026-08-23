@@ -903,12 +903,13 @@ THUMBS = {
 _ROOT = re.compile(r'<svg[^>]*viewBox="([^"]+)"[^>]*>', re.S)
 
 
-def thumb_svg(key: str, th: Theme, real: bool, x: float, y: float, size: float) -> str:
-    """One matplotlib thumbnail, inlined as a nested <svg> at (x, y)."""
-    matplotlib.rcParams["svg.hashsalt"] = f"{key}-{th.name}-{int(real)}"
-    fig = plt.figure(figsize=(1.6, 1.6), dpi=100)
-    ax = fig.add_axes((0.06, 0.06, 0.88, 0.88))
-    THUMBS[key](ax, th, real)
+def inline_figure(fig, x: float, y: float, width: float, height: float, salt: str) -> str:
+    """A matplotlib figure as a nested <svg> element, ready to drop into a page.
+
+    The figure must already have been drawn with ``svg.hashsalt`` set to *salt*:
+    matplotlib mints its ``<defs>`` ids from that salt, and two figures sharing
+    a salt would collide once they are inlined into the same document.
+    """
     buf = io.StringIO()
     fig.savefig(buf, format="svg", transparent=True)
     plt.close(fig)
@@ -921,9 +922,19 @@ def thumb_svg(key: str, th: Theme, real: bool, x: float, y: float, size: float) 
         raise RuntimeError("could not find the matplotlib <svg> root")
     body = _round_floats(s[m.end() : s.rindex("</svg>")])
     return (
-        f'<svg x="{x:.1f}" y="{y:.1f}" width="{size:.1f}" height="{size:.1f}" '
+        f'<svg x="{x:.1f}" y="{y:.1f}" width="{width:.1f}" height="{height:.1f}" '
         f'viewBox="{m.group(1)}" preserveAspectRatio="xMidYMid meet">{body}</svg>'
     )
+
+
+def thumb_svg(key: str, th: Theme, real: bool, x: float, y: float, size: float) -> str:
+    """One matplotlib thumbnail, inlined as a nested <svg> at (x, y)."""
+    salt = f"{key}-{th.name}-{int(real)}"
+    matplotlib.rcParams["svg.hashsalt"] = salt
+    fig = plt.figure(figsize=(1.6, 1.6), dpi=100)
+    ax = fig.add_axes((0.06, 0.06, 0.88, 0.88))
+    THUMBS[key](ax, th, real)
+    return inline_figure(fig, x, y, size, size, salt)
 
 
 def _round_floats(s: str) -> str:
