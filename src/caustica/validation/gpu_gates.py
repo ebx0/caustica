@@ -47,7 +47,6 @@ module touches hardware (see ``tests/test_validation_gpu_gates.py``).
 from __future__ import annotations
 
 import json
-import math
 import re
 import subprocess
 import sys
@@ -57,14 +56,22 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+# The verdict algebra lives in _verdict.py so this suite and the analytic one
+# cannot drift apart about what a missing measurement means. Re-exported here
+# because `gpu_gates.Check` is the name the gate tests and the notebook use.
+from caustica.validation._verdict import (  # noqa: F401 (public re-export)
+    EXIT_ENV,
+    EXIT_FAILED,
+    EXIT_OK,
+    Check,
+    Gate,
+    overall_verdict,
+)
+from caustica.validation._verdict import fmt_dev_pct as _pct
+from caustica.validation._verdict import fmt_num as _g
+
 #: Report format tag; the JSON companion of the Markdown page.
 FORMAT = "caustica-gpu-gates/1"
-
-#: Exit codes. 0/2/4 are borrowed from the runner's vocabulary on purpose —
-#: 2 is "this environment cannot do it", 4 is "it ran and the answer is no".
-EXIT_OK = 0
-EXIT_ENV = 2
-EXIT_FAILED = 4
 
 #: Default VRAM ladder [GiB]. 14 is the 512-cubed / dx=0.30 mm full-size class
 #: M7 names; the others bracket it so the model is checked over a decade of
@@ -94,134 +101,6 @@ PARITY_TOL = 1e-5
 
 _GIB = 2**30
 _MAX_LADDER_SIDE = 2048
-
-
-# --------------------------------------------------------------- verdicts
-
-
-@dataclass(frozen=True)
-class Check:
-    """One PASS/FAIL/SKIP decision, with the numbers that produced it.
-
-    Three constructors, because there are exactly three shapes of question
-    the gates ask: is a prediction within a tolerance of a measurement
-    (:meth:`relative`), is a measurement under a limit (:meth:`at_most`), and
-    did something specific happen (:meth:`happened`).
-
-    ``SKIP`` is load-bearing. A check that could not be evaluated — a rung
-    that never ran, a stamp with a null field — must not silently become a
-    pass, which is the single most likely way a suite like this lies.
-    """
-
-    name: str
-    verdict: str  # "PASS" | "FAIL" | "SKIP"
-    detail: str
-    data: dict[str, Any] = field(default_factory=dict)
-
-    @staticmethod
-    def relative(
-        name: str,
-        predicted: float | None,
-        actual: float | None,
-        tol_pct: float,
-        unit: str = "",
-    ) -> Check:
-        """``|predicted - actual| / |actual| <= tol_pct`` — M8's gate shape."""
-        data = {
-            "predicted": predicted,
-            "actual": actual,
-            "tol_pct": tol_pct,
-            "unit": unit,
-            "deviation_pct": None,
-        }
-        if predicted is None or actual is None:
-            return Check(name, "SKIP", "not measured", data)
-        if actual == 0.0:
-            # A zero measurement cannot carry a relative tolerance; saying so
-            # is honest, calling it a pass because 0 == 0 is not.
-            return Check(name, "SKIP", "measured value is zero", data)
-        dev = 100.0 * (predicted - actual) / abs(actual)
-        data["deviation_pct"] = dev
-        ok = abs(dev) <= tol_pct
-        return Check(
-            name,
-            "PASS" if ok else "FAIL",
-            f"predicted {predicted:.4g}{unit} vs actual {actual:.4g}{unit} "
-            f"({dev:+.1f}%, tolerance +/-{tol_pct:g}%)",
-            data,
-        )
-
-    @staticmethod
-    def at_most(name: str, value: float | None, limit: float, unit: str = "") -> Check:
-        data = {"value": value, "limit": limit, "unit": unit}
-        if value is None or not math.isfinite(value):
-            return Check(name, "SKIP", "not measured", data)
-        return Check(
-            name,
-            "PASS" if value <= limit else "FAIL",
-            f"{value:.3e}{unit} (limit {limit:.3e}{unit})",
-            data,
-        )
-
-    @staticmethod
-    def happened(name: str, observed: Any, expected: Any, detail: str = "") -> Check:
-        data = {"observed": observed, "expected": expected}
-        if observed is None:
-            return Check(name, "SKIP", "not observed", data)
-        ok = observed == expected
-        return Check(
-            name,
-            "PASS" if ok else "FAIL",
-            detail or f"observed {observed!r}, expected {expected!r}",
-            data,
-        )
-
-
-@dataclass
-class Gate:
-    """One milestone criterion and the checks that answer it.
-
-    ``required`` is the milestone's own wording made countable: M8 says "at
-    least 2 grid sizes" and "at least 2 scenarios", so one good measurement
-    is not enough and the gate stays INCOMPLETE until the ladder has produced
-    the second. A gate with no checks at all is INCOMPLETE, never PASS.
-    """
-
-    id: str
-    criterion: str
-    required: int
-    checks: list[Check] = field(default_factory=list)
-
-    @property
-    def n_pass(self) -> int:
-        return sum(c.verdict == "PASS" for c in self.checks)
-
-    @property
-    def verdict(self) -> str:
-        if any(c.verdict == "FAIL" for c in self.checks):
-            return "FAIL"
-        return "PASS" if self.n_pass >= max(1, self.required) else "INCOMPLETE"
-
-    def as_dict(self) -> dict:
-        return {
-            "id": self.id,
-            "criterion": self.criterion,
-            "required": self.required,
-            "verdict": self.verdict,
-            "n_pass": self.n_pass,
-            "checks": [
-                {"name": c.name, "verdict": c.verdict, "detail": c.detail, **c.data}
-                for c in self.checks
-            ],
-        }
-
-
-def overall_verdict(gates: list[Gate]) -> str:
-    """PASS only when every gate passes; FAIL beats INCOMPLETE beats PASS."""
-    verdicts = {g.verdict for g in gates}
-    if not gates or "FAIL" in verdicts:
-        return "FAIL" if "FAIL" in verdicts else "INCOMPLETE"
-    return "INCOMPLETE" if "INCOMPLETE" in verdicts else "PASS"
 
 
 # ------------------------------------------------------------- the ladder
@@ -1008,20 +887,6 @@ def render_markdown(payload: dict) -> str:
         "",
     ]
     return "\n".join(lines)
-
-
-def _g(value: Any) -> str:
-    if value is None:
-        return "--"
-    if isinstance(value, float):
-        return f"{value:.4g}"
-    return str(value)
-
-
-def _pct(predicted: Any, actual: Any) -> str:
-    if predicted is None or actual in (None, 0):
-        return "--"
-    return f"{100.0 * (predicted - actual) / abs(actual):+.1f}%"
 
 
 def write_report(outdir: Path, payload: dict) -> tuple[Path, Path]:

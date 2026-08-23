@@ -5,15 +5,27 @@ This package turns the ones that need real hardware into commands that
 produce a stamped report — evidence a milestone box can be ticked against,
 instead of a memory of a session that went well.
 
-The first module is :mod:`caustica.validation.gpu_gates`, which closes M7's
-and M8's on-device criteria in a single run::
+Two suites live here.
+
+:mod:`caustica.validation.gpu_gates` closes M7's and M8's on-device criteria
+in a single run — it needs a real GPU and books it for minutes::
 
     python -m caustica.validation gpu-gates
 
-Nothing here needs external data: every scenario is a homogeneous water
-volume with a bowl source, sized on the spot from the device's own free VRAM.
-Imports stay light — ``caustica.validation`` pulls in the runner (and h5py)
-only when a suite actually runs, through PEP 562 lazy attributes.
+:mod:`caustica.validation.analytic_suite` grades the solvers against the
+closed forms in :mod:`caustica.analytic` — plane wave, O'Neil bowl, linear
+limit, Fubini — and runs anywhere, GPU or not, in seconds::
+
+    python -m caustica.validation run-analytic
+
+Both share the PASS/FAIL/SKIP algebra in
+:mod:`caustica.validation._verdict`, so they cannot drift apart about what a
+missing measurement means: it is a SKIP, and a SKIP is never a pass.
+
+Nothing here needs external data: every scenario is homogeneous water with a
+library-built source. Imports stay light — ``caustica.validation`` pulls in
+the runner (and h5py) only when a suite actually runs, through PEP 562 lazy
+attributes.
 """
 
 from __future__ import annotations
@@ -23,15 +35,17 @@ __all__ = [
     "FORMAT",
     "Gate",
     "RungSpec",
+    "analytic_suite",
     "build_ladder",
     "gpu_gates",
 ]
 
 _LAZY = {
-    "Check": "caustica.validation.gpu_gates",
+    "Check": "caustica.validation._verdict",
     "FORMAT": "caustica.validation.gpu_gates",
-    "Gate": "caustica.validation.gpu_gates",
+    "Gate": "caustica.validation._verdict",
     "RungSpec": "caustica.validation.gpu_gates",
+    "analytic_suite": "caustica.validation.analytic_suite",
     "build_ladder": "caustica.validation.gpu_gates",
     "gpu_gates": "caustica.validation.gpu_gates",
 }

@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import sys
 
+from caustica.validation.analytic_suite import SIZES as ANALYTIC_SIZES
 from caustica.validation.gpu_gates import DEFAULT_TARGETS_GIB, EXIT_ENV
 
 
@@ -81,6 +82,27 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="datasheet key from gpu_db.json; detected from the device by default",
     )
+
+    a = sub.add_parser(
+        "run-analytic",
+        help="grade the solvers against the closed forms in caustica.analytic on "
+        "THIS machine (plane wave, O'Neil bowl, linear limit, Fubini) and write a "
+        "stamped PASS/FAIL report; runs anywhere, GPU or not, in seconds "
+        "(exit: 0 all gates pass, 4 a gate failed or is incomplete)",
+    )
+    a.add_argument(
+        "--out",
+        default=None,
+        help="report root (default: benchmarks/reports/analytic); one timestamped "
+        "subfolder per run, holding REPORT.md and analytic.json",
+    )
+    a.add_argument(
+        "--size",
+        default="full",
+        choices=tuple(ANALYTIC_SIZES),
+        help="'full' is the 3-D bowl geometry the physics gate validated; 'quick' is a "
+        "smaller bowl for the same tolerances (about a second), used by the test suite",
+    )
     return p
 
 
@@ -103,6 +125,11 @@ def main(argv: list[str] | None = None) -> int:
             parity=not args.no_parity,
             gpu_key=args.gpu,
         )
+        return code
+    if args.suite == "run-analytic":
+        from caustica.validation.analytic_suite import analytic_suite
+
+        code, _ = analytic_suite(out=args.out, size=args.size)
         return code
     return EXIT_ENV  # pragma: no cover - argparse rejects unknown suites first
 
