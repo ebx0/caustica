@@ -10,6 +10,12 @@ or, for a whole job in one call (M10j)::
     res = caustica.simulate("job.json")      # plan, gates, progress, result
     res.metrics; res.preview(); res.save("result.h5")
 
+or, for a parameter study with one stamped report (M11)::
+
+    sweep = caustica.Study("p0", "job.json", out="studies/p0").sweep(
+        "drive.amplitude_kpa", [50, 100, 200])
+    sweep.report()                           # STUDY.md + study.json + figure
+
 Heavy optional dependencies (cupy, h5py, matplotlib) are imported lazily by
 the modules that need them; ``import caustica`` itself only needs numpy.
 That is why ``simulate`` is resolved through ``__getattr__`` (PEP 562):
@@ -37,6 +43,9 @@ _LAZY = {
     "SimulationError": "caustica.facade",
     "SimulationRun": "caustica.facade",
     "simulate": "caustica.facade",
+    # M11: a Study composes simulate(), so reaching it costs the same
+    # runner/h5py import — which is exactly why it lives here and not above.
+    "Study": "caustica.study",
 }
 
 __all__ = [
@@ -49,6 +58,7 @@ __all__ = [
     "PMLSpec",
     "SimulationError",
     "SimulationRun",
+    "Study",
     "__version__",
     "cpu_fft_workers",
     "cupy_available",
