@@ -44,8 +44,10 @@ The honest cost of the choice: explicit stepping is conditionally stable, so
 ~0.1 s (a 60 s sonication is ~600 steps, cheap); on a 0.1 mm grid it is
 ~12 ms (~5000 steps). Media that need much finer grids want an implicit or
 ADI scheme, which trades a linear solve per step for unconditional
-stability. That is the natural phase-2 cross-check partner and is not in
-phase 1.
+stability. One lives in ``tests/_thermal_reference.py`` — an assembled
+backward-Euler scipy.sparse solver that exists ONLY to cross-check this one
+(M18's independent-implementation criterion), deliberately not shipped as a
+second library solver.
 
 Discretization
 --------------
@@ -98,6 +100,7 @@ Guards (the same discipline as the acoustic engine)
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from math import ceil
 from typing import Any
@@ -195,6 +198,91 @@ class ThermalResult:
             f"ThermalResult(t_end={self.t_end_s:.4g} s, steps={self.n_steps}"
             f"x{self.substeps}, T_peak={self.peak_temperature_c:.4g} C, "
             f"CEM43_peak={dose})"
+        )
+
+    @staticmethod
+    def chain(results: Sequence[ThermalResult]) -> ThermalResult:
+        """One result for a multi-phase exposure (source on, then off, ...).
+
+        A sonication is at least two solves — heat-up with ``Q``, cool-down
+        without it — and reading the LAST one alone is the trap this exists
+        to close. The cooling phase's ``temperature_max`` starts the moment
+        the source went off, so ITS peak is the temperature at switch-off,
+        while the exposure's real peak may have happened earlier; a safety
+        report built on the cooling phase alone would quietly under-state
+        the hottest thing that ever happened to the tissue.
+
+        The chained result therefore takes the ELEMENTWISE MAXIMUM of every
+        phase's ``temperature_max``, keeps the final temperature, and carries
+        the last phase's dose — which is the whole exposure's dose only if
+        each phase was handed the previous one's ``dose_cem43`` as ``dose0``.
+        That is the other silent failure (a cooling phase started with
+        ``dose0=None`` throws away the sonication's dose), so it is checked
+        here rather than trusted: a later phase whose dose is anywhere BELOW
+        an earlier phase's is refused.
+        """
+        results = list(results)
+        if not results:
+            raise ValueError("ThermalResult.chain() needs at least one result")
+        shapes = {r.temperature.shape for r in results}
+        if len(shapes) != 1:
+            raise ValueError(f"the phases are not on one grid: shapes {sorted(shapes)}")
+        dosed = [r.dose_cem43 is not None for r in results]
+        if any(dosed) and not all(dosed):
+            raise ValueError(
+                f"phases {[i for i, d in enumerate(dosed) if not d]} accumulated no CEM43 "
+                f"while others did, so the chained dose would cover only part of the "
+                f"exposure. Solve EVERY phase with dose=True, passing the previous "
+                f"phase's dose_cem43 as dose0."
+            )
+        for i, (prev, nxt) in enumerate(zip(results, results[1:], strict=False)):
+            if prev.dose_cem43 is None:
+                continue
+            slack = 1e-6 * np.maximum(1.0, prev.dose_cem43)
+            if not bool((nxt.dose_cem43 >= prev.dose_cem43 - slack).all()):
+                raise ValueError(
+                    f"phase {i + 1}'s CEM43 map is BELOW phase {i}'s somewhere, so the "
+                    f"phases were not chained: dose is a monotone history integral and "
+                    f"can only grow. Pass dose0=<previous>.dose_cem43 (together with "
+                    f"temperature0=<previous>.temperature) to the later solve."
+                )
+
+        temperature_max = results[0].temperature_max.copy()
+        for r in results[1:]:
+            np.maximum(temperature_max, r.temperature_max, out=temperature_max)
+
+        samples: list[np.ndarray] = []
+        times: list[float] = []
+        offset = 0.0
+        for i, r in enumerate(results):
+            for t, s in zip(r.times, r.samples, strict=True):
+                # A later phase's t=0 sample IS the previous phase's final
+                # state; keeping both would put two points on one instant.
+                if i > 0 and t == 0.0:
+                    continue
+                times.append(offset + t)
+                samples.append(s)
+            offset += r.t_end_s
+
+        last = results[-1]
+        meta = dict(last.meta)
+        meta["q"] = " -> ".join(str(r.meta.get("q")) for r in results)
+        meta["perfusion_active"] = any(bool(r.meta.get("perfusion_active")) for r in results)
+        meta["chained_phases"] = [
+            {"t_end_s": r.t_end_s, "n_steps": r.n_steps, "dt_s": r.dt, "q": r.meta.get("q")}
+            for r in results
+        ]
+        return ThermalResult(
+            temperature=last.temperature,
+            temperature_max=temperature_max,
+            dose_cem43=last.dose_cem43,
+            samples=samples,
+            times=times,
+            dt=last.dt,
+            n_steps=sum(r.n_steps for r in results),
+            t_end_s=float(sum(r.t_end_s for r in results)),
+            substeps=max(r.substeps for r in results),
+            meta=meta,
         )
 
 

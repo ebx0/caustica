@@ -20,14 +20,21 @@ and then the cooling phase, with the dose carried over::
     cool = PennesSolver().solve(hot.temperature, None, tmed, dt=0.05, n_steps=3600,
                                 dose=True, dose0=hot.dose_cem43)
 
+and finally the stamped dose/threshold summary of what that history did::
+
+    from caustica.thermal import write_thermal_report
+
+    write_thermal_report(cool, tmed, "benchmarks/reports/thermal/run", label="60 s sonication")
+
 ``dt`` is bounded by the explicit scheme's stability limit for the medium —
 ask for it with ``PennesSolver().stable_dt(tmed)`` rather than guessing; a
 step above it is refused, with the number, not silently integrated.
 
 :mod:`caustica.thermal.dose` holds the CEM43 definition and the ITRUSST
-safety thresholds as data. Reading a verdict off them is the report's job
-(phase 2), and every number here is research-only: see
-``caustica.thermal.dose.MEDICAL_DISCLAIMER``.
+safety thresholds as data; reading a PASS/EXCEEDED verdict off them is
+:mod:`caustica.thermal.report`'s job. Every number here is research-only,
+and the report says so in both the files it writes: see
+``caustica.thermal.report.MEDICAL_LIABILITY_NOTE``.
 
 Import discipline (same rule as :mod:`caustica.study` and
 :mod:`caustica.validation`): the names below are PEP 562 lazy. This package
@@ -47,6 +54,7 @@ __all__ = [
     "ITRUSST_DELTA_T_LIMIT_C",
     "ITRUSST_SOURCE",
     "MEDICAL_DISCLAIMER",
+    "MEDICAL_LIABILITY_NOTE",
     "PennesSolver",
     "ThermalDivergedError",
     "ThermalMedium",
@@ -58,6 +66,9 @@ __all__ = [
     "dose",
     "pennes",
     "properties",
+    "report",
+    "thermal_payload",
+    "write_thermal_report",
 ]
 
 _LAZY = {
@@ -68,6 +79,7 @@ _LAZY = {
     "ITRUSST_DELTA_T_LIMIT_C": "caustica.thermal.dose",
     "ITRUSST_SOURCE": "caustica.thermal.dose",
     "MEDICAL_DISCLAIMER": "caustica.thermal.dose",
+    "MEDICAL_LIABILITY_NOTE": "caustica.thermal.report",
     "PennesSolver": "caustica.thermal.pennes",
     "ThermalDivergedError": "caustica.thermal.pennes",
     "ThermalMedium": "caustica.thermal.properties",
@@ -76,11 +88,13 @@ _LAZY = {
     "ThermalStabilityError": "caustica.thermal.pennes",
     "cem43_minutes": "caustica.thermal.dose",
     "cem43_rate": "caustica.thermal.dose",
+    "thermal_payload": "caustica.thermal.report",
+    "write_thermal_report": "caustica.thermal.report",
 }
 
 #: Submodules reachable as attributes (``caustica.thermal.dose``) without an
 #: explicit import, kept lazy for the same reason as the names above.
-_SUBMODULES = ("dose", "pennes", "properties")
+_SUBMODULES = ("dose", "pennes", "properties", "report")
 
 
 def __getattr__(name: str):

@@ -26,9 +26,9 @@ Two properties of this expression drive the API:
   hot has left tissue physics behind long before it overflows; the solver's
   finite guard turns it into a refusal rather than an ``inf`` dose map.
 
-Nothing here decides whether a dose is safe. The thresholds below are DATA
-(phase 1); rendering them next to a computed dose map is the report's job
-(phase 2).
+Nothing here decides whether a dose is safe. The thresholds below are DATA;
+rendering them next to a computed dose map, with a PASS/EXCEEDED next to
+each one, is :mod:`caustica.thermal.report`'s job.
 """
 
 from __future__ import annotations
