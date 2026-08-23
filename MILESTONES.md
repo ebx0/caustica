@@ -1133,7 +1133,13 @@ eşikleri rapora girer: ≤2 CEM43 beyin / ≤16 kemik / ≤21 deri; ΔT≤2°C.
       difüzyon+perfüzyon) → CEM43 doz haritası; rapora doz/eşik özeti
 - Başarı kriterleri:
   - Analitik nokta-kaynak/Gaussian difüzyon rel err < %2; perfüzyon kararlı-durum < %2
-  - Uçtan uca sonication → T(r,t) → CEM43; k-Wave `kWaveDiffusion` çaprazı < %5
+  - Uçtan uca sonication → T(r,t) → CEM43; **bağımsız-gerçekleştirme çaprazı < %5**
+    (ÖLÇÜT UYARLANDI, kullanıcı kararı 2026-08-23: `kWaveDiffusion` yalnız MATLAB k-Wave'de
+    var — k-wave-python 0.6.2'de yok, kurulu ortamda doğrulandı. Yerine: repo içinde yalnız
+    testlerde yaşayan backward-Euler sparse (scipy) çözücüye karşı < %5 — farklı sayısal yol
+    (kapalı şema + matris vs açık şema + stencil), yeni bağımlılık yok, CI'da koşar; amaç
+    aynı bağımsız-gerçekleştirme mutabakatı. MATLAB erişimi olursa kWaveDiffusion ek kanıt
+    olarak eklenebilir, ölçüt değil)
   - Tıbbi sorumluluk notu (araştırma amaçlı; klinik karar aracı değil)
 
 ### M15 — Eksenel simetri (AS) çözücüsü `[ ]` (KZK'nın önüne geçti — kullanıcı 2026-08-22)
