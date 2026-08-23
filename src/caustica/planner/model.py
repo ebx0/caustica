@@ -51,6 +51,11 @@ BW_EFF = 0.75
 #: :func:`caustica.planner.calibrate` overwrites it with a measured value on
 #: the target device, and ``caustica.validation`` writes back what real runs
 #: actually paid.
+#:
+#: It is a CUDA number and only a CUDA number: a numpy run creates no
+#: context, plans no cuFFT and compiles no kernel, so
+#: :func:`caustica.planner.estimate` defaults a cpu target to 0.0 instead
+#: (see :func:`caustica.planner.is_cpu_target`).
 GPU_WARMUP_S = 3.0
 
 _F32 = 4

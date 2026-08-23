@@ -1118,27 +1118,28 @@ def render_markdown(payload: dict) -> str:
         n_solves = sum(r.get("solves") or 0 for r in plan_rows.values())
         why = [
             "",
-            "**Informational, not gated — no gate reads these rows.** A prediction for a "
-            "solve that takes hundredths of a second is mostly the planner's one-time "
-            f"`warmup_s` constant ({fmt_num(warmup)} s of the predicted total above, over "
-            f"the {n_solves} solves these {len(plan_rows)} scenarios run), the "
-            "measured column is wall clock on a machine that is also doing other things, "
-            "and off the GPU the model behind the time is a ~20-step CPU calibration — or, "
-            "with none on this machine, nothing at all, which is why that cell can be "
-            "empty rather than invented. The step counts are the part worth reading: they "
-            "come from the same settling policy the engine runs, so they are exact when "
-            "convergence lands where the planner assumed. Gating any of this would grade "
-            "the machine's afternoon; the gates above grade the library.",
+            "**Informational, not gated — no gate reads these rows.** The measured column "
+            f"is wall clock for the {n_solves} solves these {len(plan_rows)} scenarios run, "
+            "on a machine that is also doing other things, and the model behind the "
+            "predicted column is coarse by construction: off the GPU it is a ~20-step "
+            "calibration fitted on 3-D probe grids — or, with none on this machine, "
+            "nothing at all, which is why that cell can be empty rather than invented. A "
+            "few-thousand-voxel 1-D run is then predicted by a per-element fit that never "
+            "saw a grid that small, and comes out short; the 3-D bowl is the row where the "
+            "model is being asked something it was fitted for. The step counts are the "
+            "part worth reading regardless: they come from the same settling policy the "
+            "engine runs, so they are exact when convergence lands where the planner "
+            "assumed. Gating any of this would grade the machine's afternoon; the gates "
+            "above grade the library.",
         ]
-        if "cpu" in str(plan.get("target")) and warmup:
-            why.append("")
-            why.append(
-                "On the `cpu` target that constant is the planner's GPU default "
-                "(`planner.model.GPU_WARMUP_S`), substituted because this machine's "
-                "calibration entry carries no measured warmup — a cuFFT-plan and "
-                "kernel-compile cost a numpy run never pays, and the single largest "
-                "reason the predicted times above run long."
-            )
+        if warmup:
+            why += [
+                "",
+                f"Of the predicted totals above, {fmt_num(warmup)} s is the planner's "
+                f"one-time `warmup_s` — CUDA context, cuFFT plans and kernel "
+                f"compilation, paid once per solve. A `cpu` target reports zero for it "
+                f"and means it: a numpy run creates none of those.",
+            ]
         notes_rows = [(n, r["note"]) for n, r in plan_rows.items() if r.get("note")]
         if notes_rows:
             why += ["", *[f"- `{n}`: {_cell(note)}" for n, note in notes_rows]]
