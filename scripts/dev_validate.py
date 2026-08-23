@@ -39,10 +39,17 @@ install the ``[gpu]`` extra; it would reinstall CUDA wheels for ten minutes)::
     # from google.colab import files; files.download(
     #     '/content/dev_validate_reports/<the folder printed at the end>/dev_validate.json')
 
-Stage selection works on either profile::
+Stage selection works on either profile (case-insensitive)::
 
     python scripts/dev_validate.py --profile local  --stages L3
     python scripts/dev_validate.py --profile colab --stages U1,U6 --out /content/probe
+    python scripts/dev_validate.py --profile colab --stages U1b   # the shape hunt
+
+U1b's step-by-step machinery has a GPU-less rehearsal — two numpy mirrors of
+the same job, which must agree bit for bit at every step and every
+intermediate. It needs no profile and no GPU::
+
+    python scripts/dev_validate.py --u1b-rehearse
 
 Exit codes: 0 every stage PASSed (or was purely informational), 2 the profile
 cannot run here (no GPU for ``--profile colab``, or a bad ``--stages``), 4 at
@@ -81,7 +88,8 @@ RUNNER_EXIT_SOLVER = 4
 PROFILE_STAGES = {
     "local": ("L1", "L2", "L3", "L4", "L5"),
     # U1 first and loudest: it is the open mystery everything else is waiting on.
-    "colab": ("U1", "U2", "U3", "U4", "U5", "U6"),
+    # U1b is its follow-up (which shapes/settings, and which operator).
+    "colab": ("U1", "U1b", "U2", "U3", "U4", "U5", "U6"),
 }
 
 
@@ -137,6 +145,23 @@ def _flat(text: str) -> str:
     return re.sub(r"\s+", " ", str(text)).strip()
 
 
+def _jsonsafe(obj):
+    """Recursively replace non-finite floats with ``'inf'`` / ``'nan'`` strings.
+
+    Python's ``json`` happily writes bare ``Infinity`` and ``NaN`` tokens, which
+    no other JSON reader accepts — and this probe's whole subject is fields that
+    stop being finite, so the report would be unreadable by anything but Python
+    exactly when it matters most.
+    """
+    if isinstance(obj, float):
+        return obj if math.isfinite(obj) else repr(obj)
+    if isinstance(obj, dict):
+        return {k: _jsonsafe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_jsonsafe(v) for v in obj]
+    return obj
+
+
 # ------------------------------------------------------------------- job dicts
 
 
@@ -170,6 +195,134 @@ def rung_job_dict(side: int, *, dx_mm: float = 0.30, apex_frac: float | None = N
             round(apex_frac * extent, 4),
         ]
     return job
+
+
+#: Settling cap for every U1b matrix case. It is NOT what makes the matrix
+#: short: the engine's effective settling floor is
+#: ``tof_periods + max(min_settle_periods, ceil(ramp_periods) + 1)``, and with
+#: the rung scene's focus-referenced time of flight (~8 periods at 256^3, ~12
+#: at 400^3) plus the 3-period ramp that floor already exceeds 3. The override
+#: is here so the CAP can never be the reason a case runs long -- every case
+#: lands on ~13 (256-scene) / ~17 (400-scene) periods x spp=20 steps.
+U1B_MAX_SETTLE = 3
+
+#: The U1b shape/setting matrix. ``letter`` is the case's label in the task
+#: that commissioned it; ``over`` is the complete set of deviations from
+#: ``rung_job(RungSpec(shape=(side,)*3))``. Two controls (``-``) bracket it:
+#: without them a matrix in which nothing diverged could not tell "the shape is
+#: innocent" from "this stage's settings changed the run".
+U1B_CASES = (
+    (
+        "ref256",
+        "-",
+        {"side": 256},
+        "control: the real 256^3 rung, at this stage's settling cap",
+    ),
+    ("a240", "a", {"side": 240}, "240^3 — smooth (2^4*3*5), just under 256"),
+    ("b250", "b", {"side": 250}, "250^3 = 2*5^4 — smooth, no padding, between 240 and 256"),
+    (
+        "c256lin",
+        "c",
+        {"side": 256, "solver": "linear"},
+        "256^3 without the Westervelt term — does the nonlinear term matter?",
+    ),
+    (
+        "d256amp2",
+        "d",
+        {"side": 256, "amplitude_kpa": 2.0},
+        "256^3 driven at 2 kPa (1/100 of the rung) — is it amplitude-dependent?",
+    ),
+    (
+        "e256x400",
+        "e",
+        {"side": 256, "size_mm": (76.8, 76.8, 120.0)},
+        "256x256x400: 256 on the two transverse (c2c) axes only",
+    ),
+    (
+        "f400x256",
+        "f",
+        {"side": 400, "size_mm": (120.0, 120.0, 76.8)},
+        "400x400x256: 256 on the beam axis only (the r2c/last FFT axis)",
+    ),
+    ("g288", "g", {"side": 288}, "288^3 — control just above 256"),
+    ("ref400", "-", {"side": 400}, "control: the healthy 400^3 rung"),
+)
+_U1B_BY_TAG = {c[0]: c for c in U1B_CASES}
+
+#: The rehearsal scene: the same rung geometry at a size a laptop can step,
+#: with the apex at 0.25 x extent so the bowl clears the PML at 64^3 (exactly
+#: what L5's sentinel does at 96^3).
+U1B_REHEARSE_SIDE = 64
+U1B_REHEARSE_APEX = 0.25
+
+
+def u1b_matrix_job(tag: str) -> tuple[dict, dict]:
+    """One U1b matrix case as ``(job dict, meta)``.
+
+    ``meta['overrides']`` is the audit trail: every deviation from the plain
+    rung job, in words, so the report says what was run without anyone having
+    to re-derive it from a shape.
+
+    The two mixed shapes deserve their own sentence, because the ONLY thing
+    they change is the FFT size. ``rung_job`` derives the whole scene (bowl
+    diameter, radius of curvature, apex standoff) from ``shape[-1] * dx``, so
+    building them by side alone would move the transducer as well as the
+    transform. Instead the scene is built at its own side and only
+    ``grid.size_mm`` is overridden per axis:
+
+    * ``e256x400`` — the 256-rung SCENE (76.8 mm bowl geometry) on a
+      76.8 x 76.8 x 120.0 mm grid => shape 256 x 256 x 400.
+    * ``f400x256`` — the 400-rung SCENE (120 mm bowl geometry) on a
+      120.0 x 120.0 x 76.8 mm grid => shape 400 x 400 x 256.
+    """
+    if tag not in _U1B_BY_TAG:
+        raise KeyError(f"unknown U1b case {tag!r}; known: {', '.join(_U1B_BY_TAG)}")
+    _tag, letter, over, why = _U1B_BY_TAG[tag]
+    side = int(over["side"])
+    job = rung_job_dict(side)
+    job["name"] = f"u1b-{tag}"
+    dx_mm = float(job["grid"]["dx_mm"])
+    notes = [f"rung_job(shape=({side},)*3, dx={dx_mm} mm) — scene extent {side * dx_mm:g} mm"]
+    job["run"]["spec"]["max_settle_periods"] = U1B_MAX_SETTLE
+    notes.append(f"run.spec.max_settle_periods -> {U1B_MAX_SETTLE}")
+    if "solver" in over:
+        job["solver"] = over["solver"]
+        notes.append(f"solver -> {over['solver']!r} (was 'westervelt')")
+    if "amplitude_kpa" in over:
+        job["drive"]["amplitude_kpa"] = float(over["amplitude_kpa"])
+        notes.append(f"drive.amplitude_kpa -> {over['amplitude_kpa']} (was 200.0)")
+    if "size_mm" in over:
+        job["grid"]["size_mm"] = [float(s) for s in over["size_mm"]]
+        notes.append(
+            f"grid.size_mm -> {job['grid']['size_mm']} — the SCENE stays the "
+            f"{side}-rung scene, only the FFT size changes"
+        )
+    shape = tuple(int(round(s / dx_mm)) for s in job["grid"]["size_mm"])
+    meta = {
+        "tag": tag,
+        "letter": letter,
+        "why": why,
+        "scene_side": side,
+        "scene_extent_mm": round(side * dx_mm, 4),
+        "shape": list(shape),
+        "shape_str": "x".join(str(n) for n in shape),
+        "solver": job["solver"],
+        "amplitude_kpa": job["drive"]["amplitude_kpa"],
+        "size_mm": list(job["grid"]["size_mm"]),
+        "apex_mm": list(job["source"]["apex_mm"]),
+        "overrides": notes,
+    }
+    try:  # the padded shape is evidence in its own right (2,3,5-smooth => equal)
+        from caustica.solvers.kspace.operators import pad_shape
+
+        padded = tuple(pad_shape(shape))
+        meta["padded"] = list(padded)
+        meta["padding_free"] = padded == shape
+    except Exception as exc:  # noqa: BLE001 - a missing import must not lose the case
+        meta["padded"] = None
+        meta["padding_free"] = None
+        meta["padded_error"] = f"{type(exc).__name__}: {exc}"
+    return job, meta
 
 
 #: 24^3 at an amplitude float32 cannot carry. Same scene as
@@ -283,6 +436,17 @@ def child_main(mode: str, out: Path, backend: str) -> int:
     if mode == "u1-bare400":  # control: a bigger shape, same everything else
         return _solve(
             rung_job_dict(400), out / "bare400", backend="cupy", tag="bare400", side=400, apex=0.06
+        )
+    if mode.startswith("u1b-") and mode[len("u1b-") :] in _U1B_BY_TAG:
+        tag = mode[len("u1b-") :]  # one U1b matrix case, preview-only
+        job, meta = u1b_matrix_job(tag)
+        return _solve(
+            job,
+            out / tag,
+            backend=backend,
+            tag=tag,
+            side=meta["shape_str"],
+            apex="0.06",
         )
     if mode == "diverge":
         # preview_only=False on purpose: "must not leave result.h5" is vacuous
@@ -409,6 +573,12 @@ class Ctx:
     profile: str
     root: Path
     log: object = print
+    #: U1b-stepdiff knobs (hidden CLI flags). The defaults are the task's:
+    #: 40 steps on the real 256^3 rung and on the 400^3 control. The CPU leg
+    #: dominates the cost (~8 FFTs per step over the whole volume), so a
+    #: memory- or time-constrained session can shrink either.
+    u1b_steps: int = 40
+    u1b_shapes: tuple[int, ...] = (256, 400)
 
     def dir(self, stage: str) -> Path:
         d = self.root / stage
@@ -931,6 +1101,859 @@ def stage_u1(ctx: Ctx) -> Outcome:
     )
 
 
+# ------------------------------------------------- U1b: which shape, which op
+#
+# U1 left exactly one hypothesis standing: "the 256^3 shape diverges however it
+# is reached". U1b attacks that from two sides in one stage.
+#
+#   U1b-matrix    — nine fresh subprocesses that ask WHICH shapes and settings
+#                   carry the failure (240/250/288 around it, linear vs
+#                   westervelt, 200 kPa vs 2 kPa, and the two mixed shapes that
+#                   split "256 on the transverse axes" from "256 on the beam
+#                   axis"). Same divergence detection as U1, same tri-state.
+#   U1b-stepdiff  — ONE process, both backends, the engine's own step
+#                   composition rebuilt around the REAL maps of the real rung
+#                   job. It answers the two questions the matrix cannot: which
+#                   STEP first disagrees, and inside that step, which OPERATOR.
+
+
+def _u1b_matrix_interpret(nan: dict[str, bool | None]) -> dict:
+    """What the nine verdicts allow one to say. Pure — reads only the verdicts."""
+
+    def tri(known: bool, supported: bool) -> str:
+        return ("supported" if supported else "refuted") if known else "undetermined"
+
+    ref256, ref400 = nan.get("ref256"), nan.get("ref400")
+    a240, b250, g288 = nan.get("a240"), nan.get("b250"), nan.get("g288")
+    c_lin, d_amp = nan.get("c256lin"), nan.get("d256amp2")
+    e_tr, f_beam = nan.get("e256x400"), nan.get("f400x256")
+
+    hyps = {
+        "reproduced_here": {
+            "claim": "the 256^3 rung still diverges under this stage's settings "
+            "(max_settle_periods=3) — the matrix's own positive control",
+            "verdict": tri(ref256 is not None, bool(ref256)),
+        },
+        "not_shape_specific": {
+            "claim": "the 400^3 control diverges too, so this matrix is measuring "
+            "its own settings rather than the shape",
+            "verdict": tri(ref400 is not None, bool(ref400)),
+        },
+        "isolated_at_256": {
+            "claim": "240^3, 250^3 and 288^3 are all clean while 256^3 diverges: the "
+            "failure is pinned to the SIZE 256, not to a size range",
+            "verdict": tri(
+                None not in (ref256, a240, b250, g288),
+                bool(ref256) and a240 is False and b250 is False and g288 is False,
+            ),
+        },
+        "needs_the_nonlinear_term": {
+            "claim": "256^3 on solver 'linear' is clean: the Westervelt term is part "
+            "of the mechanism",
+            "verdict": tri(None not in (ref256, c_lin), bool(ref256) and c_lin is False),
+        },
+        "amplitude_dependent": {
+            "claim": "256^3 at a 2 kPa drive is clean: the blow-up scales with the "
+            "drive, so it grows out of the field rather than out of an index",
+            "verdict": tri(None not in (ref256, d_amp), bool(ref256) and d_amp is False),
+        },
+        "beam_axis_carries_it": {
+            "claim": "only the LAST axis (the real-to-complex FFT axis) being 256 "
+            "matters: 400x400x256 diverges, 256x256x400 does not",
+            "verdict": tri(None not in (e_tr, f_beam), bool(f_beam) and e_tr is False),
+        },
+        "transverse_axes_carry_it": {
+            "claim": "only the two complex-to-complex axes being 256 matter: "
+            "256x256x400 diverges, 400x400x256 does not",
+            "verdict": tri(None not in (e_tr, f_beam), bool(e_tr) and f_beam is False),
+        },
+        "any_256_axis": {
+            "claim": "a 256 on ANY axis is enough — both mixed shapes diverge",
+            "verdict": tri(None not in (e_tr, f_beam), bool(e_tr) and bool(f_beam)),
+        },
+        "cubic_256_only": {
+            "claim": "neither mixed shape diverges: it takes 256 on ALL THREE axes "
+            "at once (a shape-triple effect, not a per-axis transform effect)",
+            "verdict": tri(
+                None not in (ref256, e_tr, f_beam),
+                bool(ref256) and e_tr is False and f_beam is False,
+            ),
+        },
+    }
+    axis = "undetermined (a mixed-shape case did not reach a verdict)"
+    if None not in (e_tr, f_beam):
+        axis = {
+            (True, True): "any axis of size 256",
+            (True, False): "the transverse (complex-to-complex) axes",
+            (False, True): "the beam axis (the real-to-complex / last FFT axis)",
+            (False, False): "no single axis — only the fully cubic 256^3",
+        }[(bool(e_tr), bool(f_beam))]
+    return {
+        "supported": [k for k, h in hyps.items() if h["verdict"] == "supported"],
+        "axis_verdict": axis,
+        "hypotheses": hyps,
+    }
+
+
+def _u1b_matrix(out: Path) -> dict:
+    """Run the nine matrix cases, one FRESH subprocess each, and grade them."""
+    rows: list[dict] = []
+    nan: dict[str, bool | None] = {}
+    for tag, letter, _over, why in U1B_CASES:
+        _job, meta = u1b_matrix_job(tag)
+        print(f"  U1b-matrix {letter} {tag} [{meta['shape_str']}]: {why} ...", flush=True)
+        t0 = time.perf_counter()
+        proc = _run_child(f"u1b-{tag}", out, backend="cupy")
+        elapsed = time.perf_counter() - t0
+        parsed = {c["case"]: c for c in _split_cases(proc.stdout + "\n" + proc.stderr)}
+        case = parsed.get(tag, {})
+        case_dir = out / tag
+        exit_code = case.get("exit", proc.returncode)
+        diverged, signal = _diverged(case_dir, exit_code, bool(case.get("text_nan")))
+        err = _read_json(case_dir / "error.json")
+        nan[tag] = diverged
+        rows.append(
+            {
+                "case": tag,
+                "letter": letter,
+                "why": why,
+                "meta": meta,
+                "exit": exit_code,
+                "child_returncode": proc.returncode,
+                "period1_peak": case.get("period1_peak"),
+                "final_peak_mpa": case.get("final_peak_mpa"),
+                "diverged": diverged,
+                "signal": signal,
+                "error_class": err.get("error_class"),
+                "error_message": _flat(err.get("message", ""))[:300],
+                "elapsed_s": round(elapsed, 1),
+                "saw_marker": tag in parsed,
+                "stderr_tail": "" if tag in parsed else _flat(proc.stderr[-300:]),
+            }
+        )
+
+    interp = _u1b_matrix_interpret(nan)
+    header = (
+        f"{'case':<9} {'shape':>13} {'solver':>10} {'kPa':>6} {'exit':>5} "
+        f"{'period-1 peak':>16} {'final MPa':>10} {'NaN':>6} {'signal':<20} {'s':>5}"
+    )
+    lines = [
+        "",
+        "=" * len(header),
+        "U1b-matrix — which shapes/settings diverge (one FRESH process per case)",
+        "=" * len(header),
+        header,
+        "-" * len(header),
+    ]
+    for r in rows:
+        m = r["meta"]
+        lines.append(
+            f"{r['case']:<9} {m['shape_str']:>13} {m['solver']:>10} "
+            f"{m['amplitude_kpa']:>6g} {str(r['exit']):>5} "
+            f"{(r['period1_peak'] or '(no solve)'):>16} {(r['final_peak_mpa'] or '--'):>10} "
+            f"{_NAN_CELL[r['diverged']]:>6} {(r['signal'] or '-'):<20} {r['elapsed_s']:>5.0f}"
+        )
+    lines += [
+        "-" * len(header),
+        f"axis verdict: {interp['axis_verdict']}",
+        "interpretation:",
+    ]
+    for key, h in interp["hypotheses"].items():
+        lines.append(f"  {h['verdict']:<13} {key}: {h['claim']}")
+    lines.append("=" * len(header))
+    return {"cases": rows, "verdicts": nan, "interpretation": interp, "table": lines}
+
+
+# ------------------------------------------------------------ U1b-stepdiff
+#
+# The engine's step is mirrored here, not called: run_cw_kspace_pstd owns its
+# whole loop and reports only per-period peaks, which is three orders of
+# magnitude too coarse to name an operator. planner.calibration.measure_step_time
+# already mirrors the same composition with SYNTHETIC maps for timing; this is
+# that mirror with the job's REAL maps, which is the point -- a probe hunting a
+# backend-and-shape-specific fault may not approximate any input.
+
+
+class _StepMirror:
+    """One backend's private rebuild of the engine's per-step composition.
+
+    Mirrors :func:`caustica.solvers.kspace.engine.run_cw_kspace_pstd` line for
+    line: the padded shape, the four/five property maps, ``kappa``, the
+    per-axis derivative factors, the sponge, and the source scatter — then
+    ``step()`` applies them in the engine's exact order (u first from a single
+    ``rfftn(p)``, absorb then sponge, the pressure update, absorb then sponge
+    again, and the ramped source LAST).
+
+    Every array is built through THIS instance's ``xp``. That is not a style
+    point: a numpy array handed to a cupy op raises, and the one thing this
+    probe must never do is compare a program against a slightly different
+    program.
+    """
+
+    def __init__(self, backend: str, built: object, harmonics: tuple[int, ...] = (1,)) -> None:
+        import numpy as np
+
+        from caustica.core.backend import get_backend
+        from caustica.solvers.kspace import operators as ops
+        from caustica.solvers.kspace.engine import cw_discretization
+
+        self.backend_name = backend
+        b = self.b = get_backend(backend)
+        xp = self.xp = b.xp
+        self.fft = b.fft
+
+        grid, medium, source, spec = built.grid, built.medium, built.source, built.spec
+        if medium is None:
+            raise ValueError("_StepMirror needs a built job WITH its medium (with_medium=True)")
+        self.nd = nd = grid.ndim
+        self.dx = dx = grid.dx
+        self.period = 1.0 / source.f0
+        self.omega = 2.0 * np.pi * source.f0
+        self.ramp_periods = source.ramp_periods
+        # engine: nonlinear=True is passed by the westervelt solver, False by
+        # linear; beta2_dt then survives only if the medium is not linear.
+        self.nonlinear = built.solver == "westervelt"
+
+        self.spp, self.dt = cw_discretization(grid, medium, spec, source.f0, harmonics)
+        dt = self.dt
+        self.padded = padded = ops.pad_shape(grid.shape)
+        self.active_shape = tuple(grid.shape)
+
+        self.dt_over_rho = xp.asarray(dt / ops.pad_volume(medium.rho, padded), dtype=xp.float32)
+        self.rhoc2_dt = xp.asarray(
+            ops.pad_volume(medium.rho * medium.c.astype(np.float64) ** 2, padded) * dt,
+            dtype=xp.float32,
+        )
+        self.absorb = xp.asarray(
+            np.exp(-ops.pad_volume(medium.alpha * medium.c, padded) * dt), dtype=xp.float32
+        )
+        self.beta2_dt = None
+        if self.nonlinear and not medium.is_linear:
+            self.beta2_dt = xp.asarray(
+                ops.pad_volume(medium.beta, padded) * (2.0 * dt), dtype=xp.float32
+            )
+
+        ks = ops.k_vectors(padded, dx, xp)
+        kappa = ops.kappa_sinc(ks, c_ref=medium.c_max, dt=dt, xp=xp)
+        self.deriv = ops.spectral_derivative_factors(ks, kappa, xp)
+        # The engine deletes ks and kappa here; keep only the scalars the
+        # sanity dump asks for, so this mirror does not carry a shadow copy.
+        self.max_kappa = float(abs(kappa).max())
+        self.min_kappa = float(abs(kappa).min())
+        self.max_k = [float(abs(k).max()) for k in ks]
+        del ks, kappa
+
+        pml_edge = grid.pml.edge if grid.pml is not None else 2.0
+        self.pml_vox = grid.pml_vox
+        self.sponge = ops.sponge_volume(padded, grid.pml_vox, pml_edge, xp)
+
+        self.p = xp.zeros(padded, dtype=xp.float32)
+        self.u = [xp.zeros(padded, dtype=xp.float32) for _ in range(nd)]
+
+        self.src_idx = tuple(xp.asarray(source.indices[:, d]) for d in range(nd))
+        self.src_ph = xp.asarray(source.phases, dtype=xp.float32)
+        self.amp = float(source.amplitude)
+        c_src = medium.c[tuple(source.indices[:, d] for d in range(nd))]
+        self.src_scale = xp.asarray(2.0 * c_src.astype(np.float64) * dt / dx, dtype=xp.float32)
+        self.n_src = int(source.indices.shape[0])
+
+    # ---- state handling ---------------------------------------------------
+
+    def state(self) -> list:
+        """Host float32 COPIES of ``(p, u0..u_{nd-1})``."""
+
+        def host(arr):
+            h = self.b.to_numpy(arr)
+            # On numpy ``to_numpy`` hands back the LIVE array and the next step
+            # would rewrite the "snapshot" in place -- the copy is load-bearing.
+            # On cupy ``asnumpy`` already produced a fresh host array, so a
+            # second copy would be a pure waste of hundreds of MB.
+            return h if self.b.is_gpu else h.copy()
+
+        return [host(self.p)] + [host(x) for x in self.u]
+
+    def load_state(self, arrays: list) -> None:
+        """Adopt a host state. ``xp.array`` copies on BOTH backends."""
+        xp = self.xp
+        self.p = xp.array(arrays[0], dtype=xp.float32)
+        self.u = [xp.array(a, dtype=xp.float32) for a in arrays[1:]]
+
+    def sync(self) -> None:
+        self.b.synchronize()
+
+    def maps(self) -> dict:
+        """Every input the step reads, by name (``None`` where inactive)."""
+        out = {
+            name: getattr(self, name)
+            for name in ("dt_over_rho", "rhoc2_dt", "absorb", "sponge", "beta2_dt", "src_scale")
+        }
+        out.update({f"deriv{i}": self.deriv[i] for i in range(self.nd)})
+        return out
+
+    # ---- the step ---------------------------------------------------------
+
+    def _scatter(self, n: int) -> None:
+        """The engine's source injection: ramp x mass-source scale x sin(wt-phi)."""
+        from caustica.sources import ramp_envelope
+
+        xp = self.xp
+        t = n * self.dt
+        env = ramp_envelope(t, self.period, self.ramp_periods)
+        self.p[self.src_idx] += (xp.float32(self.amp * env) * self.src_scale) * xp.sin(
+            xp.float32(self.omega * t) - self.src_ph
+        )
+
+    def step(self, n: int) -> None:
+        fft = self.fft
+        p, u, padded, deriv = self.p, self.u, self.padded, self.deriv
+        pk = fft.rfftn(p)
+        for i in range(self.nd):
+            grad_i = fft.irfftn(deriv[i] * pk, s=padded)
+            u[i] -= self.dt_over_rho * grad_i
+            u[i] *= self.absorb
+            u[i] *= self.sponge
+        acc = None
+        for i in range(self.nd):
+            term = deriv[i] * fft.rfftn(u[i])
+            acc = term if acc is None else acc + term
+        divu = fft.irfftn(acc, s=padded)
+        if self.beta2_dt is None:
+            p -= self.rhoc2_dt * divu
+        else:
+            p -= (self.rhoc2_dt + self.beta2_dt * p) * divu
+        p *= self.absorb
+        p *= self.sponge
+        self._scatter(n)
+
+    def step_traced(self, n: int):
+        """The SAME step, yielding ``(name, array)`` at every intermediate.
+
+        A generator so the two backends can be walked in lock-step and each
+        intermediate compared and released before the next one is built —
+        holding all of them at 400^3 would be gigabytes per side.
+        """
+        fft = self.fft
+        p, u, padded, deriv = self.p, self.u, self.padded, self.deriv
+        pk = fft.rfftn(p)
+        yield "pk = rfftn(p)", pk
+        for i in range(self.nd):
+            dpk = deriv[i] * pk
+            yield f"deriv{i} * pk", dpk
+            grad_i = fft.irfftn(dpk, s=padded)
+            del dpk
+            yield f"grad{i} = irfftn(deriv{i}*pk)", grad_i
+            u[i] -= self.dt_over_rho * grad_i
+            u[i] *= self.absorb
+            u[i] *= self.sponge
+            yield f"u{i} after update", u[i]
+        acc = None
+        for i in range(self.nd):
+            uk = fft.rfftn(u[i])
+            yield f"rfftn(u{i})", uk
+            term = deriv[i] * uk
+            del uk
+            yield f"deriv{i} * rfftn(u{i})", term
+            acc = term if acc is None else acc + term
+        divu = fft.irfftn(acc, s=padded)
+        del acc
+        yield "divu = irfftn(sum)", divu
+        if self.beta2_dt is None:
+            p -= self.rhoc2_dt * divu
+        else:
+            p -= (self.rhoc2_dt + self.beta2_dt * p) * divu
+        yield "p after pressure update", p
+        p *= self.absorb
+        p *= self.sponge
+        yield "p after absorb+sponge", p
+        self._scatter(n)
+        yield "p after source scatter", p
+
+
+def _host64(mirror: _StepMirror, arr):
+    """One device->host copy, promoted to float64/complex128 for comparison."""
+    import numpy as np
+
+    h = mirror.b.to_numpy(arr)
+    return h.astype(np.complex128 if np.iscomplexobj(h) else np.float64)
+
+
+def _rel_linf(a, c) -> dict:
+    """Relative L-infinity difference of two host arrays, non-finite aware."""
+    import numpy as np
+
+    with np.errstate(invalid="ignore"):
+        a_max = float(np.abs(a).max()) if a.size else 0.0
+        c_max = float(np.abs(c).max()) if c.size else 0.0
+        a_fin = bool(np.isfinite(a).all())
+        c_fin = bool(np.isfinite(c).all())
+        if not (a_fin and c_fin):
+            rel = float("inf")
+        else:
+            diff = float(np.abs(a - c).max())
+            den = max(a_max, c_max)
+            rel = (diff / den) if den > 0.0 else 0.0
+    return {
+        "rel": rel,
+        "a_max": a_max,
+        "b_max": c_max,
+        "a_finite": a_fin,
+        "b_finite": c_fin,
+    }
+
+
+def _u1b_input_report(ma: _StepMirror, mb: _StepMirror) -> dict:
+    """Cheap sanity: do the two sides' INPUTS agree before a single step runs?
+
+    Both sides' stats AND their cross difference come from ONE host copy per
+    map per side -- dtype and shape are read off the device array directly, so
+    a 256^3 run pays nine transfers, not eighteen.
+    """
+    a_maps, b_maps = ma.maps(), mb.maps()
+    per_side: dict[str, dict] = {"a": {}, "b": {}}
+    cross: dict[str, dict | None] = {}
+    for name, arr_a in a_maps.items():
+        arr_b = b_maps.get(name)
+        if arr_a is None or arr_b is None:
+            per_side["a"][name] = per_side["b"][name] = cross[name] = None
+            continue
+        d = _rel_linf(_host64(ma, arr_a), _host64(mb, arr_b))
+        per_side["a"][name] = {
+            "dtype": str(arr_a.dtype),
+            "shape": list(arr_a.shape),
+            "max_abs": d["a_max"],
+            "all_finite": d["a_finite"],
+        }
+        per_side["b"][name] = {
+            "dtype": str(arr_b.dtype),
+            "shape": list(arr_b.shape),
+            "max_abs": d["b_max"],
+            "all_finite": d["b_finite"],
+        }
+        cross[name] = d
+
+    sides = {}
+    for tag, m in (("a", ma), ("b", mb)):
+        sides[tag] = {
+            "backend": m.backend_name,
+            "padded": list(m.padded),
+            "active": list(m.active_shape),
+            "dt": m.dt,
+            "spp": m.spp,
+            "pml_vox": m.pml_vox,
+            "n_source_voxels": m.n_src,
+            "nonlinear": m.nonlinear,
+            "beta2_dt_active": m.beta2_dt is not None,
+            "max_kappa": m.max_kappa,
+            "min_kappa": m.min_kappa,
+            "max_k_per_axis": m.max_k,
+            "p_dtype": str(m.p.dtype),
+            "u_dtype": str(m.u[0].dtype),
+            "src_idx_dtype": str(m.src_idx[0].dtype),
+            "src_ph_dtype": str(m.src_ph.dtype),
+            "maps": per_side[tag],
+        }
+    nonfinite = [
+        f"{side}:{name}"
+        for side, info in sides.items()
+        for name, m in info["maps"].items()
+        if m is not None and not m["all_finite"]
+    ]
+    worst = max((v["rel"] for v in cross.values() if v is not None), default=0.0)
+    return {
+        "sides": sides,
+        "cross": cross,
+        "worst_map_rel": worst,
+        "nonfinite_maps": nonfinite,
+        "shapes_agree": sides["a"]["padded"] == sides["b"]["padded"],
+        "dt_agrees": sides["a"]["dt"] == sides["b"]["dt"],
+    }
+
+
+def _u1b_stepdiff_one(
+    job: dict,
+    *,
+    label: str,
+    backends: tuple[str, str],
+    n_steps: int,
+    tol: float,
+    force_bad_step: int | None = None,
+) -> dict:
+    """Step-by-step, then operator-by-operator, for ONE job on TWO backends.
+
+    ``force_bad_step`` is for the rehearsal ONLY: it declares a step "the first
+    bad one" whether or not it exceeded ``tol``, so the operator drill can be
+    exercised on a machine where the two sides agree exactly. It never fires
+    on the real stage (which passes ``None``), and the result carries the flag
+    so no reader can mistake a forced drill for a real divergence.
+    """
+    from caustica.config.job import build_job, parse_job
+
+    t0 = time.perf_counter()
+    built = build_job(parse_job(job), None, with_medium=True)
+    solver_name = built.solver
+    ma = _StepMirror(backends[0], built, tuple(built.harmonics))
+    mb = _StepMirror(backends[1], built, tuple(built.harmonics))
+    # The medium's four property volumes are ~4 x P float32 on the host (1 GiB
+    # at 400^3) and both mirrors have already absorbed them into their own
+    # maps. Nothing below reads `built` again.
+    del built
+    inputs = _u1b_input_report(ma, mb)
+
+    rows: list[dict] = []
+    first_bad: int | None = None
+    last_good: list | None = None
+    for n in range(n_steps):
+        # The rolling snapshot is the drill's starting point; once the first
+        # bad step is known it costs memory and buys nothing, so it stops.
+        prev = ma.state() if first_bad is None else None
+        ma.step(n)
+        ma.sync()
+        mb.step(n)
+        mb.sync()
+        fields = {"p": _rel_linf(_host64(ma, ma.p), _host64(mb, mb.p))}
+        for i in range(ma.nd):
+            fields[f"u{i}"] = _rel_linf(_host64(ma, ma.u[i]), _host64(mb, mb.u[i]))
+        worst_field = max(fields, key=lambda k: fields[k]["rel"])
+        worst = fields[worst_field]["rel"]
+        rows.append(
+            {
+                "step": n,
+                "worst_rel": worst,
+                "worst_field": worst_field,
+                "rel": {k: v["rel"] for k, v in fields.items()},
+                "p_max_a": fields["p"]["a_max"],
+                "p_max_b": fields["p"]["b_max"],
+                "finite_a": all(v["a_finite"] for v in fields.values()),
+                "finite_b": all(v["b_finite"] for v in fields.values()),
+            }
+        )
+        if first_bad is None and (worst > tol or n == force_bad_step):
+            first_bad, last_good = n, prev
+        del prev
+
+    drill: list[dict] = []
+    guilty: str | None = None
+    drill_error = None
+    if first_bad is not None and last_good is not None:
+        try:
+            # Both sides start from the SAME state — side A's, the reference —
+            # so the one step that follows is the only difference between them.
+            ma.load_state(last_good)
+            mb.load_state(last_good)
+            ga, gb = ma.step_traced(first_bad), mb.step_traced(first_bad)
+            for (na, aa), (nb, bb) in zip(ga, gb, strict=True):
+                if na != nb:
+                    raise RuntimeError(f"traced steps desynchronized: {na!r} vs {nb!r}")
+                d = _rel_linf(_host64(ma, aa), _host64(mb, bb))
+                drill.append({"op": na, **d})
+                if guilty is None and d["rel"] > tol:
+                    guilty = na
+                del aa, bb
+        except Exception as exc:  # noqa: BLE001 - the step table still stands
+            drill_error = f"{type(exc).__name__}: {exc}"
+    del last_good
+
+    return {
+        "label": label,
+        "backends": list(backends),
+        "n_steps": n_steps,
+        "tol": tol,
+        "padded": list(ma.padded),
+        "active": list(ma.active_shape),
+        "solver": solver_name,
+        "dt": ma.dt,
+        "spp": ma.spp,
+        "nonlinear": ma.nonlinear,
+        "inputs": inputs,
+        "steps": rows,
+        "first_bad_step": first_bad,
+        "forced_bad_step": force_bad_step,
+        "worst_rel_overall": max((r["worst_rel"] for r in rows), default=0.0),
+        "all_zero": all(r["worst_rel"] == 0.0 for r in rows),
+        "drill": drill,
+        "guilty_operator": guilty,
+        "drill_error": drill_error,
+        "elapsed_s": round(time.perf_counter() - t0, 1),
+    }
+
+
+def _u1b_stepdiff_lines(res: dict) -> list[str]:
+    """The console rendering of one stepdiff result."""
+    inp = res["inputs"]
+    a, b = inp["sides"]["a"], inp["sides"]["b"]
+    width = 92
+    lines = [
+        "",
+        "=" * width,
+        f"U1b-stepdiff — {res['label']}: {a['backend']} vs {b['backend']}",
+        "=" * width,
+        f"  padded {'x'.join(str(n) for n in res['padded'])}  active "
+        f"{'x'.join(str(n) for n in res['active'])}  solver {res['solver']}  "
+        f"nonlinear {res['nonlinear']}",
+        f"  dt {res['dt']:.6e} s  spp {res['spp']}  steps {res['n_steps']}  tol {res['tol']:g}",
+        f"  max|kappa| a={a['max_kappa']:.9g} b={b['max_kappa']:.9g}  "
+        f"min|kappa| a={a['min_kappa']:.9g} b={b['min_kappa']:.9g}",
+        f"  max|k| per axis a={[float(f'{v:.6g}') for v in a['max_k_per_axis']]}",
+        f"  max|k| per axis b={[float(f'{v:.6g}') for v in b['max_k_per_axis']]}",
+        f"  state dtypes  p {a['p_dtype']}/{b['p_dtype']}  u {a['u_dtype']}/{b['u_dtype']}  "
+        f"src idx {a['src_idx_dtype']}/{b['src_idx_dtype']}  "
+        f"phase {a['src_ph_dtype']}/{b['src_ph_dtype']}  "
+        f"({a['n_source_voxels']} source voxels, pml {a['pml_vox']} vox)",
+    ]
+    for name, m in a["maps"].items():
+        mb_ = b["maps"].get(name)
+        cross = inp["cross"].get(name)
+        if m is None and mb_ is None:
+            lines.append(f"    map {name:<12} inactive on both sides")
+            continue
+        rel = "--" if cross is None else f"{cross['rel']:.3e}"
+        lines.append(
+            f"    map {name:<12} a[{m['dtype']}, max {m['max_abs']:.6g}, finite "
+            f"{m['all_finite']}]  b[{mb_['dtype']}, max {mb_['max_abs']:.6g}, finite "
+            f"{mb_['all_finite']}]  rel {rel}"
+        )
+    lines.append(
+        f"  INPUTS: shapes agree {inp['shapes_agree']}, dt agrees {inp['dt_agrees']}, "
+        f"worst map rel {inp['worst_map_rel']:.3e}, non-finite maps "
+        f"{inp['nonfinite_maps'] or 'none'}"
+    )
+    nd = len(res["steps"][0]["rel"]) - 1 if res["steps"] else 3
+    head = f"  {'step':>5} " + " ".join(
+        f"{('rel ' + k):>12}" for k in ["p"] + [f"u{i}" for i in range(nd)]
+    )
+    head += f" {'worst':>12} {'field':>6} {'fin a/b':>9}"
+    lines += [head, "  " + "-" * (len(head) - 2)]
+    for r in res["steps"]:
+        cells = " ".join(f"{r['rel'][k]:>12.3e}" for k in ["p"] + [f"u{i}" for i in range(nd)])
+        lines.append(
+            f"  {r['step']:>5} {cells} {r['worst_rel']:>12.3e} {r['worst_field']:>6} "
+            f"{str(r['finite_a'])[0] + '/' + str(r['finite_b'])[0]:>9}"
+        )
+    lines.append("  " + "-" * (len(head) - 2))
+    if res["first_bad_step"] is None:
+        lines.append(
+            f"  no step exceeded rel {res['tol']:g} in {res['n_steps']} steps "
+            f"(worst {res['worst_rel_overall']:.3e}; all-zero: {res['all_zero']})"
+        )
+    else:
+        forced = res.get("forced_bad_step") == res["first_bad_step"]
+        lines.append(
+            f"  {'FORCED (rehearsal) bad step' if forced else 'FIRST bad step'}: "
+            f"{res['first_bad_step']} "
+            f"(worst field {res['steps'][res['first_bad_step']]['worst_field']}, "
+            f"rel {res['steps'][res['first_bad_step']]['worst_rel']:.3e})"
+        )
+        lines.append(
+            f"  operator drill — both sides reloaded from side-A state after step "
+            f"{res['first_bad_step'] - 1}, then ONE step:"
+        )
+        lines.append(f"    {'operator':<28} {'rel':>12} {'max a':>12} {'max b':>12} {'fin a/b':>9}")
+        for d in res["drill"]:
+            lines.append(
+                f"    {d['op']:<28} {d['rel']:>12.3e} {d['a_max']:>12.6g} "
+                f"{d['b_max']:>12.6g} "
+                f"{str(d['a_finite'])[0] + '/' + str(d['b_finite'])[0]:>9}"
+            )
+        if res["drill_error"]:
+            lines.append(f"    drill FAILED: {res['drill_error']}")
+        lines.append(f"  FIRST guilty operator: {res['guilty_operator'] or '(none exceeded tol)'}")
+    lines.append(f"  {res['elapsed_s']:.1f} s")
+    lines.append("=" * width)
+    return lines
+
+
+#: What "the same" means between two backends' float32 states, per the task.
+U1B_TOL = 1e-3
+
+
+def _u1b_stepdiff(ctx: Ctx, backends: tuple[str, str] = ("numpy", "cupy")) -> dict:
+    """Both stepdiff shapes, in THIS process, with per-shape error containment."""
+    results = []
+    for side in ctx.u1b_shapes:
+        label = f"rung{side} ({side}^3)"
+        # ~8 whole-volume transforms per step, and the numpy leg pays them on
+        # one CPU core: minutes at 256^3, tens of minutes at 400^3. Said out
+        # loud so a silent hour is never mistaken for a hang.
+        print(
+            f"  U1b-stepdiff {label}: {ctx.u1b_steps} steps on "
+            f"{backends[0]} and {backends[1]} — the {backends[0]} leg is the slow "
+            f"one (~8 full {side}^3 transforms per step) ...",
+            flush=True,
+        )
+        try:
+            res = _u1b_stepdiff_one(
+                rung_job_dict(side),
+                label=label,
+                backends=backends,
+                n_steps=ctx.u1b_steps,
+                tol=U1B_TOL,
+            )
+        except Exception as exc:  # noqa: BLE001 - one shape must not lose the other
+            results.append(
+                {
+                    "label": label,
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "traceback": traceback.format_exc(),
+                }
+            )
+            print(f"    {label} raised {type(exc).__name__}: {exc}", flush=True)
+            continue
+        for line in _u1b_stepdiff_lines(res):
+            print(line, flush=True)
+        results.append(res)
+    return {"shapes": results}
+
+
+def stage_u1b(ctx: Ctx) -> Outcome:
+    """U1b — which shapes/settings diverge, and which operator does it first."""
+    out = ctx.dir("U1b")
+    matrix = _u1b_matrix(out)
+    for line in matrix["table"]:
+        print(line, flush=True)
+    step = _u1b_stepdiff(ctx)
+
+    rows = matrix["cases"]
+    unknown = [r["case"] for r in rows if r["diverged"] is None]
+    unseen = [r["case"] for r in rows if not r["saw_marker"]]
+    broken = [s["label"] for s in step["shapes"] if s.get("error")]
+    good = [s for s in step["shapes"] if not s.get("error")]
+
+    numbers = ", ".join(f"{r['case']}={_NAN_CELL[r['diverged']]}" for r in rows)
+    if good:
+        numbers += "; " + ", ".join(
+            f"{s['label'].split()[0]} first-bad-step "
+            f"{'none' if s['first_bad_step'] is None else s['first_bad_step']}"
+            for s in good
+        )
+    note_bits = [f"axis verdict: {matrix['interpretation']['axis_verdict']}"]
+    supported = matrix["interpretation"]["supported"]
+    note_bits.append("supported: " + (", ".join(supported) if supported else "(none)"))
+    for s in good:
+        if s["guilty_operator"]:
+            note_bits.append(f"{s['label'].split()[0]} first guilty op: {s['guilty_operator']}")
+    if unknown:
+        note_bits.append(f"UNDETERMINED cases: {', '.join(unknown)}")
+    if unseen:
+        note_bits.append(f"no output from: {', '.join(unseen)}")
+    if broken:
+        note_bits.append(f"stepdiff FAILED for: {', '.join(broken)}")
+
+    verdict = "WARN" if (unknown or unseen or broken) else "INFO"
+    return Outcome(
+        verdict,
+        numbers,
+        "; ".join(note_bits),
+        # Sanitized AFTER the console tables were rendered from the real floats:
+        # a diverged cupy leg puts inf in half these cells.
+        _jsonsafe({"matrix": matrix, "stepdiff": step}),
+    )
+
+
+#: How many intermediates ``_StepMirror.step_traced`` yields in 3-D:
+#: pk, then 3 x (deriv*pk, grad, u updated), then 3 x (rfftn(u), deriv*rfftn(u)),
+#: then divu and the three pressure stages.
+U1B_TRACE_OPS_3D = 1 + 3 * 3 + 3 * 2 + 1 + 3
+
+
+def u1b_rehearse(n_steps: int = 8) -> int:
+    """The GPU-less plumbing test: stepdiff numpy-vs-numpy on a mini scene.
+
+    Two numpy mirrors of the SAME job must agree bit for bit at every step and
+    at every intermediate — every relative difference exactly ``0.0``. Anything
+    else is a bug in this file (a shared array where two were meant, a mirror
+    that is not the engine's step, a comparison that lies), found on a laptop
+    instead of on a GPU hour.
+
+    Two passes, because "no divergence" would leave the more intricate half of
+    the machinery unexecuted:
+
+    1. the plain run — every step must be exactly 0.0 and NO step may be
+       flagged;
+    2. the same run with the drill FORCED at a mid-trajectory step, so
+       ``load_state`` on both sides, the two lock-stepped ``step_traced``
+       generators, the name check and the operator table all actually run —
+       against a non-trivial field, and still at exactly 0.0.
+    """
+    _utf8_streams()
+    job = rung_job_dict(U1B_REHEARSE_SIDE, apex_frac=U1B_REHEARSE_APEX)
+    job["name"] = "u1b-rehearse"
+    job["run"]["spec"]["max_settle_periods"] = U1B_MAX_SETTLE
+    label = f"rehearse{U1B_REHEARSE_SIDE} ({U1B_REHEARSE_SIDE}^3)"
+    print(
+        f"U1b rehearsal — {U1B_REHEARSE_SIDE}^3 rung scene (apex at "
+        f"{U1B_REHEARSE_APEX} x extent), numpy vs numpy, {n_steps} steps."
+    )
+
+    print("\n--- pass 1/2: identity (no step may be flagged) ---")
+    res = _u1b_stepdiff_one(
+        job, label=label, backends=("numpy", "numpy"), n_steps=n_steps, tol=U1B_TOL
+    )
+    for line in _u1b_stepdiff_lines(res):
+        print(line)
+
+    forced = max(0, n_steps - 3)
+    print(f"\n--- pass 2/2: the operator drill, FORCED at step {forced} ---")
+    drilled = _u1b_stepdiff_one(
+        job,
+        label=label + " [forced drill]",
+        backends=("numpy", "numpy"),
+        n_steps=n_steps,
+        tol=U1B_TOL,
+        force_bad_step=forced,
+    )
+    for line in _u1b_stepdiff_lines(drilled):
+        print(line)
+
+    checks = [
+        (
+            "every step rel diff is exactly 0.0",
+            res["all_zero"],
+            f"worst {res['worst_rel_overall']}",
+        ),
+        ("no step flagged bad", res["first_bad_step"] is None, str(res["first_bad_step"])),
+        (
+            "every map agrees exactly",
+            res["inputs"]["worst_map_rel"] == 0.0,
+            f"worst map rel {res['inputs']['worst_map_rel']}",
+        ),
+        ("no non-finite map", not res["inputs"]["nonfinite_maps"], "ok"),
+        (
+            "every field stayed finite",
+            all(r["finite_a"] and r["finite_b"] for r in res["steps"]),
+            "ok",
+        ),
+        (
+            "the forced drill ran every intermediate",
+            len(drilled["drill"]) == U1B_TRACE_OPS_3D and not drilled["drill_error"],
+            f"{len(drilled['drill'])}/{U1B_TRACE_OPS_3D} ops, error {drilled['drill_error']}",
+        ),
+        (
+            "every intermediate is exactly 0.0",
+            all(d["rel"] == 0.0 for d in drilled["drill"]),
+            f"worst {max((d['rel'] for d in drilled['drill']), default=None)}",
+        ),
+        (
+            "the drill named no guilty operator",
+            drilled["guilty_operator"] is None,
+            str(drilled["guilty_operator"]),
+        ),
+        (
+            "the drill saw a NON-trivial field (max|p| > 0)",
+            any(d["a_max"] > 0.0 for d in drilled["drill"]),
+            f"max over ops {max((d['a_max'] for d in drilled['drill']), default=0.0):.6g}",
+        ),
+    ]
+    print("")
+    for name, ok, detail in checks:
+        print(f"  [{'PASS' if ok else 'FAIL'}] {name}  ({detail})")
+    bad = [n for n, ok, _ in checks if not ok]
+    if bad:
+        print(f"\nREHEARSAL FAILED: {', '.join(bad)}")
+        return EXIT_FAILED
+    print("\nREHEARSAL PASSED — the stepdiff machinery is wired correctly.")
+    return EXIT_OK
+
+
 def stage_u2(ctx: Ctx) -> Outcome:
     """U2 — rerun the gpu-gates suite and read its report back."""
     root = Path("benchmarks/reports/gpu_gates")
@@ -1312,6 +2335,7 @@ STAGES = {
     "L4": ("subprocess runner mechanics (run_job_subprocess, numpy)", stage_l4),
     "L5": ("96^3 NaN sentinel on numpy (light stand-in for U1)", stage_l5),
     "U1": ("256^3 NaN discrimination probe (5 fresh processes)", stage_u1),
+    "U1b": ("256^3 shape matrix + per-step/per-operator backend diff", stage_u1b),
     "U2": ("gpu-gates rerun + report parse", stage_u2),
     "U3": ("calibration quality + step-time spot check", stage_u3),
     "U4": ("unknown-GPU path through spec_for_device", stage_u4),
@@ -1424,6 +2448,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--child", default=None, help=argparse.SUPPRESS)
     p.add_argument("--child-out", default=None, help=argparse.SUPPRESS)
     p.add_argument("--child-backend", default="numpy", help=argparse.SUPPRESS)
+    # U1b dev flags. --u1b-rehearse is the GPU-less proof that the stepdiff
+    # machinery works at all (numpy vs numpy must be bit-identical); the other
+    # two size the real stage.
+    p.add_argument("--u1b-rehearse", action="store_true", help=argparse.SUPPRESS)
+    # None -> the context's own default: 40 steps for the stage, 8 for the
+    # rehearsal (where the point is the plumbing, not the trajectory).
+    p.add_argument("--u1b-steps", type=int, default=None, help=argparse.SUPPRESS)
+    p.add_argument("--u1b-shapes", default="256,400", help=argparse.SUPPRESS)
     return p
 
 
@@ -1440,14 +2472,22 @@ def main(argv: list[str] | None = None) -> int:
             return EXIT_ENV
         return child_main(args.child, Path(args.child_out), args.child_backend)
 
+    if args.u1b_rehearse:
+        # Deliberately BEFORE the profile check: the whole point is that it
+        # runs on a machine with no GPU at all.
+        return u1b_rehearse(max(1, int(args.u1b_steps)) if args.u1b_steps else 8)
+
     if not args.profile:
         print("dev_validate: --profile local|colab is required", file=sys.stderr)
         return EXIT_ENV
 
     available = PROFILE_STAGES[args.profile]
     if args.stages:
+        # Case-insensitive so "--stages u1b", "U1B" and "U1b" all name the
+        # stage whose canonical label carries a lower-case suffix.
+        canon = {s.upper(): s for s in available}
         wanted = [s.strip().upper() for s in args.stages.replace(",", " ").split()]
-        bad = [s for s in wanted if s not in available]
+        bad = [s for s in wanted if s not in canon]
         if bad:
             print(
                 f"dev_validate: {', '.join(bad)} is not in the {args.profile} profile "
@@ -1455,7 +2495,7 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return EXIT_ENV
-        selected = [s for s in available if s in wanted]
+        selected = [s for s in available if s.upper() in wanted]
     else:
         selected = list(available)
 
@@ -1464,7 +2504,19 @@ def main(argv: list[str] | None = None) -> int:
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     root = Path(args.out) if args.out else Path("dev_validate_reports") / f"{args.profile}-{stamp}"
     root.mkdir(parents=True, exist_ok=True)
-    ctx = Ctx(profile=args.profile, root=root)
+    try:
+        shapes = tuple(int(s) for s in str(args.u1b_shapes).replace(",", " ").split())
+    except ValueError:
+        print(
+            f"dev_validate: --u1b-shapes {args.u1b_shapes!r} is not a list of ints", file=sys.stderr
+        )
+        return EXIT_ENV
+    ctx = Ctx(
+        profile=args.profile,
+        root=root,
+        u1b_steps=max(1, int(args.u1b_steps)) if args.u1b_steps else Ctx.u1b_steps,
+        u1b_shapes=shapes or Ctx.u1b_shapes,
+    )
 
     print(f"dev_validate — profile {args.profile}, stages {', '.join(selected)}")
     print(f"report folder: {root.resolve()}")
