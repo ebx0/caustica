@@ -29,6 +29,10 @@ Thumbs.db
 # Local calibration / caches
 .caustica/
 
+# Dev-validation runner output (scripts/dev_validate.py) — evidence worth keeping
+# gets curated into benchmarks/reports/ by hand, never committed wholesale
+dev_validate_reports/
+
 # App run outputs (figures + npz + reports are regenerated, never committed)
 apps/outputs/
 
