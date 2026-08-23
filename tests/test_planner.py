@@ -295,6 +295,96 @@ def test_a_pre_A2_calibration_entry_still_gets_the_constant(tmp_path):
     assert est.warmup_s == model.GPU_WARMUP_S
 
 
+def cpu_target(**over) -> planner.GPUSpec:
+    """The cpu planning target, built the way
+    :func:`caustica.validation.analytic_suite.plan_target` builds it off the
+    GPU: a key the calibration store matches, and throughput placeholders no
+    honest number is ever derived from."""
+    fields = {
+        "key": "cpu",
+        "vram_gib": 0.0,
+        "mem_bw_gbs": 1.0,
+        "fp32_tflops": 1.0,
+        "device_name": "cpu",
+        "source": "device",
+    }
+    return planner.GPUSpec(**{**fields, **over})
+
+
+def test_a_cpu_plan_does_not_inherit_the_gpu_warmup_constant(tmp_path):
+    """GPU_WARMUP_S is a CUDA measurement; numpy pays none of it.
+
+    Inherited as a default it is not conservative, it is fiction: the
+    analytic suite's planner table predicted 6.0 s for a pair of 1-D solves
+    that cost 0.026 s, all but 0.002 s of it this constant (2026-08-23).
+    Both non-measured paths are pinned, because the fallback lives in each.
+    """
+    grid, med, src = tiny_setup()
+
+    # (a) calibrated, from an entry too old to carry a warmup at all — the
+    # exact shape of the entry that caused the bug.
+    calfile = tmp_path / "calibration.json"
+    pre_a2 = {"a": 1e-9, "b": 2e-10, "backend": "numpy", "samples": [], "shapes": []}
+    calfile.write_text(json.dumps({"version": 1, "devices": {"cpu": pre_a2}}))
+    est = planner.estimate(grid, med, src, gpu=cpu_target(), calibration_path=calfile)
+    assert est.source == "calibrated"
+    assert est.warmup_s == 0.0
+    assert est.t_expected_s == pytest.approx(est.t_step_s * est.steps_expected)
+
+    # (b) db, with no entry for this machine at all.
+    empty = tmp_path / "empty.json"
+    empty.write_text(json.dumps({"version": 1, "devices": {}}))
+    est_db = planner.estimate(grid, med, src, gpu=cpu_target(), calibration_path=empty)
+    assert est_db.source == "db"
+    assert est_db.warmup_s == 0.0
+
+    # ... while the same two paths on a CARD are untouched: the constant is
+    # the whole point of fix A2 there.
+    gpu_db_path = planner.estimate(grid, med, src, gpu="A100", calibration_path=empty)
+    assert (gpu_db_path.source, gpu_db_path.warmup_s) == ("db", model.GPU_WARMUP_S)
+
+
+def test_a_measured_cpu_warmup_is_used_rather_than_zeroed(tmp_path):
+    """Zero is the DEFAULT, not a rule: a cpu entry that measured its own
+    warmup is believed, exactly like a GPU one. ``calibrate(backend="numpy")``
+    has recorded those fields since fix A2 — the bug was only ever entries
+    written before it."""
+    calfile = tmp_path / "calibration.json"
+    entry = planner.calibrate(shapes=((16, 16), (24, 24)), backend="numpy", n_steps=4, path=calfile)
+    assert entry["warmup_context_s"] is not None and entry["warmup_source"] == "probe"
+
+    data = json.loads(calfile.read_text())
+    data["devices"]["cpu"] = {**entry, "warmup_context_s": 0.25, "warmup_per_elem_s": 0.0}
+    calfile.write_text(json.dumps(data))
+    grid, med, src = tiny_setup()
+    est = planner.estimate(grid, med, src, gpu=cpu_target(), calibration_path=calfile)
+    assert est.source == "calibrated"
+    assert est.warmup_s == pytest.approx(0.25)
+
+
+def test_the_cpu_target_is_recognised_by_the_same_rule_the_store_matches_on(tmp_path):
+    """One rule, two readers: if these ever disagreed, a plan could take the
+    cpu warmup branch while the calibration lookup went hunting for a card
+    (or the reverse)."""
+    assert planner.is_cpu_target(cpu_target())
+    assert planner.is_cpu_target(cpu_target(key="unknown:cpu"))
+    # Every real device in the database is a card, however it is spelled.
+    devices, _aliases = planner.load_gpu_db()
+    for key, spec in devices.items():
+        assert not planner.is_cpu_target(spec), key
+    assert not planner.is_cpu_target(planner.spec_for_device("NVIDIA A100-SXM4-40GB"))
+
+    # And the store's own cpu rule agrees about which entry each key reaches.
+    calfile = tmp_path / "calibration.json"
+    calfile.write_text(
+        json.dumps(
+            {"version": 1, "devices": {"cpu": {"a": 1.0}, "NVIDIA A100-SXM4-40GB": {"a": 2.0}}}
+        )
+    )
+    assert cal.find_calibration_for("cpu", calfile)["a"] == 1.0
+    assert cal.find_calibration_for("A100-40GB", calfile)["a"] == 2.0
+
+
 def test_record_warmup_writes_back_what_a_real_run_paid(tmp_path):
     """The probe replays the step composition, not a whole solve: it never
     builds the property maps or the source scatter, so it under-counts. The

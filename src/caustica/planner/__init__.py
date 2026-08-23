@@ -22,7 +22,8 @@ one-time cost a GPU solve pays for cuFFT plans, kernel compilation and the
 first allocations — dropping it made the first real Colab session look like a
 25.9x miss when the per-step accounting was in fact correct (see
 ``model.GPU_WARMUP_S``). ``t_expected_s`` therefore INCLUDES the warmup, and
-``Estimate.warmup_s`` says how much of it that is.
+``Estimate.warmup_s`` says how much of it that is -- zero by default on a
+cpu target, which pays no CUDA context and no cuFFT plan.
 
 VRAM comes from a byte-level inventory of the engine's buffers
 (:mod:`caustica.planner.model`); when it does not fit, ``advice`` carries
@@ -72,6 +73,7 @@ __all__ = [
     "default_calibration_path",
     "estimate",
     "gpu_key_for_device",
+    "is_cpu_target",
     "list_gpus",
     "load_gpu_db",
     "default_probe_shapes",
@@ -186,6 +188,23 @@ def spec_for_device(device_name: str, total_bytes: int | None = None) -> GPUSpec
     )
 
 
+def is_cpu_target(spec: GPUSpec) -> bool:
+    """Is this "device" the host CPU rather than a card?
+
+    The same rule :func:`caustica.planner.calibration.find_calibration_for`
+    matches the ``"cpu"`` calibration entry by: the key's primary token, or
+    the live device name, is literally ``cpu``. Nothing in ``gpu_db.json``
+    can collide with it -- every row there is a vendor product name.
+
+    It exists because one number in this module is CUDA-specific and must
+    not follow a plan onto a CPU: see ``model.GPU_WARMUP_S`` in
+    :func:`estimate`.
+    """
+    key_token = _norm_device(spec.key.split("-")[0])
+    name = _norm_device(spec.device_name) if spec.device_name else ""
+    return key_token == "cpu" or name == "cpu"
+
+
 def _resolve_gpu(name: str | GPUSpec) -> GPUSpec:
     if isinstance(name, GPUSpec):
         return name
@@ -297,6 +316,16 @@ def estimate(
     for n in mem.padded_shape:
         p_elems *= n
 
+    # The one-time cost a run pays before its per-step clock means anything.
+    # GPU_WARMUP_S is a MEASURED CUDA constant -- context creation, cuFFT
+    # plans, kernel compilation -- and a numpy run pays none of it, so on a
+    # cpu target the honest default is zero rather than a conservative
+    # guess. (Inherited, it made the analytic suite's planner table predict
+    # 6 s for a pair of 1-D solves that cost 0.03 s: 3 s of pure fiction per
+    # solve, 2026-08-23.) A measured or a warmup-carrying calibrated entry
+    # overrides this either way; it is only ever the fallback.
+    warmup_default = 0.0 if is_cpu_target(gpu_spec) else model.GPU_WARMUP_S
+
     warnings: list[str] = []
     if measure:
         run = measure_step_time(
@@ -317,8 +346,9 @@ def estimate(
             t_step = model.step_time(entry["a"], entry["b"], p_elems)
             # Entries written before fix A2 carry no warmup at all; a GPU
             # entry without one gets the constant rather than a silent zero,
-            # which is the term the whole fix exists to stop dropping.
-            warmup_s = calibrated_warmup(entry, p_elems, default=model.GPU_WARMUP_S)
+            # which is the term the whole fix exists to stop dropping. A cpu
+            # entry gets zero, which is what a cpu actually pays.
+            warmup_s = calibrated_warmup(entry, p_elems, default=warmup_default)
             src_label = "calibrated"
             # A "calibrated" label is a promise about accuracy; these two
             # warnings are where the label stops being able to keep it.
@@ -341,7 +371,7 @@ def estimate(
                 gpu_spec.fp32_tflops, gpu_spec.mem_bw_gbs, grid.ndim, nonlinear
             )
             t_step = model.step_time(a, b, p_elems)
-            warmup_s = model.GPU_WARMUP_S
+            warmup_s = warmup_default
             src_label = "db"
             warnings.append(
                 "db estimate is datasheet-coarse (~2x); run planner.calibrate() on the "
