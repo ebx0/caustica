@@ -87,9 +87,7 @@ def kappa_sinc(ks: list, c_ref: float, dt: float, xp: ModuleType):
     return xp.sinc(c_ref * xp.sqrt(k2) * (dt / (2.0 * np.pi))).astype(xp.float32)
 
 
-def spectral_derivative_factors(
-    ks: list, kappa, shape: tuple[int, ...], xp: ModuleType
-) -> list:
+def spectral_derivative_factors(ks: list, kappa, shape: tuple[int, ...], xp: ModuleType) -> list:
     """Per-axis complex factors ``i k_ax kappa`` (complex64) for grad/div.
 
     The Nyquist wavenumber is DROPPED on every even-length axis. That is one
