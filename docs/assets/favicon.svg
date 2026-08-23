@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="caustica">
+  <title>caustica</title>
+  <!-- Same mark as logo.svg, in a blue that stays legible on both a light and
+       a dark browser tab. Heavier strokes: this is read at 16 px. -->
+  <g fill="none" stroke="#2F6699" stroke-linecap="round">
+    <path d="M17 9 A 26 26 0 0 0 17 55" stroke-width="8"/>
+    <path d="M26 18 A 16 16 0 0 0 26 46" stroke-width="5" opacity="0.7"/>
+  </g>
+  <circle cx="50" cy="32" r="6" fill="#2F6699"/>
+</svg>

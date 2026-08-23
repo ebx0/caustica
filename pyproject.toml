@@ -40,6 +40,7 @@ dependencies = [
 gpu = ["cupy-cuda12x>=13.0"]
 kwave = ["k-wave-python>=0.6"]
 report = ["matplotlib>=3.8"]
+docs = ["mkdocs-material>=9.5"]
 dev = [
     "pytest>=8",
     "pytest-cov",
