@@ -20,7 +20,9 @@ exposed the four defects fixed in `aed5088` + `e2a1a23`:
 
 What PASSED, cleanly: **M7.parity** (numpy vs cupy, in-memory fp32: rel L∞
 1.5e-6 phasor / 1.2e-6 p_max) and **M8.oom** (43.4 GiB refused, exit 3, with
-advice). `parity_fields.npz` holds the four fields; `stored_float16_reference`
+advice). `parity_fields.npz` holds the four fields (local-only: `*.npz` is
+gitignored repo-wide, so the repo copy of this folder carries the numbers in
+`gpu_gates.json` instead); `stored_float16_reference`
 in the JSON shows the same fields after float16 quantization (~4.9e-4 = 1 ULP),
 which is why the parity gate measures memory, not files.
 

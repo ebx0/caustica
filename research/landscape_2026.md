@@ -9,10 +9,12 @@ acoustic wave solver on the market for focused ultrasound", and what is the shor
 `LICENSE` file or the API's SPDX field. Anything not confirmed against a primary source is marked
 **`[unverified]`** and no date or version number in this document was inferred or reconstructed.
 
-**Relationship to the earlier reports.** `research/gemini1.md` and `research/gemini2.md` (both
-2026-08-10) laid out an architecture thesis. This report does **not** repeat them; it audits their
-market claims against primary sources and updates them for 2025–2026. Several of their central
-premises are now **false**. Section 0 lists those corrections first, because they change the strategy.
+**Relationship to the earlier reports.** `gemini1.md` and `gemini2.md` (both 2026-08-10) laid
+out an architecture thesis. This report does **not** repeat them; it audits their market claims
+against primary sources and updates them for 2025–2026. Several of their central premises are now
+**false** — Section 0 lists those corrections first, because they change the strategy. The two
+files were removed from the tree in the 2026-08-23 cleanup (their audited-and-corrected content
+lives HERE; the originals survive in git history before that date).
 
 ---
 
