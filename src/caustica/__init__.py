@@ -46,19 +46,30 @@ _LAZY = {
     # M11: a Study composes simulate(), so reaching it costs the same
     # runner/h5py import — which is exactly why it lives here and not above.
     "Study": "caustica.study",
+    # M18: the sonication -> heating -> dose chain. These need nothing
+    # heavier than numpy today; they are listed here rather than imported
+    # eagerly so the door keeps ONE rule (value types above, everything
+    # composed lazy) and a future dependency in the thermal chain cannot
+    # quietly land in `import caustica`.
+    "HeatingSource": "caustica.sensors",
+    "PennesSolver": "caustica.thermal",
+    "ThermalMedium": "caustica.thermal",
 }
 
 __all__ = [
     "Backend",
     "CausticaWarning",
     "Grid",
+    "HeatingSource",
     "Material",
     "MaterialDB",
     "Medium",
     "PMLSpec",
+    "PennesSolver",
     "SimulationError",
     "SimulationRun",
     "Study",
+    "ThermalMedium",
     "__version__",
     "cpu_fft_workers",
     "cupy_available",
