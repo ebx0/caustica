@@ -3,10 +3,29 @@
 :func:`measure_step_time` replays ``run_cw_kspace_pstd``'s step composition
 op-for-op with synthetic data (timing/memory only, no physics claim), so the
 measured per-step cost pays exactly the FFT mix and elementwise passes of a
-real solve. :func:`calibrate` fits ``t_step = a*P*log2(P) + b*P`` over >= 2
-grid sizes and persists the coefficients to ``~/.caustica/calibration.json``
-keyed by device name; estimates targeting a matching device are then labeled
-``"calibrated"`` (the M8 ±25% gate applies to this path, on-device).
+real solve. :func:`calibrate` measures >= 2 grid sizes and persists them to
+``~/.caustica/calibration.json`` keyed by device name; estimates targeting a
+matching device are then labeled ``"calibrated"`` (the M8 ±25% gate applies
+to this path, on-device).
+
+BOTH halves of the wall-time model — the per-step cost and the one-time
+warmup — are predicted by INTERPOLATING their measured samples
+(:func:`predict_step_time`, :func:`calibrated_warmup`) rather than by forcing
+a global law through them. The fits (``t_step = a*P*log2(P) + b*P``, and
+``warmup = context + per_elem*P``) are still computed and stored — older
+stores carry nothing else, and they remain the fallback and a diagnostic —
+but on a real device neither is a law. On an RTX PRO 6000 Blackwell
+(2026-08-23):
+
+* ``t_step/P`` RISES 1.70x from 216^3 to 432^3 (small grids are
+  disproportionately fast), and the two-term fit missed its own three
+  saturating probes by 70%;
+* warmup is SUPERLINEAR in P (0.069 -> 0.096 -> 0.124 us/element over
+  400^3/512^3/640^3), so the linear refit lands on a negative context,
+  clamps it to zero, and misses its own smallest sample by 108% — and
+  over-predicted a real 192^3 run's warmup by 2x.
+
+M8.time failed that session on the warmup half, not the per-step half.
 
 Works on the numpy backend too (device key ``"cpu"``) — that is how the
 mechanics are tested locally before the Colab session.
@@ -14,7 +33,9 @@ mechanics are tested locally before the Colab session.
 
 from __future__ import annotations
 
+import bisect
 import json
+import math
 import re
 import time
 from datetime import datetime
@@ -24,7 +45,7 @@ from statistics import median
 import numpy as np
 
 from caustica.core.backend import get_backend
-from caustica.planner.model import fft_sizes
+from caustica.planner.model import fft_sizes, step_time
 from caustica.solvers.kspace import operators as ops
 
 
@@ -236,18 +257,35 @@ def measure_step_time(
     }
 
 
-def fit_max_rel_residual(samples: list[tuple[int, float]], a: float, b: float) -> float:
-    """Worst relative miss of ``(a, b)`` against the samples it was fitted to.
+def max_rel_residual(samples: list[tuple[int, float]], predict) -> float:
+    """Worst relative miss of ``predict`` against the samples it was fitted to.
 
     A model that cannot reproduce its own measurements will not survive
     extrapolation, and this is the number that says so out loud.
     """
     worst = 0.0
     for p_elems, t in samples:
-        pred = a * p_elems * np.log2(p_elems) + b * p_elems
         if t > 0.0:
-            worst = max(worst, abs(pred - t) / t)
+            worst = max(worst, abs(predict(p_elems) - t) / t)
     return float(worst)
+
+
+def fit_max_rel_residual(samples: list[tuple[int, float]], a: float, b: float) -> float:
+    """:func:`max_rel_residual` for the ``a*P*log2(P) + b*P`` time model."""
+    return max_rel_residual(samples, lambda p: a * p * np.log2(p) + b * p)
+
+
+def warmup_fit_max_rel_residual(
+    samples: list[tuple[int, float]], context_s: float, per_elem_s: float
+) -> float:
+    """:func:`max_rel_residual` for the two-term warmup model.
+
+    The number that says the linear model is the wrong shape: on the real
+    Blackwell warmup triple (400^3 4.389 s, 512^3 12.838 s, 640^3 32.375 s)
+    the refit lands on context 0.0 + 1.4264e-7 s/element and misses the
+    smallest of its own three samples by 108% (measured, 2026-08-23).
+    """
+    return max_rel_residual(samples, lambda p: max(0.0, context_s + per_elem_s * p))
 
 
 def fit_time_model(samples: list[tuple[int, float]]) -> tuple[float, float]:
@@ -268,7 +306,183 @@ def fit_time_model(samples: list[tuple[int, float]]) -> tuple[float, float]:
 
 #: Above this, the fit is not reproducing its own samples and extrapolating
 #: it upward is guesswork; the throughput-anchored fallback takes over.
+#: The same limit grades the interpolator, via its leave-one-out error.
 FIT_RESIDUAL_LIMIT = 0.10
+
+
+def _dedupe(samples: list[tuple[int, float]]) -> list[tuple[int, float]]:
+    """Sorted by ``P``, one time per size — the SLOWER one when a size was
+    measured twice. Two timings of one shape disagree only by noise, and the
+    planner's job is not to be optimistic."""
+    by_p: dict[int, float] = {}
+    for p_elems, t in samples:
+        key = int(p_elems)
+        by_p[key] = max(by_p.get(key, 0.0), float(t))
+    return sorted(by_p.items())
+
+
+def entry_samples(entry: dict) -> list[tuple[int, float]]:
+    """The ``(P, t_step)`` measurements an entry carries, sorted by ``P``.
+
+    Tolerant of what is actually on disk: JSON pairs, missing key, empty
+    list, junk rows, non-positive or non-finite times.
+    """
+    clean: list[tuple[int, float]] = []
+    for row in entry.get("samples") or ():
+        try:
+            p_elems, t = int(row[0]), float(row[1])
+        except (TypeError, ValueError, IndexError, KeyError):
+            continue
+        if p_elems > 0 and t > 0.0 and math.isfinite(t):
+            clean.append((p_elems, t))
+    return _dedupe(clean)
+
+
+def _monotone_knots(samples: list[tuple[int, float]]) -> tuple[list[float], list[float]]:
+    """Sorted knots with a running max over ``t``: a bigger grid is never
+    predicted cheaper than a smaller one.
+
+    A falling measurement is noise (or a latency-bound probe), not a device
+    that speeds up as the problem grows — the same judgment
+    :func:`record_warmup_model` makes about a falling warmup. The first A100
+    calibration measured exactly that: 1.061 ms at 110,592 elements and
+    1.001 ms at 373,248.
+    """
+    ps: list[float] = []
+    ts: list[float] = []
+    running = 0.0
+    for p_elems, t in _dedupe(samples):
+        running = max(running, t)
+        ps.append(float(p_elems))
+        ts.append(running)
+    return ps, ts
+
+
+def _interp_loglog(samples: list[tuple[int, float]], p_elems: int, *, below: str) -> float:
+    """Monotone piecewise-linear interpolation of log(cost) against log(P).
+
+    One machine, two cost curves. Between knots it is a local power law, so
+    the measurements are reproduced exactly and there is nothing for a global
+    law to miss. Above the largest sample it continues the LAST segment's
+    slope, but never predicts a better per-element rate than that sample
+    measured: the slope was measured over a finite range, and continued far
+    enough it would claim a throughput the device has never demonstrated.
+    Extrapolation may assume the card stays as fast as its best measurement.
+    It may not assume it gets faster.
+
+    ``below`` is where the two curves genuinely differ, and each rule is a
+    measurement rather than a taste:
+
+    * ``"value"`` (per-step time) — hold the smallest sample's TIME. A step
+      has a hard floor: the launch and the fixed per-kernel cost. The first
+      A100 probe measured 1.061 ms at 110,592 elements and 1.001 ms at
+      373,248 — 3.4x the work for the same time. Continuing a log-log slope
+      downward through that regime predicts absurdly fast steps on grids that
+      are latency-bound in practice.
+    * ``"rate"`` (warmup) — hold the smallest sample's PER-ELEMENT rate. Plan
+      creation has no such floor; it shrinks with the transform. Checked
+      against the one measurement below the sampled range: from warmups at
+      400^3/512^3/640^3 this rule predicts 0.485 s for 192^3 where a real run
+      paid 0.501 s (-3.1%). Holding the VALUE instead would have said 4.389 s
+      (+776%), and the linear two-term model said 1.010 s (+101%).
+    """
+    if not samples:
+        raise ValueError("interpolation needs at least one (P, cost) sample")
+    ps, ts = _monotone_knots(samples)
+    p = float(p_elems)
+    if p <= ps[0] or len(ps) == 1:
+        return ts[0] if below == "value" else ts[0] * (p / ps[0])
+    if p >= ps[-1]:
+        slope = (math.log(ts[-1]) - math.log(ts[-2])) / (math.log(ps[-1]) - math.log(ps[-2]))
+        if not math.isfinite(slope):
+            slope = 1.0
+        extrapolated = ts[-1] * (p / ps[-1]) ** slope
+        best_rate_floor = ts[-1] * (p / ps[-1])  # == (cost_max / P_max) * P, exact at the knot
+        return max(extrapolated, best_rate_floor)
+    i = min(bisect.bisect_right(ps, p) - 1, len(ps) - 2)
+    slope = (math.log(ts[i + 1]) - math.log(ts[i])) / (math.log(ps[i + 1]) - math.log(ps[i]))
+    return ts[i] * (p / ps[i]) ** slope
+
+
+def interp_step_time(samples: list[tuple[int, float]], p_elems: int) -> float:
+    """Per-step time at ``p_elems``, interpolated through the measurements.
+
+    The calibrated path's predictor, because a device's per-element step cost
+    is a *curve*: on an RTX PRO 6000 Blackwell it RISES 1.70x from 216^3
+    (0.217 ns/element) to 432^3 (0.370 ns/element) — small grids are
+    disproportionately fast — and the global ``a*P*log2(P) + b*P`` fit that
+    has to cross all of that missed its own probes by 70% (measured,
+    2026-08-23). See :func:`_interp_loglog` for the out-of-range rules.
+    """
+    return _interp_loglog(samples, p_elems, below="value")
+
+
+def interp_warmup(samples: list[tuple[int, float]], p_elems: int) -> float:
+    """One-time cost at ``p_elems``, interpolated through real runs' warmups.
+
+    Same medicine as :func:`interp_step_time`, for the same reason: the
+    Blackwell's measured warmups are SUPERLINEAR in P (0.069, 0.096 and
+    0.124 microseconds per element at 400^3, 512^3, 640^3), and the linear
+    ``context + per_elem * P`` model refitted on them lands on a negative
+    context — clamped to zero — and misses its own smallest sample by 108%.
+    """
+    return max(0.0, _interp_loglog(samples, p_elems, below="rate"))
+
+
+def interp_loo_rel_err(samples: list[tuple[int, float]], *, below: str = "value") -> float | None:
+    """Worst leave-one-out miss of the interpolator, or None.
+
+    The honest quality number for an interpolator. Its residual against the
+    samples it passes through is 0 by construction — reporting THAT would be
+    self-flattery — so each interior sample is predicted from the others
+    instead, which is exactly what the planner does for a grid size that was
+    never probed. None when there is no interior sample (< 3 probes): with
+    two, there is nothing to hold out and nothing honest to claim.
+
+    ``below`` never actually applies (a held-out interior sample is inside
+    what remains), and is carried only so the two curves cannot drift apart.
+    """
+    pts = _dedupe(samples)
+    if len(pts) < 3:
+        return None
+    worst = 0.0
+    for i in range(1, len(pts) - 1):
+        p_elems, t = pts[i]
+        pred = _interp_loglog(pts[:i] + pts[i + 1 :], p_elems, below=below)
+        worst = max(worst, abs(pred - t) / t)
+    return float(worst)
+
+
+def predict_step_time(entry: dict, p_elems: int) -> float:
+    """Per-step time a calibration entry predicts for a ``p_elems`` grid.
+
+    Interpolation wins whenever the entry carries >= 2 samples. Entries that
+    carry only ``(a, b)`` — everything written before 2026-08-23 — keep the
+    global two-term model, byte for byte.
+    """
+    samples = entry_samples(entry)
+    if len(samples) >= 2:
+        return interp_step_time(samples, p_elems)
+    return step_time(float(entry["a"]), float(entry["b"]), p_elems)
+
+
+def time_model_quality(entry: dict) -> tuple[str, float | None]:
+    """``(mode, worst_rel_err)`` for whatever drives this entry's prediction.
+
+    ``"interpolated"`` reports leave-one-out error (computed on the spot when
+    an older store did not record it); ``"fit"`` reports the global model's
+    residual against its own samples. Two different numbers, and pairing the
+    wrong one with the mode would either flatter the interpolator (residual
+    0 by construction) or condemn it for a defect it does not have.
+    """
+    samples = entry_samples(entry)
+    if len(samples) >= 2:
+        loo = entry.get("interp_loo_rel_err")
+        if loo is None:
+            loo = interp_loo_rel_err(samples)
+        return "interpolated", (float(loo) if loo is not None else None)
+    residual = entry.get("fit_max_rel_residual")
+    return "fit", (float(residual) if residual is not None else None)
 
 
 def calibrate(
@@ -279,7 +493,13 @@ def calibrate(
     n_steps: int = 20,
     path: str | Path | None = None,
 ) -> dict:
-    """Measure ``shapes`` on this device, fit ``(a, b)``, persist, return entry.
+    """Measure ``shapes`` on this device, persist the samples, return entry.
+
+    The samples ARE the model: :func:`predict_step_time` interpolates them.
+    ``(a, b)`` is fitted and stored alongside for older readers and as a
+    diagnostic — ``fit_max_rel_residual`` says how badly one global law has
+    to miss this device's curve, and ``interp_loo_rel_err`` says how well the
+    interpolator does on a probe it was not shown.
 
     ``shapes=None`` (the default) sizes the probe for the executing device
     via :func:`default_probe_shapes` -- a fixed pair was the reason the first
@@ -299,7 +519,7 @@ def calibrate(
     samples = [(r["p_elems"], r["t_step_s"]) for r in runs]
     a, b = fit_time_model(samples)
     residual = fit_max_rel_residual(samples, a, b)
-    fit_mode = "nnls"
+    global_fit_mode = "nnls"
     if residual > FIT_RESIDUAL_LIMIT:
         # The nonnegativity clip has left a model that misses its own
         # measurements. Anchor on the LARGEST sample instead: it is the most
@@ -307,8 +527,13 @@ def calibrate(
         # here is heading into.
         p_big, t_big = max(samples, key=lambda s: s[0])
         a, b = 0.0, t_big / p_big
-        fit_mode = "throughput-anchored"
+        global_fit_mode = "throughput-anchored"
         residual = fit_max_rel_residual(samples, a, b)
+    # (a, b) is kept for backward compatibility and as a diagnostic, but it
+    # does not predict any more: with >= 2 samples on file, estimate() reads
+    # them through interp_step_time(). fit_max_rel_residual stays the GLOBAL
+    # model's number -- the interpolator's is leave-one-out, below.
+    loo = interp_loo_rel_err(samples)
 
     # Warmup is not a constant: it is a per-process cost (CUDA context,
     # module load) plus a per-shape cost (cuFFT plans, kernel specialization)
@@ -322,8 +547,10 @@ def calibrate(
     entry = {
         "a": a,
         "b": b,
-        "fit_mode": fit_mode,
+        "fit_mode": "interpolated",
+        "global_fit_mode": global_fit_mode,
         "fit_max_rel_residual": residual,
+        "interp_loo_rel_err": loo,
         "p_max_probe": max(p for p, _ in samples),
         "warmup_context_s": context_s,
         "warmup_per_elem_s": per_elem,
@@ -356,18 +583,58 @@ def calibrate(
 EXTRAPOLATION_WARN_FACTOR = 8.0
 
 
+def entry_warmup_samples(entry: dict) -> list[tuple[int, float]]:
+    """The ``(P, warmup_s)`` measurements an entry carries, sorted by ``P``.
+
+    Written by :func:`record_warmup_model` from whole runs — the gate suite's
+    ladder — not by the probe.
+    """
+    clean: list[tuple[int, float]] = []
+    for row in entry.get("warmup_samples") or ():
+        try:
+            p_elems, w = int(row[0]), float(row[1])
+        except (TypeError, ValueError, IndexError, KeyError):
+            continue
+        if p_elems > 0 and w > 0.0 and math.isfinite(w):
+            clean.append((p_elems, w))
+    return _dedupe(clean)
+
+
 def calibrated_warmup(entry: dict, p_elems: int, default: float = 0.0) -> float:
     """One-time cost this entry predicts for a run of ``p_elems`` elements.
 
-    Prefers the two-term (context + per-element) model when the entry
-    carries it; falls back to the flat ``warmup_s`` that pre-2026-08-23
-    entries have, and to ``default`` when the entry has neither.
+    Interpolates the measured warmups when the entry carries >= 2 of them
+    (:func:`interp_warmup`) — the same fix, for the same reason, as the
+    per-step curve: warmup is superlinear in P on a real card and the linear
+    two-term model cannot bend that way. Falls back to that two-term model
+    (context + per-element), then to the flat ``warmup_s`` that pre-fix-A2
+    entries have, then to ``default``.
     """
+    samples = entry_warmup_samples(entry)
+    if len(samples) >= 2:
+        return interp_warmup(samples, p_elems)
     ctx, per = entry.get("warmup_context_s"), entry.get("warmup_per_elem_s")
     if ctx is not None and per is not None:
         return max(0.0, float(ctx) + float(per) * p_elems)
     flat = entry.get("warmup_s")
     return float(flat) if flat is not None else default
+
+
+def warmup_model_quality(entry: dict) -> tuple[str, float | None]:
+    """``(mode, worst_rel_err)`` for whatever drives this entry's warmup.
+
+    The warmup twin of :func:`time_model_quality`: ``"interpolated"`` reports
+    leave-one-out error, ``"fit"`` the two-term model's residual against the
+    samples it was fitted to (None when the entry never recorded any).
+    """
+    samples = entry_warmup_samples(entry)
+    if len(samples) >= 2:
+        loo = entry.get("warmup_loo_rel_err")
+        if loo is None:
+            loo = interp_loo_rel_err(samples, below="rate")
+        return "interpolated", (float(loo) if loo is not None else None)
+    residual = entry.get("warmup_fit_max_rel_residual")
+    return "fit", (float(residual) if residual is not None else None)
 
 
 def record_warmup(
@@ -400,18 +667,24 @@ def record_warmup(
     measured = max(0.0, float(warmup_s))
     entry["warmup_s"] = measured
     entry["warmup_source"] = source
+    # The caller is asserting ONE number. Older samples would outrank it --
+    # calibrated_warmup interpolates them when they exist -- so they go: a
+    # stale curve that contradicts a fresh measurement is worse than no curve.
+    entry.pop("warmup_loo_rel_err", None)
     if p_elems:
         # A real run at a KNOWN size: keep the fitted per-element slope and
         # move the constant term to match what was actually paid.
         per = float(entry.get("warmup_per_elem_s") or 0.0)
         entry["warmup_context_s"] = max(0.0, measured - per * int(p_elems))
         entry["warmup_per_elem_s"] = per
+        entry["warmup_samples"] = [[int(p_elems), measured]]  # one point: not a curve yet
     else:
         # No size context: the caller is asserting a flat number, so make
         # the two-term model reduce to exactly that rather than leaving a
         # stale slope to contradict it.
         entry["warmup_context_s"] = measured
         entry["warmup_per_elem_s"] = 0.0
+        entry.pop("warmup_samples", None)
     entry["warmup_recorded_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(data, indent=2))
@@ -425,13 +698,18 @@ def record_warmup_model(
     source: str = "measured",
     path: str | Path | None = None,
 ) -> dict | None:
-    """Refit warmup = context + per_elem * P from REAL runs, and store it.
+    """Store REAL runs' warmups, and refit context + per_elem * P from them.
 
     Strictly better data than the probe: these are whole solves, at several
     sizes, each in its own process, so every one of them paid the CUDA
     context AND its own plan creation -- which is exactly what the two terms
     mean. With a single sample only the constant can move, and the probe's
     slope is kept.
+
+    The SAMPLES are what predicts (:func:`calibrated_warmup` interpolates
+    them); the two-term fit is kept as the fallback for entries that have
+    none, and its residual is kept as the evidence that it is the wrong
+    shape. On the Blackwell's real triple it misses by 108%.
 
     Returns the updated entry, or None when the device has no calibration
     (inventing one would let the planner call a datasheet guess
@@ -460,6 +738,15 @@ def record_warmup_model(
     entry["warmup_s"] = max(0.0, max(w for _, w in samples))
     entry["warmup_source"] = source
     entry["warmup_samples"] = [[int(p), float(w)] for p, w in samples]
+    entry["warmup_mode"] = "interpolated" if len(samples) >= 2 else "fit"
+    entry["warmup_fit_max_rel_residual"] = warmup_fit_max_rel_residual(
+        [(int(p), float(w)) for p, w in samples],
+        float(entry["warmup_context_s"]),
+        float(entry["warmup_per_elem_s"]),
+    )
+    entry["warmup_loo_rel_err"] = interp_loo_rel_err(
+        [(int(p), float(w)) for p, w in samples], below="rate"
+    )
     entry["warmup_recorded_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(data, indent=2))

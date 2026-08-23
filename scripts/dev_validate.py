@@ -2084,14 +2084,28 @@ def stage_u3(ctx: Ctx) -> Outcome:
         )
 
     residual = entry.get("fit_max_rel_residual")
+    # The honest quality number depends on what actually predicts: an
+    # interpolated entry is graded by leave-one-out (its on-sample residual is
+    # 0 by construction, and the GLOBAL fit's residual only says the fallback
+    # would have been bad - on a curved device it reads 0.705 forever).
+    loo = entry.get("interp_loo_rel_err")
+    interpolated = entry.get("fit_mode") == "interpolated" and loo is not None
+    quality_name = "interp_loo_rel_err < 0.10" if interpolated else "fit_max_rel_residual < 0.10"
+    quality_val = loo if interpolated else residual
+    warm_loo = entry.get("warmup_loo_rel_err")
     checks = [
         ("probe shapes recorded", bool(entry.get("shapes")), str(entry.get("shapes"))),
         (">=2 probe shapes", len(entry.get("shapes") or []) >= 2, str(entry.get("shapes"))),
         ("fit_mode recorded", bool(entry.get("fit_mode")), str(entry.get("fit_mode"))),
         (
-            "fit_max_rel_residual < 0.10",
-            residual is not None and float(residual) < cal.FIT_RESIDUAL_LIMIT,
-            _num(residual),
+            quality_name,
+            quality_val is not None and float(quality_val) < cal.FIT_RESIDUAL_LIMIT,
+            _num(quality_val),
+        ),
+        (
+            "warmup_loo_rel_err recorded (info)",
+            True,  # informational: absent on entries without >=3 warmup samples
+            _num(warm_loo),
         ),
         (
             "warmup_context_s present",
@@ -2148,7 +2162,8 @@ def stage_u3(ctx: Ctx) -> Outcome:
 
     verdict, note = _verdict_from(checks)
     numbers = (
-        f"{device}; fit {entry.get('fit_mode')} residual {_num(residual, '.3f')}; "
+        f"{device}; fit {entry.get('fit_mode')} "
+        f"{'loo' if interpolated else 'residual'} {_num(quality_val, '.3f')}; "
         f"{side}^3 t_step dev {_num(spot.get('dev_pct'), '.1f')}%"
     )
     return Outcome(
