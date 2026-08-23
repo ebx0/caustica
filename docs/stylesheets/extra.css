@@ -35,11 +35,51 @@
   border-radius: 8px;
 }
 
-/* Hero: the one-line pitch under the title. */
+/* The split hero: the pitch on the left, a real solve running on the right. */
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  gap: 2.4rem;
+  align-items: center;
+  margin: 0 0 3rem;
+}
+
+.md-typeset .hero-copy > h1 {
+  margin-top: 0;
+}
+
 .hero-tagline {
-  font-size: 1.15rem;
-  line-height: 1.6;
+  font-size: 1.1rem;
+  line-height: 1.65;
   color: var(--md-default-fg-color--light);
+}
+
+/* The artwork carries its own rounded panel; it needs room, not a frame. */
+.hero-art img {
+  display: block;
+  width: 100%;
+  max-width: 480px;
+  margin-inline: auto;
+  border-radius: 14px;
+}
+
+.md-typeset .hero-art small {
+  display: block;
+  max-width: 480px;
+  margin-top: 0.7rem;
+  margin-inline: auto;
+  line-height: 1.5;
+  color: var(--md-default-fg-color--light);
+}
+
+/* One column below Material's tablet breakpoint: the name still comes first,
+   because a full-width square would otherwise fill the viewport before it. */
+@media screen and (max-width: 59.9375em) {
+  .hero {
+    grid-template-columns: 1fr;
+    gap: 1.4rem;
+    margin-bottom: 2rem;
+  }
 }
 
 /* Feature cards: a touch more air than the stock grid. */
@@ -49,16 +89,4 @@
 
 .md-typeset .grid.cards > ul > li > hr {
   margin-block: 0.6em;
-}
-
-/* The animated 2-D section at the top of the landing page. It carries its own
-   background, so it needs no frame of its own -- only room to breathe. */
-.hero-field {
-  margin: 0 0 1.6rem;
-}
-
-.hero-field img {
-  width: 100%;
-  border-radius: 10px;
-  display: block;
 }

@@ -3,10 +3,8 @@ hide:
   - navigation
 ---
 
-<div class="hero-field" markdown>
-![A focused ultrasound beam converging in water: one plane of a real caustica solve, with the wavefronts animated over one acoustic period](assets/hero-field.svg#only-light)
-![A focused ultrasound beam converging in water: one plane of a real caustica solve, with the wavefronts animated over one acoustic period](assets/hero-field-dark.svg#only-dark)
-</div>
+<div class="hero" markdown>
+<div class="hero-copy" markdown>
 
 # caustica
 
@@ -18,14 +16,18 @@ and the same four commands on a laptop and in a Colab cell.
 
 [Get started](#quickstart){ .md-button .md-button--primary }
 [Write a job](job_reference.md){ .md-button }
-[GitHub](https://github.com/ebx0/caustica){ .md-button }
+[:octicons-mark-github-16: GitHub](https://github.com/ebx0/caustica){ .md-button }
 
+</div>
+<div class="hero-art" markdown>
+![A 1 MHz focused ultrasound beam converging on its focus in water, with the wavefronts animated over one acoustic period](assets/hero-field.svg#only-light)
+![A 1 MHz focused ultrasound beam converging on its focus in water, with the wavefronts animated over one acoustic period](assets/hero-field-dark.svg#only-dark)
 <small markdown>
-Above: one x–z plane of a real solve — a 1 MHz focused bowl in water, run by the k-space
-solver this library ships. The envelope is |P|; the moving fronts are Re{P·e^(−iωt)} over one
-acoustic period, so the loop closes on itself exactly. `python scripts/make_hero.py --resolve`
-re-solves it.
+One x–z plane of a real solve. Brightness is |P|; the moving fringes are Re{P·e^(−iωt)}
+over one acoustic period, so the loop closes on itself exactly.
 </small>
+</div>
+</div>
 
 !!! warning "Pre-alpha, and honest about it"
 
@@ -37,23 +39,49 @@ re-solves it.
 
 ## Quickstart
 
-No checkout, no external data:
+No checkout, no external data — the example job ships inside the wheel.
 
-```bash
-pip install "caustica[report] @ git+https://github.com/ebx0/caustica"
+=== "Command line"
 
-caustica example water_bowl_mini      # copies a packaged, self-contained job here
-caustica validate water_bowl_mini.json
-caustica run water_bowl_mini.json     # seconds on CPU; writes runs/water_bowl_mini/
-caustica report runs/water_bowl_mini  # local HTML + figures
-```
+    ```bash
+    pip install "caustica[report] @ git+https://github.com/ebx0/caustica"
 
-Prefix each line with `!` and the same four commands are a Colab session.
+    caustica example water_bowl_mini      # copies a packaged, self-contained job here
+    caustica validate water_bowl_mini.json
+    caustica run water_bowl_mini.json     # seconds on CPU; writes runs/water_bowl_mini/
+    caustica report runs/water_bowl_mini  # local HTML + figures
+    ```
+
+    Prefix each line with `!` and the same four commands are a Colab cell.
+
+=== "Python"
+
+    ```python
+    import caustica
+
+    res = caustica.simulate(
+        "water_bowl_mini.json",   # a job path, a job dict, an ExplicitJobConfig, or a BuiltJob
+        solver="westervelt",
+        harmonics=(1, 2),
+        out=None,                 # None = in memory; a path = the full run folder
+        progress="auto",
+    )
+
+    res.metrics        # focal metrics — the definitions the HTML report quotes
+    res.result.phasor  # the complex field, as the solver produced it
+    res.save("result.h5")
+    ```
+
+    `out=None` writes nothing at all, but it does **not** skip the planner or the two
+    pre-run gates: a run that will not fit in VRAM, or that a CPU would take hours over,
+    is refused here exactly as `caustica run` refuses it — same message, same exit code,
+    carried on `SimulationError.exit_code`.
+
+    [:octicons-arrow-right-24: The rest of the Python API](library.md)
 
 ## How it fits together
 
-Ten steps from an empty shell to a focal metric — the same ten decisions whether you write
-a job file, call `caustica.simulate()` from Python, or run it in a Colab cell.
+Ten decisions, in the order you meet them — and none of the thumbnails is a mock-up.
 
 <div class="howto" markdown>
 ![How to use caustica, in ten steps](assets/how-to-use-real.svg#only-light)
@@ -61,10 +89,10 @@ a job file, call `caustica.simulate()` from Python, or run it in a Colab cell.
 </div>
 
 <small markdown>
-The thumbnails are not decoration: each one is drawn by calling caustica. The absorbing
-profile, the constructive geometry, the spiral element table, the steered Rayleigh preview,
-the Fubini harmonics, the planner's own estimate, and the axial line and focal plane of a
-real solve. Regenerate the whole diagram with `python scripts/make_howto.py`.
+Each one is drawn by calling caustica: the absorbing profile, the constructive geometry, the
+spiral element table, the steered Rayleigh preview, the Fubini harmonics, the planner's own
+estimate, and the axial line and focal plane of a real solve. `python scripts/make_howto.py`
+regenerates the diagram.
 </small>
 
 ## What you get
@@ -89,6 +117,8 @@ real solve. Regenerate the whole diagram with `python scripts/make_howto.py`.
     wall-clock, then refuses a run that will not fit or that a CPU would take hours over.
     The refusal names the fix for the machine you are on.
 
+    [:octicons-arrow-right-24: The planner](library.md#planner-will-it-fit-how-long-will-it-take)
+
 -   :material-layers-triple-outline:{ .lg .middle } **Anatomy in, per-voxel physics out**
 
     ---
@@ -96,7 +126,7 @@ real solve. Regenerate the whole diagram with `python scripts/make_howto.py`.
     Constructive solid geometry, or a segmented volume resampled onto your grid, with
     every label carrying sound speed, density, absorption and B/A.
 
-    [:octicons-arrow-right-24: Phantoms](uwcem.md)
+    [:octicons-arrow-right-24: Medium kinds](job_reference.md#medium-kinds)
 
 -   :material-check-decagram-outline:{ .lg .middle } **Gated by analytic references**
 
@@ -138,32 +168,8 @@ One API, a registry of engines:
 | `kwave` | [k-Wave](http://www.k-wave.org) `kspaceFirstOrder` via `k-wave-python` | 2/3-D | external binary | wrapped + cross-validated |
 | `kzk` | parabolic KZK (z-marching) | planned | — | M9 |
 
-## From Python
-
-The same job, the same planner, the same gates — without leaving a notebook:
-
-```python
-import caustica
-
-res = caustica.simulate(
-    "water_bowl_mini.json",   # a job path, a job dict, an ExplicitJobConfig, or a BuiltJob
-    solver="westervelt",
-    harmonics=(1, 2),
-    out=None,                 # None = in memory; a path = the full run folder
-    progress="auto",
-)
-
-res.metrics        # focal metrics — the definitions the HTML report quotes
-res.result.phasor  # the complex field, as the solver produced it
-res.save("result.h5")
-```
-
-[:octicons-arrow-right-24: The rest of the Python API](library.md)
-
-`out=None` writes nothing at all, but it does **not** skip the planner or the two pre-run
-gates: a run that will not fit in VRAM, or that a CPU would take hours over, is refused
-here exactly as `caustica run` refuses it — same message, same exit code, carried on
-`SimulationError.exit_code`.
+Swapping engines is one string: `solver="kwave"` runs the same job through the real k-Wave
+binary, on the same grid, and the two results are compared in CI.
 
 ## What has been measured
 
@@ -183,25 +189,9 @@ against k-Wave on identical grids, media and sources:
 
 ## Where to go next
 
-<div class="grid cards" markdown>
-
--   **Write your own job** — every field, every medium and array kind, with a working
-    snippet per kind.
-
-    [:octicons-arrow-right-24: Job reference](job_reference.md)
-
--   **Read this before you trust a number** — the five things that make a result *silently*
-    wrong if you assume otherwise.
-
-    [:octicons-arrow-right-24: Conventions](conventions.md)
-
--   **Plug your own physics in** — the five extension points and a copy-paste plugin package
-    that uses all five.
-
-    [:octicons-arrow-right-24: Extending](extending.md)
-
--   **Follow the build** — the engineering log, milestone by milestone.
-
-    [:octicons-arrow-right-24: Devlog](devlog.md)
-
-</div>
+- **[Conventions that bite](conventions.md)** — the five assumptions that make a result
+  *silently* wrong if you get them backwards. Read this before you trust a number.
+- **[Using caustica from Python](library.md)** — `simulate()`, the geometry DSL, volume
+  media, your own transducer, the planner.
+- **[Anatomical phantoms](uwcem.md)** — segmented volumes resampled onto your grid.
+- **[Engineering log](devlog.md)** — milestone by milestone, including what broke.
