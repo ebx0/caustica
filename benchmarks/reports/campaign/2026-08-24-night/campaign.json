@@ -1,0 +1,918 @@
+{
+  "format": "caustica-dev-campaign/1",
+  "note": "consolidated from every campaign run of the night of 2026-08-24",
+  "environment": {
+    "python": "3.12.10",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "caustica": "0.1.0.dev0",
+    "numpy": "2.2.6",
+    "scipy": "1.15.3",
+    "h5py": "3.16.0",
+    "cupy": "14.2.0",
+    "gpu_name": "NVIDIA GeForce RTX 5050 Laptop GPU",
+    "vram_free_gib": 6.9,
+    "vram_total_gib": 7.96,
+    "git_commit": "b41850d794884dc74c3e8f1b5f56f684fbb2cc5d"
+  },
+  "experiments": [
+    {
+      "id": "E1",
+      "title": "focused bowl vs O'Neil: fixed operator against the pre-fix one",
+      "status": "OK",
+      "elapsed_s": 87.0,
+      "data": {
+        "scenario": {
+          "shape": [
+            120,
+            120,
+            180
+          ],
+          "dx_mm": 0.15,
+          "f0_MHz": 1.0,
+          "ppw": 10.000000000000002,
+          "f_number": 1.0,
+          "source": {
+            "aperture_mm": 6.0,
+            "roc_mm": 12.0,
+            "clipped": false,
+            "f_number": 1.0,
+            "n_source_voxels": 6514
+          }
+        },
+        "fixed": {
+          "correlation_r": 0.963408979236955,
+          "one_minus_r": 0.03659102076304499,
+          "peak_z_mm": 10.2,
+          "peak_z_error_mm": 0.14999999999999908,
+          "width_6db_mm": 10.199999999999998,
+          "width_6db_error_pct": -8.108108108108123,
+          "peak_pa": 884863.9375
+        },
+        "legacy": {
+          "correlation_r": 0.9634220839259895,
+          "one_minus_r": 0.03657791607401051,
+          "peak_z_mm": 10.2,
+          "peak_z_error_mm": 0.14999999999999908,
+          "width_6db_mm": 10.199999999999998,
+          "width_6db_error_pct": -8.108108108108123,
+          "peak_pa": 884633.5625
+        },
+        "fixed_vs_legacy": {
+          "max_rel": 0.02025418208717541,
+          "rel_l2": 0.010531066916882992
+        },
+        "fixed_is_closer_to_oneill": false,
+        "verdict": "correlation with O'Neil: fixed 0.963409, legacy 0.963422; -6 dB width error -8.11% vs -8.11%; the fields differ by 2.025%; fixed is FURTHER"
+      }
+    },
+    {
+      "id": "E2",
+      "title": "blast radius: how much the field moves, over a shape matrix",
+      "status": "OK",
+      "elapsed_s": 148.6,
+      "data": {
+        "rows": [
+          {
+            "case": "cubic-64",
+            "shape": [
+              64,
+              64,
+              64
+            ],
+            "padded": [
+              64,
+              64,
+              64
+            ],
+            "padded_parity": [
+              "even",
+              "even",
+              "even"
+            ],
+            "even_axes": 3,
+            "aperture_mm": 3.8,
+            "clipped": true,
+            "max_rel": 0.027260342690598124,
+            "rel_l2": 0.014700288884341717,
+            "identical": false,
+            "peak_kpa": 442.6095275878906
+          },
+          {
+            "case": "cubic-96",
+            "shape": [
+              96,
+              96,
+              96
+            ],
+            "padded": [
+              96,
+              96,
+              96
+            ],
+            "padded_parity": [
+              "even",
+              "even",
+              "even"
+            ],
+            "even_axes": 3,
+            "aperture_mm": 6.0,
+            "clipped": false,
+            "max_rel": 0.012811013638860462,
+            "rel_l2": 0.011709083802998066,
+            "identical": false,
+            "peak_kpa": 880.6637573242188
+          },
+          {
+            "case": "cubic-81 (3^4, stays odd)",
+            "shape": [
+              81,
+              81,
+              81
+            ],
+            "padded": [
+              81,
+              81,
+              81
+            ],
+            "padded_parity": [
+              "odd",
+              "odd",
+              "odd"
+            ],
+            "even_axes": 0,
+            "aperture_mm": 5.500000000000001,
+            "clipped": true,
+            "max_rel": 0.0,
+            "rel_l2": 0.0,
+            "identical": true,
+            "peak_kpa": 764.5145263671875
+          },
+          {
+            "case": "cubic-135 (odd smooth)",
+            "shape": [
+              135,
+              135,
+              135
+            ],
+            "padded": [
+              135,
+              135,
+              135
+            ],
+            "padded_parity": [
+              "odd",
+              "odd",
+              "odd"
+            ],
+            "even_axes": 0,
+            "aperture_mm": 6.0,
+            "clipped": false,
+            "max_rel": 0.0,
+            "rel_l2": 0.0,
+            "identical": true,
+            "peak_kpa": 880.4874267578125
+          },
+          {
+            "case": "cubic-63 -> pads to 64",
+            "shape": [
+              63,
+              63,
+              63
+            ],
+            "padded": [
+              64,
+              64,
+              64
+            ],
+            "padded_parity": [
+              "even",
+              "even",
+              "even"
+            ],
+            "even_axes": 3,
+            "aperture_mm": 3.7,
+            "clipped": true,
+            "max_rel": 0.01835147223253853,
+            "rel_l2": 0.010225601494312286,
+            "identical": false,
+            "peak_kpa": 433.5098876953125
+          },
+          {
+            "case": "beam-axis-odd",
+            "shape": [
+              64,
+              64,
+              81
+            ],
+            "padded": [
+              64,
+              64,
+              81
+            ],
+            "padded_parity": [
+              "even",
+              "even",
+              "odd"
+            ],
+            "even_axes": 2,
+            "aperture_mm": 3.8,
+            "clipped": true,
+            "max_rel": 0.02755509283920608,
+            "rel_l2": 0.012864995747804642,
+            "identical": false,
+            "peak_kpa": 440.8091735839844
+          },
+          {
+            "case": "beam-axis-even",
+            "shape": [
+              81,
+              81,
+              64
+            ],
+            "padded": [
+              81,
+              81,
+              64
+            ],
+            "padded_parity": [
+              "odd",
+              "odd",
+              "even"
+            ],
+            "even_axes": 1,
+            "aperture_mm": 5.500000000000001,
+            "clipped": true,
+            "max_rel": 2.1269266445971086e-07,
+            "rel_l2": 3.266536339197046e-07,
+            "identical": false,
+            "peak_kpa": 734.6280517578125
+          },
+          {
+            "case": "padded-100",
+            "shape": [
+              100,
+              100,
+              100
+            ],
+            "padded": [
+              100,
+              100,
+              100
+            ],
+            "padded_parity": [
+              "even",
+              "even",
+              "even"
+            ],
+            "even_axes": 3,
+            "aperture_mm": 6.0,
+            "clipped": false,
+            "max_rel": 0.012438048609170126,
+            "rel_l2": 0.011475521139800549,
+            "identical": false,
+            "peak_kpa": 882.3733520507812
+          },
+          {
+            "case": "anisotropic",
+            "shape": [
+              64,
+              80,
+              96
+            ],
+            "padded": [
+              64,
+              80,
+              96
+            ],
+            "padded_parity": [
+              "even",
+              "even",
+              "even"
+            ],
+            "even_axes": 3,
+            "aperture_mm": 3.8,
+            "clipped": true,
+            "max_rel": 0.02547376075115455,
+            "rel_l2": 0.011767699383199215,
+            "identical": false,
+            "peak_kpa": 441.6567687988281
+          }
+        ],
+        "all_odd_padded_are_identical": true,
+        "n_all_odd_cases": 2,
+        "even_cases_that_did_not_move": [],
+        "worst": {
+          "case": "beam-axis-odd",
+          "max_rel": 0.02755509283920608
+        },
+        "verdict": "2 all-odd-padded shapes bit-identical: True; every shape with an even padded axis moved, worst 2.76% (beam-axis-odd)"
+      }
+    },
+    {
+      "id": "E3",
+      "title": "plane wave in 1-D: phase speed and absorption, fixed vs pre-fix",
+      "status": "OK",
+      "elapsed_s": 0.2,
+      "data": {
+        "rows": [
+          {
+            "grid": "even-512",
+            "padded": 512,
+            "operator": "fixed",
+            "alpha_measured_np_m": 10.000947498775899,
+            "alpha_error_pct": 0.009474987758988362,
+            "k_measured_rad_m": 4190.917646954496,
+            "k_error_pct": 0.05078894057941981,
+            "c_implied_m_s": 1499.2385526223648
+          },
+          {
+            "grid": "even-512",
+            "padded": 512,
+            "operator": "legacy",
+            "alpha_measured_np_m": 10.000947498775899,
+            "alpha_error_pct": 0.009474987758988362,
+            "k_measured_rad_m": 4190.917646954496,
+            "k_error_pct": 0.05078894057941981,
+            "c_implied_m_s": 1499.2385526223648
+          },
+          {
+            "grid": "odd-405",
+            "padded": 405,
+            "operator": "fixed",
+            "alpha_measured_np_m": 10.005792220968546,
+            "alpha_error_pct": 0.05792220968546147,
+            "k_measured_rad_m": 4190.917432824723,
+            "k_error_pct": 0.05078382860762847,
+            "c_implied_m_s": 1499.2386292241154
+          },
+          {
+            "grid": "odd-405",
+            "padded": 405,
+            "operator": "legacy",
+            "alpha_measured_np_m": 10.005792220968546,
+            "alpha_error_pct": 0.05792220968546147,
+            "k_measured_rad_m": 4190.917432824723,
+            "k_error_pct": 0.05078382860762847,
+            "c_implied_m_s": 1499.2386292241154
+          }
+        ],
+        "fixed_vs_legacy": {
+          "even-512": {
+            "max_rel": 0.0,
+            "rel_l2": 0.0
+          },
+          "odd-405": {
+            "max_rel": 0.0,
+            "rel_l2": 0.0
+          }
+        },
+        "k_expected_rad_m": 4188.790204786391,
+        "alpha_configured_np_m": 10.0,
+        "odd_grid_untouched": true,
+        "verdict": "phase speed error: fixed 0.0508%, legacy 0.0508%; absorption: fixed 0.058%, legacy 0.058%"
+      }
+    },
+    {
+      "id": "E4",
+      "title": "k-Wave cross-check: does the fix move us toward an independent code?",
+      "status": "OK",
+      "elapsed_s": 107.9,
+      "data": {
+        "rows": [
+          {
+            "scenario": "water",
+            "shape": [
+              96,
+              96,
+              135
+            ],
+            "source": {
+              "aperture_mm": 6.0,
+              "roc_mm": 12.0,
+              "clipped": false,
+              "f_number": 1.0,
+              "n_source_voxels": 3682
+            },
+            "kwave_peak_kpa": 861.5899658203125,
+            "fixed": {
+              "rel_l2_vs_kwave": 0.20200283825397491,
+              "pearson_r": 0.9768415670961716,
+              "peak_ratio": 1.0210766792297363,
+              "axial_r": 0.9876078601843117,
+              "peak_z_diff_mm": 0.0
+            },
+            "legacy": {
+              "rel_l2_vs_kwave": 0.20194019377231598,
+              "pearson_r": 0.97687639708485,
+              "peak_ratio": 1.0212682485580444,
+              "axial_r": 0.987617486144463,
+              "peak_z_diff_mm": 0.0
+            },
+            "fix_moved_us": "further from k-Wave",
+            "l2_improvement_pct": -0.031021304124112525
+          },
+          {
+            "scenario": "layered",
+            "shape": [
+              96,
+              96,
+              135
+            ],
+            "source": {
+              "aperture_mm": 6.0,
+              "roc_mm": 12.0,
+              "clipped": false,
+              "f_number": 1.0,
+              "n_source_voxels": 3682
+            },
+            "kwave_peak_kpa": 861.3731689453125,
+            "fixed": {
+              "rel_l2_vs_kwave": 0.2047303318977356,
+              "pearson_r": 0.9742662003576174,
+              "peak_ratio": 1.0263580083847046,
+              "axial_r": 0.9968806033323304,
+              "peak_z_diff_mm": 0.0
+            },
+            "legacy": {
+              "rel_l2_vs_kwave": 0.2046762853860855,
+              "pearson_r": 0.9742844636218492,
+              "peak_ratio": 1.0266578197479248,
+              "axial_r": 0.9968701781093935,
+              "peak_z_diff_mm": 0.0
+            },
+            "fix_moved_us": "further from k-Wave",
+            "l2_improvement_pct": -0.026405849387067803
+          }
+        ],
+        "all_closer": false,
+        "verdict": "water: further from k-Wave (-0.0% on rel L2); layered: further from k-Wave (-0.0% on rel L2)"
+      }
+    },
+    {
+      "id": "E7",
+      "title": "warmup: a fresh process pays what a warm one never sees",
+      "status": "OK",
+      "elapsed_s": 1.6,
+      "data": {
+        "rows": [
+          {
+            "shape": [
+              128,
+              128,
+              128
+            ],
+            "p_elems": 2097152,
+            "warm_process_s": 0.035,
+            "fresh_process_s": 0.411,
+            "ratio": 11.63,
+            "missing_s": 0.375
+          },
+          {
+            "shape": [
+              192,
+              192,
+              192
+            ],
+            "p_elems": 7077888,
+            "warm_process_s": 0.004,
+            "fresh_process_s": 0.415,
+            "ratio": 96.8,
+            "missing_s": 0.41
+          },
+          {
+            "shape": [
+              256,
+              256,
+              256
+            ],
+            "p_elems": 16777216,
+            "warm_process_s": 0.007,
+            "fresh_process_s": 0.411,
+            "ratio": 58.91,
+            "missing_s": 0.404
+          }
+        ],
+        "supports_warm_process_hypothesis": true,
+        "verdict": "a fresh process pays 11.6-96.8x the warmup a warm one measures (0.4-0.4 s the calibration never sees)"
+      }
+    },
+    {
+      "id": "E8",
+      "title": "planner VRAM inventory against the measured pool peak",
+      "status": "OK",
+      "elapsed_s": 3.9,
+      "data": {
+        "rows": [
+          {
+            "shape": [
+              96,
+              96,
+              96
+            ],
+            "planned_gib": 0.0915985107421875,
+            "measured_pool_gib": 0.08480310440063477,
+            "dev_pct": 8.01315752481093,
+            "plan_source": "db"
+          },
+          {
+            "shape": [
+              128,
+              128,
+              128
+            ],
+            "planned_gib": 0.21674804762005806,
+            "measured_pool_gib": 0.20056390762329102,
+            "dev_pct": 8.069318248009452,
+            "plan_source": "db"
+          },
+          {
+            "shape": [
+              160,
+              160,
+              160
+            ],
+            "planned_gib": 0.4228973388671875,
+            "measured_pool_gib": 0.3912014961242676,
+            "dev_pct": 8.102178303748497,
+            "plan_source": "db"
+          },
+          {
+            "shape": [
+              192,
+              192,
+              192
+            ],
+            "planned_gib": 0.730261230841279,
+            "measured_pool_gib": 0.6753888130187988,
+            "dev_pct": 8.124567177418273,
+            "plan_source": "db"
+          }
+        ],
+        "verdict": "worst VRAM deviation +8.1% over 4 shapes on an unknown card"
+      }
+    },
+    {
+      "id": "E10",
+      "title": "sensitivity of the answer to CFL, PML thickness and resolution",
+      "status": "OK",
+      "elapsed_s": 84.7,
+      "data": {
+        "rows": [
+          {
+            "knob": "baseline",
+            "shape": [
+              72,
+              72,
+              120
+            ],
+            "dx_mm": 0.25,
+            "ppw": 6.0,
+            "pml_vox": 10,
+            "cfl": 0.48,
+            "peak_pa": 1006273.5625,
+            "peak_z_mm": 14.0,
+            "correlation_r": 0.914148748280172,
+            "width_6db_mm": 10.5,
+            "peak_dev_pct": 0.0,
+            "focus_shift_mm": 0.0
+          },
+          {
+            "knob": "cfl=0.2",
+            "shape": [
+              72,
+              72,
+              120
+            ],
+            "dx_mm": 0.25,
+            "ppw": 6.0,
+            "pml_vox": 10,
+            "cfl": 0.2,
+            "peak_pa": 949354.5,
+            "peak_z_mm": 14.0,
+            "correlation_r": 0.9008272093653918,
+            "width_6db_mm": 10.75,
+            "peak_dev_pct": -5.656420343449101,
+            "focus_shift_mm": 0.0
+          },
+          {
+            "knob": "cfl=0.3",
+            "shape": [
+              72,
+              72,
+              120
+            ],
+            "dx_mm": 0.25,
+            "ppw": 6.0,
+            "pml_vox": 10,
+            "cfl": 0.3,
+            "peak_pa": 967031.0625,
+            "peak_z_mm": 14.0,
+            "correlation_r": 0.9064219835315687,
+            "width_6db_mm": 10.75,
+            "peak_dev_pct": -3.899784458463302,
+            "focus_shift_mm": 0.0
+          },
+          {
+            "knob": "pml=6",
+            "shape": [
+              72,
+              72,
+              120
+            ],
+            "dx_mm": 0.25,
+            "ppw": 6.0,
+            "pml_vox": 6,
+            "cfl": 0.48,
+            "peak_pa": 1110895.75,
+            "peak_z_mm": 14.25,
+            "correlation_r": 0.9254864891113844,
+            "width_6db_mm": 10.25,
+            "peak_dev_pct": 10.396992567316902,
+            "focus_shift_mm": 0.25
+          },
+          {
+            "knob": "pml=16",
+            "shape": [
+              72,
+              72,
+              120
+            ],
+            "dx_mm": 0.25,
+            "ppw": 6.0,
+            "pml_vox": 16,
+            "cfl": 0.48,
+            "peak_pa": 743233.75,
+            "peak_z_mm": 13.25,
+            "correlation_r": 0.7700457196227302,
+            "width_6db_mm": 11.75,
+            "peak_dev_pct": -26.139990386560513,
+            "focus_shift_mm": -0.75
+          },
+          {
+            "knob": "dx/1.5 (finer)",
+            "shape": [
+              108,
+              108,
+              180
+            ],
+            "dx_mm": 0.16666666666666666,
+            "ppw": 9.0,
+            "pml_vox": 10,
+            "cfl": 0.48,
+            "peak_pa": 1107832.125,
+            "peak_z_mm": 14.0,
+            "correlation_r": 0.9256438423255915,
+            "width_6db_mm": 10.166666666666668,
+            "peak_dev_pct": 10.092540069092792,
+            "focus_shift_mm": 0.0
+          },
+          {
+            "knob": "dx*1.5 (coarser)",
+            "shape": [
+              48,
+              48,
+              80
+            ],
+            "dx_mm": 0.375,
+            "ppw": 4.0,
+            "pml_vox": 10,
+            "cfl": 0.48,
+            "peak_pa": 773861.3125,
+            "peak_z_mm": 13.125,
+            "correlation_r": 0.8205895057922153,
+            "width_6db_mm": 11.250000000000002,
+            "peak_dev_pct": -23.096328738140727,
+            "focus_shift_mm": -0.875
+          }
+        ],
+        "verdict": "the focal peak moves at most 26.1% across the knobs (pml=16); focus position stays within 0.88 mm"
+      }
+    },
+    {
+      "id": "E11",
+      "title": "grid refinement: the two operators against O'Neil as dx shrinks",
+      "status": "OK",
+      "elapsed_s": 500.0,
+      "data": {
+        "rows": [
+          {
+            "shape": [
+              75,
+              75,
+              108
+            ],
+            "dx_mm": 0.3,
+            "ppw": 5.000000000000001,
+            "fixed": {
+              "correlation_r": 0.9644839459435584,
+              "one_minus_r": 0.03551605405644165,
+              "peak_z_mm": 9.899999999999999,
+              "peak_z_error_mm": 0.0,
+              "width_6db_mm": 10.199999999999998,
+              "width_6db_error_pct": -8.108108108108123,
+              "peak_pa": 844357.9375
+            },
+            "legacy": {
+              "correlation_r": 0.9644839583128223,
+              "one_minus_r": 0.0355160416871777,
+              "peak_z_mm": 9.899999999999999,
+              "peak_z_error_mm": 0.0,
+              "width_6db_mm": 10.199999999999998,
+              "width_6db_error_pct": -8.108108108108123,
+              "peak_pa": 844358.0
+            },
+            "fixed_vs_legacy": {
+              "max_rel": 2.960829630384093e-07,
+              "rel_l2": 4.607212815699313e-07
+            },
+            "fixed_is_closer": false
+          },
+          {
+            "shape": [
+              96,
+              96,
+              135
+            ],
+            "dx_mm": 0.2,
+            "ppw": 7.5,
+            "fixed": {
+              "correlation_r": 0.9650877055038848,
+              "one_minus_r": 0.034912294496115215,
+              "peak_z_mm": 10.0,
+              "peak_z_error_mm": 0.0,
+              "width_6db_mm": 10.200000000000001,
+              "width_6db_error_pct": -8.928571428571436,
+              "peak_pa": 879749.4375
+            },
+            "legacy": {
+              "correlation_r": 0.965111031316547,
+              "one_minus_r": 0.03488896868345304,
+              "peak_z_mm": 10.0,
+              "peak_z_error_mm": 0.0,
+              "width_6db_mm": 10.200000000000001,
+              "width_6db_error_pct": -8.928571428571436,
+              "peak_pa": 879914.4375
+            },
+            "fixed_vs_legacy": {
+              "max_rel": 0.012938382988451754,
+              "rel_l2": 0.010998737998306751
+            },
+            "fixed_is_closer": false
+          },
+          {
+            "shape": [
+              120,
+              120,
+              180
+            ],
+            "dx_mm": 0.15,
+            "ppw": 10.000000000000002,
+            "fixed": {
+              "correlation_r": 0.963408979236955,
+              "one_minus_r": 0.03659102076304499,
+              "peak_z_mm": 10.2,
+              "peak_z_error_mm": 0.14999999999999908,
+              "width_6db_mm": 10.199999999999998,
+              "width_6db_error_pct": -8.108108108108123,
+              "peak_pa": 884863.9375
+            },
+            "legacy": {
+              "correlation_r": 0.9634220839259895,
+              "one_minus_r": 0.03657791607401051,
+              "peak_z_mm": 10.2,
+              "peak_z_error_mm": 0.14999999999999908,
+              "width_6db_mm": 10.199999999999998,
+              "width_6db_error_pct": -8.108108108108123,
+              "peak_pa": 884633.5625
+            },
+            "fixed_vs_legacy": {
+              "max_rel": 0.02025418208717541,
+              "rel_l2": 0.010531066916882992
+            },
+            "fixed_is_closer": false
+          },
+          {
+            "shape": [
+              160,
+              160,
+              240
+            ],
+            "dx_mm": 0.1,
+            "ppw": 15.0,
+            "fixed": {
+              "correlation_r": 0.965955007073494,
+              "one_minus_r": 0.03404499292650598,
+              "peak_z_mm": 9.799999999999999,
+              "peak_z_error_mm": -0.2000000000000005,
+              "width_6db_mm": 10.000000000000002,
+              "width_6db_error_pct": -9.090909090909069,
+              "peak_pa": 886310.8125
+            },
+            "legacy": {
+              "correlation_r": 0.9659533313189493,
+              "one_minus_r": 0.03404666868105066,
+              "peak_z_mm": 9.799999999999999,
+              "peak_z_error_mm": -0.2000000000000005,
+              "width_6db_mm": 10.000000000000002,
+              "width_6db_error_pct": -9.090909090909069,
+              "peak_pa": 886410.25
+            },
+            "fixed_vs_legacy": {
+              "max_rel": 0.01726097840747599,
+              "rel_l2": 0.00755451712757349
+            },
+            "fixed_is_closer": true
+          }
+        ],
+        "gap_by_ppw": {
+          "5": 4.607212815699313e-07,
+          "8": 0.010998737998306751,
+          "10": 0.010531066916882992,
+          "15": 0.00755451712757349
+        },
+        "gap_shrinks_with_refinement": false,
+        "fixed_closer_at": "1/4",
+        "verdict": "the gap falls 0.00% -> 0.76% as ppw goes 5 -> 15; the fixed operator is closer to O'Neil in 1/4 resolutions"
+      }
+    },
+    {
+      "id": "E12",
+      "title": "harmonics: the higher the harmonic, the more the Nyquist bin mattered",
+      "status": "OK",
+      "elapsed_s": 34.5,
+      "data": {
+        "rows": [
+          {
+            "harmonic": 1,
+            "ppw_at_this_harmonic": 7.5,
+            "peak_kpa_fixed": 7008.0715,
+            "peak_kpa_legacy": 7009.3955,
+            "peak_shift_pct": -0.018888932718948447,
+            "max_rel": 0.012993767258225033,
+            "rel_l2": 0.011026870459318161
+          },
+          {
+            "harmonic": 2,
+            "ppw_at_this_harmonic": 3.75,
+            "peak_kpa_fixed": 914.005125,
+            "peak_kpa_legacy": 913.9841875,
+            "peak_shift_pct": 0.0022907945549112685,
+            "max_rel": 0.00029909770041463115,
+            "rel_l2": 0.0005537480465136468
+          },
+          {
+            "harmonic": 3,
+            "ppw_at_this_harmonic": 2.5,
+            "peak_kpa_fixed": 197.690265625,
+            "peak_kpa_legacy": 197.692796875,
+            "peak_shift_pct": -0.0012803956643905922,
+            "max_rel": 0.00010361248201902823,
+            "rel_l2": 0.00021788159210700542
+          }
+        ],
+        "scenario": {
+          "shape": [
+            96,
+            96,
+            135
+          ],
+          "dx_mm": 0.2,
+          "drive_kpa": 800.0,
+          "source": {
+            "aperture_mm": 6.0,
+            "roc_mm": 12.0,
+            "clipped": false,
+            "f_number": 1.0,
+            "n_source_voxels": 3682
+          }
+        },
+        "grows_with_harmonic_order": false,
+        "verdict": "the change does NOT grow monotonically with harmonic order: h1 1.10% -> h2 0.06% -> h3 0.02%"
+      }
+    },
+    {
+      "id": "E13",
+      "title": "checkpoint resume and the thermal solver, on the GPU",
+      "status": "OK",
+      "elapsed_s": 4.0,
+      "data": {
+        "resume_on_cupy": {
+          "interrupted": true,
+          "max_rel": 0.0,
+          "rel_l2": 0.0,
+          "bit_exact": true
+        },
+        "thermal_backends": {
+          "temperature_max_rel": 0.0,
+          "temperature_rel_l2": 0.0,
+          "peak_c_numpy": 43.58917236328125,
+          "peak_c_cupy": 43.58917236328125,
+          "bit_exact": true,
+          "cem43_max_rel": 0.0,
+          "cem43_peak_min": 0.011079375632107258
+        },
+        "verdict": "resume on cupy: max rel 0.00e+00 (bit-exact); thermal numpy vs cupy: max rel 0.00e+00 on the rise"
+      }
+    }
+  ]
+}

@@ -102,13 +102,30 @@ def spectral_derivative_factors(ks: list, kappa, shape: tuple[int, ...], xp: Mod
     * Structurally, ``i k`` is purely imaginary and odd in the index, while
       the bins that pair with THEMSELVES under ``j -> -j`` -- index ``n/2`` of
       an even axis -- have to stay conjugate-symmetric or ``irfftn`` has no
-      real inverse to return. Leaving them in handed the C2R transform an
-      input violating its Hermitian contract by ~150% of its own magnitude,
-      which every FFT backend is free to resolve differently. They do: at
-      256^3 cuFFT and pocketfft parted company at step 2 (1.1e-2 on
-      ``irfftn(deriv2*pk)``), and by period 2 the GPU run was at NaN while the
-      identical CPU run sat at 45 kPa -- the 256^3 divergence that outlived
-      three GPU sessions (2026-08-23, dev_validate U1b).
+      real inverse to return. Leaving them in handed the transform an input
+      violating that symmetry by ~150% of its own magnitude.
+
+    Which axis you are on decides what the violation COSTS, and the two axis
+    classes cost different things (measured 2026-08-24, see
+    ``benchmarks/reports/campaign/2026-08-24-night``):
+
+    * On the LAST axis, ``irfftn`` ends in a complex-to-real transform, and a
+      C2R is free to resolve a non-Hermitian input however it likes. pocketfft
+      discards the offending part, so the CPU answer was unaffected; cuFFT does
+      not, so at 256^3 the two parted company at step 2 (1.1e-2 on
+      ``irfftn(deriv2*pk)``) and by period 2 the GPU run was at NaN while the
+      identical CPU run sat at 45 kPa -- the divergence that outlived three GPU
+      sessions (2026-08-23, dev_validate U1b).
+    * On the TRANSVERSE axes, ``irfftn`` is a plain complex-to-complex inverse
+      and nothing discards anything: the illegal content passed straight into
+      the real output on EVERY backend. That is where the CPU field actually
+      moved -- 2.7% of peak at 64^3, and 1.4% on the library's own O'Neil bowl,
+      concentrated on the voxelized source shell. A grid whose transverse axes
+      are odd is bit-identical before and after; one whose beam axis is odd is
+      not.
+
+    So this is not a GPU-only repair. It is a correctness repair whose most
+    visible symptom happened to be a GPU divergence.
 
     ``kappa`` keeps the true Nyquist ``|k|``: the dispersion correction is an
     even function of a magnitude, not an odd derivative, and zeroing it there

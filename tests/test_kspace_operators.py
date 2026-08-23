@@ -1,11 +1,15 @@
 """k-space operator gates, with the 256^3 divergence pinned as a CPU test.
 
-The defect these tests guard used to be invisible on the CPU, which is why it
-survived three GPU sessions: the array the engine handed to ``irfftn`` was not
-a legal half-spectrum, numpy's pocketfft quietly symmetrized it and returned
-something sane, and cuFFT -- whose C2R contract says the input MUST be
-Hermitian -- resolved the same ambiguity differently at 256^3 and diverged to
-NaN by the second period.
+The defect these tests guard was invisible on the CPU *on the axis where it
+diverged*, which is why it survived three GPU sessions. The array the engine
+handed to ``irfftn`` was not a legal half-spectrum. On the LAST axis that
+matters to a complex-to-real transform, and the two libraries disagreed:
+pocketfft discards the offending part and returned something sane, cuFFT does
+not and reached NaN by the second period at 256^3. On the TRANSVERSE axes
+``irfftn`` is a plain complex-to-complex inverse, nothing is discarded, and the
+illegal content went into the answer on every backend -- so the CPU numbers
+were wrong there too, by ~1.4% of peak on the library's own bowl scenario
+(measured 2026-08-24).
 
 So the gate here is deliberately NOT "does the CPU answer look right". It is
 the CONTRACT itself: the input array is measured against the Hermitian
@@ -146,21 +150,35 @@ def test_the_contract_was_actually_broken_before(shape):
     assert worst > 0.5
 
 
-@pytest.mark.parametrize("shape", [(8, 8, 8), (8, 8, 6), (6, 6, 8)])
+@pytest.mark.parametrize("shape", [(8, 8, 8), (8, 8, 6), (6, 6, 8), (9, 8, 7)])
 def test_the_transform_carries_everything_we_hand_it(shape):
     """The CPU-side stand-in for "cuFFT and pocketfft disagreed at 256^3".
 
-    Before the fix a fifth of the gradient spectrum fell through ``irfftn``
-    without a contract saying where it went.
+    Every axis is checked, not just the last one. The 2026-08-24 campaign found
+    that the two axis classes carry two different consequences of the same
+    defect: the real-to-complex (beam) axis is where cuFFT's C2R contract breaks
+    and the GPU run diverged, while the transverse complex-to-complex axes are
+    where a voxelized source puts most of its near-Nyquist energy and where the
+    CPU field actually moved (2.7% at 64^3; exactly zero once the transverse
+    axes were odd). A gate that only watched the last axis would have watched
+    the wrong one for half the story.
     """
     pk = np.fft.rfftn(_random_field(shape))
-    last = len(shape) - 1
-
     broken, _, _ = _factors(shape, zero_nyquist=False)
-    assert round_trip_loss(broken[last] * pk, shape) > 0.1
-
     fixed, _, _ = _factors(shape)
-    assert round_trip_loss(fixed[last] * pk, shape) < ROUNDOFF
+
+    for ax, n in enumerate(shape):
+        before = round_trip_loss(broken[ax] * pk, shape)
+        after = round_trip_loss(fixed[ax] * pk, shape)
+        if n % 2 == 0:
+            # An even axis had a live Nyquist bin, and the transform pair drops
+            # most of what that bin contributed: 0.62 to 1.00 of it, measured.
+            assert before > 0.5, f"axis {ax} (n={n}) lost only {before:.3f}"
+        else:
+            assert before < ROUNDOFF, (
+                f"odd axis {ax} (n={n}) has no Nyquist bin, yet lost {before:.2e}"
+            )
+        assert after < ROUNDOFF, f"axis {ax} still loses {after:.2e} after the fix"
 
 
 def test_kappa_keeps_the_true_nyquist():

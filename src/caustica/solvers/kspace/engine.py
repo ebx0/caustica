@@ -306,7 +306,12 @@ def run_cw_kspace_pstd(
     fingerprint = None
     if checkpoint is not None:
         fingerprint = {
-            "scheme": "cw-kspace-pstd/1",  # bump when the numerics change
+            # Bumped to /2 on 2026-08-24: zeroing the Nyquist wavenumber in the
+            # collocated first derivative changed the trajectory this scheme
+            # produces on every even-length axis. A checkpoint written by /1
+            # holds a state the current step loop would never have reached, and
+            # splicing the two would produce a field that is neither.
+            "scheme": "cw-kspace-pstd/2",
             "solver": solver_name,
             "backend": b.name,
             "grid_shape": list(grid.shape),

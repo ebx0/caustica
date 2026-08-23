@@ -8,6 +8,8 @@ band exists as headroom for cross-session float environment drift, not as an
 expected error.
 """
 
+import json
+
 import numpy as np
 import pytest
 
@@ -183,6 +185,42 @@ def test_mismatched_run_refuses_to_resume(tmp_path):
         grid, med, src, spec, backend="numpy", checkpoint=CheckpointSpec(path=ck_path)
     )
     _assert_identical(baseline, resumed)
+
+
+def test_a_checkpoint_from_older_numerics_is_refused(tmp_path):
+    """The case the other refusals cannot see: same run, different scheme.
+
+    Amplitude, medium and geometry can all match while the STEP ITSELF has
+    changed underneath — which is exactly what happened on 2026-08-24, when
+    zeroing the Nyquist wavenumber altered the trajectory on every even-length
+    axis. The scheme tag is the only field that catches it, so it needs a test
+    of its own or the next numerics change will forget to bump it too.
+    """
+    grid, med, src, spec = _setup_1d()
+    ck_path = tmp_path / "old_scheme.ckpt.npz"
+    with pytest.raises(RunInterrupted):
+        solvers.get("linear")().run(
+            grid,
+            med,
+            src,
+            spec,
+            backend="numpy",
+            checkpoint=CheckpointSpec(path=ck_path, every_periods=2, stop_when=_stop_after(3)),
+        )
+
+    # Rewrite the stored fingerprint as an older scheme would have left it.
+    stored = dict(np.load(ck_path, allow_pickle=True))
+    meta = json.loads(str(stored["meta_json"]))
+    assert meta["fingerprint"]["scheme"] == "cw-kspace-pstd/2", meta["fingerprint"]["scheme"]
+    meta["fingerprint"]["scheme"] = "cw-kspace-pstd/1"
+    stored["meta_json"] = np.asarray(json.dumps(meta))
+    with open(ck_path, "wb") as fh:
+        np.savez(fh, **stored)
+
+    with pytest.raises(CheckpointMismatch, match="scheme"):
+        solvers.get("linear")().run(
+            grid, med, src, spec, backend="numpy", checkpoint=CheckpointSpec(path=ck_path)
+        )
 
 
 def test_checkpoint_write_cadence_is_every_periods(tmp_path):
