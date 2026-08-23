@@ -50,3 +50,15 @@
 .md-typeset .grid.cards > ul > li > hr {
   margin-block: 0.6em;
 }
+
+/* The animated 2-D section at the top of the landing page. It carries its own
+   background, so it needs no frame of its own -- only room to breathe. */
+.hero-field {
+  margin: 0 0 1.6rem;
+}
+
+.hero-field img {
+  width: 100%;
+  border-radius: 10px;
+  display: block;
+}
