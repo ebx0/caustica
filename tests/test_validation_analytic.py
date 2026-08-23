@@ -375,6 +375,237 @@ def test_the_two_sizes_are_graded_against_the_same_tolerances():
     assert "size" not in inspect.getsource(an.evaluate)
 
 
+# ------------------------------------------- the planner table (M11's first)
+#
+# The suite reports what the planner PREDICTED next to what the solve cost.
+# Two separate risks again: that the table exists and reads correctly for
+# every scenario (fabricated rows, below), and that its numbers come from a
+# real estimate taken on the real setup before the real solve (the last two
+# tests, which pay for the cheapest scenario to find out).
+
+
+def planned_results() -> dict[str, dict]:
+    """:func:`perfect_results` plus the planner rows a real run attaches.
+
+    Shaped like a real numpy run's (2026-08-23): the plane wave and the
+    linear limit solve twice, so their rows are sums of two legs.
+    """
+    results = perfect_results()
+    rows = {
+        "planewave": {
+            "target": "cpu",
+            "source": "calibrated",
+            "solves": 2,
+            "predicted_s": 6.01,
+            "measured_s": 0.0773,
+            "predicted_steps": 1640,
+            "actual_steps": 1640,
+            "warmup_s": 6.0,
+            "vram_gib": 2.103e-05,
+            "note": None,
+        },
+        "oneill": {
+            "target": "cpu",
+            "source": "calibrated",
+            "solves": 1,
+            "predicted_s": 5.248,
+            "measured_s": 2.329,
+            "predicted_steps": 152,
+            "actual_steps": 152,
+            "warmup_s": 3.0,
+            "vram_gib": 0.02616,
+            "note": None,
+        },
+        "linear_limit": {
+            "target": "cpu",
+            "source": "calibrated",
+            "solves": 2,
+            "predicted_s": 6.002,
+            "measured_s": 0.0262,
+            "predicted_steps": 768,
+            "actual_steps": 768,
+            "warmup_s": 6.0,
+            "vram_gib": 9.374e-06,
+            "note": None,
+        },
+        "fubini": {
+            "target": "cpu",
+            "source": "calibrated",
+            "solves": 1,
+            "predicted_s": 3.042,
+            "measured_s": 0.1095,
+            "predicted_steps": 2673,
+            "actual_steps": 2673,
+            "warmup_s": 3.0,
+            "vram_gib": 6.174e-05,
+            "note": None,
+        },
+    }
+    for name, row in rows.items():
+        results[name]["planner"] = row
+    return results
+
+
+def test_every_scenario_gets_a_planner_row_in_the_json_and_in_the_report(tmp_path):
+    """One row per scenario, every field present, and the report renders it.
+
+    A table that quietly drops the scenario it could not plan invites the
+    reader to assume that one was fine.
+    """
+    _code, payload = run_suite(tmp_path, planned_results())
+    (folder,) = (tmp_path / "reports").iterdir()
+    doc = json.loads((folder / "analytic.json").read_text(encoding="utf-8"))
+    block = doc["planner"]
+
+    assert set(block["scenarios"]) == set(doc["scenarios"]) == set(perfect_results())
+    assert block["target"] == "cpu" and block["source"] == "calibrated"
+    for name, row in block["scenarios"].items():
+        assert set(row) == set(an.PLAN_ROW_FIELDS), name
+        # Every scenario here solved, so nothing in the row may be missing.
+        for field in an.PLAN_ROW_FIELDS:
+            if field != "note":
+                assert row[field] is not None, f"{name}.{field} is null for a solved scenario"
+        assert row["predicted_steps"] > 0 and row["actual_steps"] > 0
+    assert doc["planner"] == payload["planner"]
+
+    md = (folder / "REPORT.md").read_text(encoding="utf-8")
+    header = (
+        "| scenario | predicted t [s] | measured t [s] | deviation | predicted steps "
+        "| actual steps | vram predicted [GiB] |"
+    )
+    assert header in md
+    body = list(
+        itertools.takewhile(lambda r: r.startswith("|"), md[md.index(header) :].splitlines()[2:])
+    )
+    assert [row.split("|")[1].strip() for row in body] == list(block["scenarios"])
+    for row in body:
+        assert row.count("|") - row.count("\\|") == 8, row
+    # The numbers in the row are the row's, not a re-derivation.
+    assert "| 152 | 152 |" in md
+    assert "+125.3%" in md  # (5.248 - 2.329) / 2.329
+
+
+def test_the_planner_rows_are_informational_and_no_gate_can_read_them(tmp_path):
+    """A wildly wrong prediction must not cost a physics gate.
+
+    The planner is graded on a device, by ``caustica.validation gpu-gates``
+    and by the M8 ±25% criterion — not here, where the setups are hundredths
+    of a second and the number is mostly a per-run constant.
+    """
+    results = planned_results()
+    for name in results:
+        results[name]["planner"]["predicted_s"] = 1.0e6  # 11 days per scenario
+
+    code, payload = run_suite(tmp_path, results)
+    assert code == an.EXIT_OK and payload["verdict"] == "PASS"
+    assert [g["verdict"] for g in payload["gates"]] == ["PASS"] * 4
+    assert len(payload["gates"]) == 4
+    blob = json.dumps(payload["gates"])
+    assert "planner" not in blob and "predicted_s" not in blob
+    assert payload["planner"]["gated"] is False and payload["planner"]["informational"] is True
+
+    (folder,) = (tmp_path / "reports").iterdir()
+    md = (folder / "REPORT.md").read_text(encoding="utf-8")
+    assert "Informational, not gated" in md
+
+
+def test_a_scenario_the_planner_could_not_plan_still_gets_a_row_that_says_why(tmp_path):
+    results = planned_results()
+    results["oneill"] = RuntimeError("-6 dB lobe is not fully contained")
+    del results["fubini"]["planner"]  # solved, but the estimate did not happen
+
+    _code, payload = run_suite(tmp_path, results)
+    rows = payload["planner"]["scenarios"]
+    assert set(rows) == set(payload["scenarios"])
+
+    assert rows["oneill"]["predicted_s"] is None and rows["oneill"]["actual_steps"] is None
+    assert "raised before it could be planned" in rows["oneill"]["note"]
+    assert "RuntimeError" in rows["oneill"]["note"]
+    assert rows["fubini"]["note"] == "this scenario reported no planner estimate"
+    # ... and the rows that were planned are untouched by their neighbours.
+    assert rows["planewave"]["predicted_steps"] == 1640
+
+    (folder,) = (tmp_path / "reports").iterdir()
+    md = (folder / "REPORT.md").read_text(encoding="utf-8")
+    assert "| oneill | -- | -- | -- | -- | -- | -- |" in md
+
+
+def test_the_estimate_is_taken_on_the_real_setup_before_the_real_solve(monkeypatch):
+    """The cheapest real scenario, for the one thing fabrication cannot show.
+
+    An estimate taken AFTER the solve is a prediction written with the
+    answer in hand, so the order is asserted rather than assumed; the row's
+    numbers are then the real planner's on the real objects.
+    """
+    import caustica.solvers as solvers
+
+    order: list[str] = []
+    real_plan, real_get = an.plan_solve, solvers.get
+
+    def spy_plan(*args, **kwargs):
+        order.append("plan")
+        return real_plan(*args, **kwargs)
+
+    def spy_get(name):
+        order.append("solve")
+        return real_get(name)
+
+    monkeypatch.setattr(an, "plan_solve", spy_plan)
+    monkeypatch.setattr(solvers, "get", spy_get)
+
+    data = an.measure_linear_limit(an.SIZES["quick"], backend="numpy")
+    assert order == ["plan", "solve", "plan", "solve"]  # two legs, each planned first
+
+    row = data["planner"]
+    assert row["solves"] == 2 and row["target"] == "cpu"
+    assert row["predicted_steps"] > 0 and row["actual_steps"] > 0
+    assert row["measured_s"] > 0.0 and row["vram_gib"] > 0.0
+    # A wall time is reported only when a measured model backs it: off the
+    # GPU that is this machine's "cpu" calibration entry, and gpu_db.json
+    # has no datasheet row for a CPU to fall back on.
+    if row["source"] == "calibrated":
+        assert row["predicted_s"] > 0.0 and row["warmup_s"] is not None
+    else:
+        assert row["source"] == "db" and row["predicted_s"] is None
+        assert "no wall time" in row["note"]
+
+
+def test_a_cpu_with_no_calibration_reports_no_time_instead_of_inventing_one(monkeypatch):
+    """``gpu_db.json`` is a sheet of GPU datasheets; a CPU has no row in it.
+
+    The planner's ``db`` path would happily do arithmetic over the
+    placeholder throughput :func:`analytic_suite.plan_target` has to hand it,
+    and the result would land in a column the reader is invited to compare
+    against a stopwatch. The device-independent half of the estimate — the
+    step count and the byte inventory — is real either way, so it stays.
+    """
+    from caustica import planner
+
+    monkeypatch.setattr(planner, "find_calibration_for", lambda *_a, **_k: None)
+    row = an.measure_linear_limit(an.SIZES["quick"], backend="numpy")["planner"]
+
+    assert (row["source"], row["target"]) == ("db", "cpu")
+    assert row["predicted_s"] is None and row["warmup_s"] is None
+    assert "no wall time" in row["note"]
+    assert row["predicted_steps"] > 0 and row["actual_steps"] > 0 and row["vram_gib"] > 0
+
+
+def test_a_planner_that_raises_costs_its_row_and_nothing_else(monkeypatch):
+    """The physics is the point; the informational table is not allowed to
+    take a scenario down with it."""
+    from caustica import planner
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("gpu_db.json is unreadable")
+
+    monkeypatch.setattr(planner, "estimate", boom)
+    data = an.measure_linear_limit(an.SIZES["quick"], backend="numpy")
+
+    assert data["phasor_max_abs_diff_pa"] == 0.0  # the scenario still measured
+    assert data["planner"]["predicted_s"] is None
+    assert "planner.estimate raised RuntimeError" in data["planner"]["note"]
+
+
 # ------------------------------------------------------------ end to end
 
 
