@@ -52,6 +52,7 @@ from caustica.planner.calibration import (
     find_calibration_for,
     measure_step_time,
     record_warmup,
+    record_warmup_model,
 )
 from caustica.solvers.base import CWRunSpec
 from caustica.solvers.kspace.engine import (
@@ -77,6 +78,7 @@ __all__ = [
     "measure_step_time",
     "spec_for_device",
     "record_warmup",
+    "record_warmup_model",
 ]
 
 _GIB = 2**30
@@ -250,7 +252,7 @@ def estimate(
     spec: CWRunSpec | None = None,
     *,
     solver: str = "westervelt",
-    gpu: str = "A100",
+    gpu: str | GPUSpec = "A100",
     harmonics: tuple[int, ...] = (1,),
     record_region: tuple[slice, ...] | None = None,
     reference_point: tuple[int, ...] | None = None,

@@ -508,3 +508,77 @@ def test_a_big_unknown_card_is_not_judged_against_a100_vram():
     side, mem = between
     assert mem.total_bytes > a100.usable_bytes
     assert mem.total_bytes <= spec.usable_bytes
+
+
+def test_real_runs_refit_both_warmup_terms(tmp_path):
+    """The gate suite's rungs are better warmup data than the probe.
+
+    They are whole solves, at several sizes, each in its own process — so
+    every sample paid the CUDA context and its own plan creation, which is
+    exactly what the two terms mean. Writing back one flat number instead
+    (what the suite used to do) collapses the model to a constant and
+    re-loses the term that is 46% of a 512^3 run's wall time.
+    """
+    calfile = tmp_path / "calibration.json"
+    device = "NVIDIA A100-SXM4-40GB"
+    calfile.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "devices": {
+                    device: {
+                        "a": 0.0,
+                        "b": 2e-10,
+                        "warmup_context_s": 9.9,
+                        "warmup_per_elem_s": 9.9e-7,
+                    }
+                },
+            }
+        )
+    )
+
+    c0, c1 = 1.81, 1.6258e-07
+    samples = [(n**3, c0 + c1 * n**3) for n in (256, 400, 512)]
+    entry = cal.record_warmup_model(device, samples, path=calfile)
+    assert entry["warmup_context_s"] == pytest.approx(c0, rel=1e-3)
+    assert entry["warmup_per_elem_s"] == pytest.approx(c1, rel=1e-3)
+    assert entry["warmup_source"] == "measured"
+    assert cal.calibrated_warmup(entry, 640**3) == pytest.approx(c0 + c1 * 640**3, rel=1e-3)
+
+
+def test_one_warmup_sample_moves_the_constant_and_keeps_the_slope(tmp_path):
+    calfile = tmp_path / "calibration.json"
+    device = "cpu"
+    calfile.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "devices": {
+                    device: {
+                        "a": 0.0,
+                        "b": 1e-10,
+                        "warmup_context_s": 0.5,
+                        "warmup_per_elem_s": 2e-08,
+                    }
+                },
+            }
+        )
+    )
+    entry = cal.record_warmup_model(device, [(1_000_000, 3.0)], path=calfile)
+    assert entry["warmup_per_elem_s"] == pytest.approx(2e-08)  # slope kept
+    assert entry["warmup_context_s"] == pytest.approx(3.0 - 2e-08 * 1_000_000)
+
+
+def test_a_falling_warmup_is_treated_as_noise_not_a_model(tmp_path):
+    calfile = tmp_path / "calibration.json"
+    device = "cpu"
+    calfile.write_text(json.dumps({"version": 1, "devices": {device: {"a": 0.0, "b": 1e-10}}}))
+    entry = cal.record_warmup_model(device, [(1_000_000, 4.0), (8_000_000, 2.0)], path=calfile)
+    assert entry["warmup_per_elem_s"] == 0.0
+    assert entry["warmup_context_s"] == pytest.approx(3.0)
+
+
+def test_recording_a_warmup_for_an_uncalibrated_device_invents_nothing(tmp_path):
+    calfile = tmp_path / "calibration.json"
+    calfile.write_text(json.dumps({"version": 1, "devices": {}}))
+    assert cal.record_warmup_model("no-such-device", [(10, 1.0)], path=calfile) is None

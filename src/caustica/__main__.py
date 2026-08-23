@@ -56,7 +56,12 @@ def build_parser() -> argparse.ArgumentParser:
         "registered through the 'caustica.backends' entry-point group. An "
         "unregistered name is refused before the run, listing what IS registered",
     )
-    r.add_argument("--gpu", default="A100", help="GPU for the datasheet estimate")
+    r.add_argument(
+        "--gpu",
+        default=None,
+        help="plan for THIS device instead of the one the run is on "
+        "(default: the live GPU, or A100 when there is none)",
+    )
     r.add_argument("--no-measure", action="store_true", help="skip the ~20-step timing probe")
     r.add_argument("--dry-run", action="store_true", help="plan only: no solve, no result")
     r.add_argument("--resume", action="store_true", help="continue from an existing checkpoint.npz")
