@@ -26,6 +26,14 @@ def _targets(text: str) -> tuple[float, ...]:
     return values
 
 
+def _solver_list(text: str) -> tuple[str, ...]:
+    """``a,b,c`` -> ``("a", "b", "c")``. Order matters: the first is the reference."""
+    names = tuple(part.strip() for part in text.split(",") if part.strip())
+    if not names:
+        raise argparse.ArgumentTypeError(f"no solver names in {text!r}")
+    return names
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="python -m caustica.validation",
@@ -103,6 +111,44 @@ def build_parser() -> argparse.ArgumentParser:
         help="'full' is the 3-D bowl geometry the physics gate validated; 'quick' is a "
         "smaller bowl for the same tolerances (about a second), used by the test suite",
     )
+
+    c = sub.add_parser(
+        "compare",
+        help="run the SAME job on N registered solvers and table what they disagree "
+        "about: normalized relL2, Pearson r, focal metrics and runtime per engine, "
+        "behind a T0 sanity gate and a verbatim 'environment-broken' stamp for any "
+        "engine this machine cannot run (exit: 0 all gates pass, 2 nothing could be "
+        "compared on this machine, 4 a gate failed or is incomplete)",
+    )
+    # --job and --example answer the same question ("which job?"); argparse
+    # refuses both at once rather than letting one silently win.
+    src = c.add_mutually_exclusive_group()
+    src.add_argument("--job", default=None, help="path to a caustica-job/1 file")
+    src.add_argument(
+        "--example",
+        default=None,
+        help="a packaged example job by name (read in place, never run in place)",
+    )
+    c.add_argument(
+        "--solvers",
+        type=_solver_list,
+        default=None,
+        help="comma-separated solver names, FIRST is the reference (default: every "
+        "registered solver whose caps accept the job, the job's own solver first)",
+    )
+    c.add_argument(
+        "--backend",
+        default="auto",
+        choices=("auto", "numpy", "cupy"),
+        help="backend for the solvers that take one; an external engine (k-Wave) "
+        "drives itself and ignores this",
+    )
+    c.add_argument(
+        "--out",
+        default=None,
+        help="report root (default: benchmarks/reports/compare); one timestamped "
+        "subfolder per run, holding REPORT.md, compare.json and job_input.json",
+    )
     return p
 
 
@@ -130,6 +176,24 @@ def main(argv: list[str] | None = None) -> int:
         from caustica.validation.analytic_suite import analytic_suite
 
         code, _ = analytic_suite(out=args.out, size=args.size)
+        return code
+    if args.suite == "compare":
+        from caustica.validation.compare import compare
+
+        try:
+            code, _ = compare(
+                job_path=args.job,
+                example=args.example,
+                solvers=args.solvers,
+                backend=args.backend,
+                out=args.out,
+            )
+        except (ValueError, KeyError) as exc:
+            # An unknown solver name, an unknown example, a missing job file:
+            # the request itself is unanswerable on this machine, which is
+            # what exit 2 means everywhere else in this package.
+            print(f"caustica compare: {exc}", file=sys.stderr)
+            return EXIT_ENV
         return code
     return EXIT_ENV  # pragma: no cover - argparse rejects unknown suites first
 
