@@ -23,7 +23,7 @@ import numpy as np
 from caustica.io.atomic import atomic_write
 from caustica.report import html as hrep
 from caustica.report.html import FIG_CAPTIONS
-from caustica.report.metrics import axial_profiles, focus_metrics
+from caustica.report.metrics import FieldFrame, axial_profiles, focus_metrics
 
 
 def _read_json(path: Path) -> dict | None:
@@ -125,16 +125,13 @@ def _full_report(outdir: Path, result_path: Path, metrics: dict | None, meta: di
     # ONE open for the fields and the geometry: the parsing of the result
     # attrs belongs to the module that writes them (janitor ticket 02).
     result, geo = load_result(result_path, with_geometry=True)
+    frame = FieldFrame.from_geometry(geo)
     name = geo["job_name"] or (metrics or {}).get("job") or outdir.name
     notes: list[str] = []
     if metrics is None:
         m = focus_metrics(
             result,
-            dx=geo["dx"],
-            grid_shape=geo["grid_shape"],
-            pml_vox=geo["pml_vox"],
-            apex_vox=geo["apex_vox"],
-            focus_vox=geo["focus_vox"],
+            frame,
             source_amplitude=geo["amplitude_pa"],
             medium=None,
         )
@@ -152,22 +149,12 @@ def _full_report(outdir: Path, result_path: Path, metrics: dict | None, meta: di
             )
 
     ctx = hfig.FigureContext(
-        dx=geo["dx"],
-        grid_shape=geo["grid_shape"],
-        pml_vox=geo["pml_vox"],
-        apex_vox=geo["apex_vox"],
-        focus_vox=geo["focus_vox"],
+        frame=frame,
         title=f"caustica run — {name}",
         solver=geo["solver"] or metrics.get("run", {}).get("solver", ""),
         source_indices=geo["source_indices"],
     )
-    prof = axial_profiles(
-        result,
-        dx=geo["dx"],
-        grid_shape=geo["grid_shape"],
-        pml_vox=geo["pml_vox"],
-        apex_vox=geo["apex_vox"],
-    )
+    prof = axial_profiles(result, frame)
     figs = hfig.make_all(ctx, result, prof, outdir)
 
     rows = _header_rows(name, meta, geo) + _metric_rows(metrics, _wall_time(meta))

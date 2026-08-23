@@ -256,7 +256,24 @@ def mini_job(name: str = "compare-mini") -> dict:
 # --------------------------------------------------------- field comparison
 
 
-def interior_amp(result: Any, *, grid_shape: tuple[int, ...], pml_vox: int) -> np.ndarray:
+def field_frame_of(built: Any) -> Any:
+    """The built job's grid frame, as :class:`~caustica.report.metrics.FieldFrame`.
+
+    One spelling for the harness: the T0 probe and the real comparison both
+    measure in the frame ``caustica report`` measures in.
+    """
+    from caustica.report.metrics import FieldFrame  # noqa: PLC0415
+
+    return FieldFrame(
+        dx=built.grid.dx,
+        grid_shape=built.grid.shape,
+        pml_vox=built.grid.pml_vox,
+        apex_vox=tuple(int(v) for v in built.derived.get("apex_vox", (0, 0, 0))),
+        focus_vox=built.focus_vox,
+    )
+
+
+def interior_amp(result: Any, frame: Any) -> np.ndarray:
     """``|phasor|`` over the record region with the sponge shaved off.
 
     Uses :func:`caustica.report.metrics.interior_slices`, the library's own
@@ -267,7 +284,7 @@ def interior_amp(result: Any, *, grid_shape: tuple[int, ...], pml_vox: int) -> n
     """
     from caustica.report.metrics import interior_slices  # noqa: PLC0415
 
-    return np.asarray(result.amp[interior_slices(result, grid_shape=grid_shape, pml_vox=pml_vox)])
+    return np.asarray(result.amp[interior_slices(result, frame)])
 
 
 def compare_fields(reference: np.ndarray, compared: np.ndarray) -> dict:
@@ -878,7 +895,7 @@ def _t0_for(solver_cls: type, built_t0: Any, backend: str, expected_pa: float) -
         np.isfinite(np.asarray(result.phasor)).all() and np.isfinite(np.asarray(result.p_max)).all()
     )
     try:
-        amp = interior_amp(result, grid_shape=built_t0.grid.shape, pml_vox=built_t0.grid.pml_vox)
+        amp = interior_amp(result, field_frame_of(built_t0))
         peak = float(amp.max())
     except Exception as exc:  # noqa: BLE001 - unmeasurable is a T0 failure, not a crash
         # Defensive: only reachable if the record region is swallowed by the
@@ -964,13 +981,7 @@ def compare(
         f"\nreport folder: {outdir}"
     )
 
-    geometry = {
-        "dx": built.grid.dx,
-        "grid_shape": built.grid.shape,
-        "pml_vox": built.grid.pml_vox,
-        "apex_vox": tuple(int(v) for v in built.derived.get("apex_vox", (0, 0, 0))),
-        "focus_vox": built.focus_vox,
-    }
+    frame = field_frame_of(built)
 
     runs: dict[str, dict] = {}
     amps: dict[str, np.ndarray] = {}
@@ -1029,7 +1040,7 @@ def compare(
             continue
         elapsed = time.perf_counter() - t_start
 
-        amp = interior_amp(result, grid_shape=geometry["grid_shape"], pml_vox=geometry["pml_vox"])
+        amp = interior_amp(result, frame)
         amps[name] = amp
         record["run"] = {
             "elapsed_s": elapsed,
@@ -1052,11 +1063,7 @@ def compare(
 
             record["metrics"] = focus_metrics(
                 result,
-                dx=geometry["dx"],
-                grid_shape=geometry["grid_shape"],
-                pml_vox=geometry["pml_vox"],
-                apex_vox=geometry["apex_vox"],
-                focus_vox=geometry["focus_vox"],
+                frame,
                 source_amplitude=built.source.amplitude,
                 medium=built.medium,
                 solver=name,

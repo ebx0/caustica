@@ -70,6 +70,7 @@ from caustica.runner import (
     EXIT_OK,
     EXIT_SOLVER,
     RunnerOptions,
+    _linear_solve_warnings_for,
     _now_iso,
     _plan,
     _ppw_warnings_for,
@@ -204,7 +205,7 @@ class SimulationRun:
         return self._metrics
 
     def _compute_metrics(self, result: SolverResult) -> dict:
-        from caustica.report.metrics import focus_metrics  # noqa: PLC0415
+        from caustica.report.metrics import FieldFrame, focus_metrics  # noqa: PLC0415
 
         g = self.geometry
         return {
@@ -213,11 +214,7 @@ class SimulationRun:
             "generated": _now_iso(),
             **focus_metrics(
                 result,
-                dx=g["dx"],
-                grid_shape=g["grid_shape"],
-                pml_vox=g["pml_vox"],
-                apex_vox=g["apex_vox"],
-                focus_vox=g["focus_vox"],
+                FieldFrame.from_geometry(g),
                 source_amplitude=g["source_amplitude"],
                 medium=self._medium,
                 solver=self.job.solver,
@@ -231,6 +228,7 @@ class SimulationRun:
         Identical in content to the ``preview.npz`` a written run produces —
         and read back from that file when there is one.
         """
+        from caustica.report.metrics import FieldFrame  # noqa: PLC0415
         from caustica.report.preview import (  # noqa: PLC0415
             build_preview,
             decode_preview,
@@ -240,17 +238,7 @@ class SimulationRun:
         path = None if self.outdir is None else self.outdir / "preview.npz"
         if path is not None and path.exists():
             return load_preview(path)
-        g = self.geometry
-        return decode_preview(
-            build_preview(
-                self.result,
-                dx=g["dx"],
-                grid_shape=g["grid_shape"],
-                pml_vox=g["pml_vox"],
-                apex_vox=g["apex_vox"],
-                focus_vox=g["focus_vox"],
-            )
-        )
+        return decode_preview(build_preview(self.result, FieldFrame.from_geometry(self.geometry)))
 
     # -- persistence ----------------------------------------------------
     def save(self, path: str | Path) -> Path:
@@ -540,6 +528,8 @@ def _run_in_memory(
             CausticaWarning,
             stacklevel=2,
         )
+    for warn_text in _linear_solve_warnings_for(built):
+        warnings.warn(warn_text, CausticaWarning, stacklevel=2)
     if native:
         refusal = check_gates(built, est, backend_name, opts, gpu_env)
         if refusal is not None:

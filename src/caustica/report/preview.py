@@ -31,6 +31,7 @@ import numpy as np
 from caustica.io.atomic import atomic_write
 from caustica.io.quantize import restore, try_float16
 from caustica.report.metrics import (
+    FieldFrame,
     argmax_interior,
     interior_slices,
     mm_axes,
@@ -74,12 +75,8 @@ def _put_quantized(arrays: dict, name: str, arr: np.ndarray) -> None:
 
 def build_preview(
     result: SolverResult,
+    frame: FieldFrame,
     *,
-    dx: float,
-    grid_shape: tuple[int, ...],
-    pml_vox: int,
-    apex_vox: tuple[int, int, int],
-    focus_vox: tuple[int, int, int] | None,
     max_bytes: int = DEFAULT_MAX_BYTES,
 ) -> bytes:
     """The package as npz BYTES — the same package, not yet written anywhere.
@@ -89,9 +86,9 @@ def build_preview(
     budget is still MEASURED here, on the compressed bytes, not estimated.
     """
     amp = result.amp
-    interior = interior_slices(result, grid_shape=grid_shape, pml_vox=pml_vox)
+    interior = interior_slices(result, frame)
     pk = argmax_interior(amp, interior)
-    x_mm, y_mm, z_mm = mm_axes(result, dx=dx, apex_vox=apex_vox)
+    x_mm, y_mm, z_mm = mm_axes(result, frame)
 
     step = _coarse_step(amp.shape, int(max_bytes * _COARSE_BUDGET_FRACTION))
     for _attempt in range(4):
@@ -113,13 +110,13 @@ def build_preview(
             json.dumps(
                 {
                     "format": PREVIEW_FORMAT,
-                    "dx_m": float(dx),
-                    "grid_shape": list(grid_shape),
-                    "pml_vox": int(pml_vox),
+                    "dx_m": float(frame.dx),
+                    "grid_shape": list(frame.grid_shape),
+                    "pml_vox": int(frame.pml_vox),
                     "region_start": [int(s.start) for s in result.region],
                     "region_stop": [int(s.stop) for s in result.region],
-                    "apex_vox": list(apex_vox),
-                    "focus_vox": None if focus_vox is None else list(focus_vox),
+                    "apex_vox": list(frame.apex_vox),
+                    "focus_vox": None if frame.focus_vox is None else list(frame.focus_vox),
                     "peak_voxel_grid": list(to_grid(pk, result)),
                     "coarse_step": int(step),
                     "coarse_note": (
@@ -151,26 +148,14 @@ def build_preview(
 def write_preview(
     outdir: str | Path,
     result: SolverResult,
+    frame: FieldFrame,
     *,
-    dx: float,
-    grid_shape: tuple[int, ...],
-    pml_vox: int,
-    apex_vox: tuple[int, int, int],
-    focus_vox: tuple[int, int, int] | None,
     metrics: dict,
     max_bytes: int = DEFAULT_MAX_BYTES,
 ) -> Path:
     """Write ``preview.npz`` + ``metrics.json`` into ``outdir`` (atomic)."""
     outdir = Path(outdir)
-    payload = build_preview(
-        result,
-        dx=dx,
-        grid_shape=grid_shape,
-        pml_vox=pml_vox,
-        apex_vox=apex_vox,
-        focus_vox=focus_vox,
-        max_bytes=max_bytes,
-    )
+    payload = build_preview(result, frame, max_bytes=max_bytes)
     path = outdir / "preview.npz"
     with atomic_write(path) as tmp:
         tmp.write_bytes(payload)

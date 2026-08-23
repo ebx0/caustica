@@ -448,6 +448,13 @@ def _ppw_warnings_for(built: BuiltJob) -> list[str]:
     return low_ppw_warnings(built.grid, built.source.f0, built.harmonics, c_min, approx)
 
 
+def _linear_solve_warnings_for(built: BuiltJob) -> list[str]:
+    """ "westervelt on a beta=0 medium" warnings (single source: config.job)."""
+    from caustica.config.job import linear_medium_warnings  # noqa: PLC0415
+
+    return linear_medium_warnings(built.solver, built.medium)
+
+
 #: Planning target when no device is present and none was named.
 DEFAULT_PLAN_GPU = "A100"
 
@@ -714,15 +721,18 @@ def _write_preview_package(built: BuiltJob, result, outdir: Path, apex_vox: tupl
     never turn a successful run into a failed one — the caller warns.
     """
     from caustica.report import preview as _preview  # noqa: PLC0415
-    from caustica.report.metrics import focus_metrics  # noqa: PLC0415
+    from caustica.report.metrics import FieldFrame, focus_metrics  # noqa: PLC0415
 
-    metrics = focus_metrics(
-        result,
+    frame = FieldFrame(
         dx=built.grid.dx,
         grid_shape=built.grid.shape,
         pml_vox=built.grid.pml_vox,
         apex_vox=apex_vox,
         focus_vox=built.focus_vox,
+    )
+    metrics = focus_metrics(
+        result,
+        frame,
         source_amplitude=built.source.amplitude,
         medium=built.medium,
         solver=built.solver,
@@ -730,11 +740,7 @@ def _write_preview_package(built: BuiltJob, result, outdir: Path, apex_vox: tupl
     _preview.write_preview(
         outdir,
         result,
-        dx=built.grid.dx,
-        grid_shape=built.grid.shape,
-        pml_vox=built.grid.pml_vox,
-        apex_vox=apex_vox,
-        focus_vox=built.focus_vox,
+        frame,
         metrics={
             "format": "caustica-metrics/1",
             "job": built.name,
@@ -858,6 +864,10 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
             CausticaWarning,
             stacklevel=2,
         )
+    # The other silent-expectation trap, in the same phase and from the same
+    # single source `caustica validate` reads (janitor ticket 08).
+    for warn_text in _linear_solve_warnings_for(built):
+        warnings.warn(warn_text, CausticaWarning, stacklevel=2)
 
     if native:
         refusal = check_gates(built, est, backend_name, opts, gpu_env, ck_exists=ck_path.exists())

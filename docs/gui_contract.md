@@ -341,6 +341,15 @@ identical package without touching disk.
 - `focal_spot` — the −6 dB focal spot
 - `target` — the requested focus, and the miss distance
 - `run` — solver/steps/convergence provenance
+- `warnings` — caveats about the numbers above; a list, empty when there are
+  none, never absent *(added 2026-08-23)*
+
+A run that recorded a second harmonic also carries `harmonics`. Its
+`a2_peak_pa` is a whole-interior maximum, so it can land on the PML's own
+harmonic-DFT residue rather than on the beam: `a2_peak_distance_to_pml_vox`
+*(added 2026-08-23)* says how far that voxel is from the absorber, and under 8
+voxels a `warnings` entry (and the REPORT.md row) says to read
+`a2_at_fundamental_peak_pa` instead. Existing fields are unchanged.
 
 ---
 

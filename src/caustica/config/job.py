@@ -999,6 +999,38 @@ def low_ppw_warnings(grid, f0: float, harmonics, c_min: float, approx_label: str
     return out
 
 
+#: The solver whose physics is the nonlinear one; pairing it with a beta=0
+#: medium is the trap :func:`linear_medium_warnings` exists for.
+_NONLINEAR_SOLVER = "westervelt"
+
+
+def linear_medium_warnings(solver: str, medium) -> list[str]:
+    """The "westervelt on a beta=0 medium" warning (janitor ticket 08).
+
+    ``water()`` is beta=0 by design and the engine is right to drop the
+    nonlinear term for it (M5: westervelt at beta=0 IS linear, bit for bit) —
+    but a job that ASKS for westervelt is asking for nonlinear physics, and a
+    ``harmonics: [1, 2]`` run that quietly gets a linear solve back is left
+    wondering why its second harmonic is numerical noise.
+
+    A warning, never an error: a linear reference run through the nonlinear
+    engine is a legitimate thing to want, and ``water()`` keeps its beta (the
+    analytic cross-checks are built on it).
+
+    Single source for validate and the runner/facade gate, exactly like
+    :func:`low_ppw_warnings`.
+    """
+    if solver != _NONLINEAR_SOLVER or medium is None or not medium.is_linear:
+        return []
+    return [
+        f"solver '{_NONLINEAR_SOLVER}' with a medium whose beta is 0 everywhere: this "
+        f"solve will be BIT-IDENTICAL to solver 'linear' (there is no nonlinear term "
+        f"to apply), so recorded harmonics above f0 will be numerical residue. Set "
+        f"medium.material.beta (water in the HIFU literature: 3.5) for a nonlinear "
+        f"run. Intentional? Then this is fine — it is a linear reference run."
+    ]
+
+
 def validate_job(path: str | Path, fast: bool = False) -> JobReport:
     """Everything that can be checked WITHOUT solving (and without a GPU).
 
@@ -1070,6 +1102,7 @@ def validate_job(path: str | Path, fast: bool = False) -> JobReport:
             report.errors.append(str(exc))
         except Exception as exc:
             report.errors.append(f"{type(exc).__name__}: {exc}")
+        report.warnings.extend(linear_medium_warnings(built.solver, built.medium))
     else:
         try:
             import caustica.solvers as solvers  # noqa: PLC0415

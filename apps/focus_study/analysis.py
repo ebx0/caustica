@@ -15,6 +15,7 @@ from apps.focus_study.scenarios import Setup
 from caustica.analytic import axial_pressure
 from caustica.report import metrics as _metrics
 from caustica.report.metrics import (
+    FieldFrame,
     axial_profiles,
     focus_metrics,
     region_origin,
@@ -22,25 +23,35 @@ from caustica.report.metrics import (
 )
 from caustica.solvers import SolverResult
 
-__all__ = ["interior_slices", "analyze", "profiles", "region_origin"]
+__all__ = ["field_frame", "interior_slices", "analyze", "profiles", "region_origin"]
+
+
+def field_frame(setup: Setup) -> FieldFrame:
+    """The scenario's grid frame, in the library's own vocabulary.
+
+    The ONE place a ``Setup`` is translated into a
+    :class:`~caustica.report.metrics.FieldFrame`; every metric, profile and
+    figure below is then computed in the identical frame.
+    """
+    return FieldFrame(
+        dx=setup.grid.dx,
+        grid_shape=setup.grid.shape,
+        pml_vox=setup.grid.pml_vox,
+        apex_vox=setup.apex_vox,
+        focus_vox=setup.focus_vox,
+    )
 
 
 def interior_slices(setup: Setup, result: SolverResult, extra: int = 2) -> tuple[slice, ...]:
     """Record-region slices with the PML (plus a margin) shaved off."""
-    return _metrics.interior_slices(
-        result, grid_shape=setup.grid.shape, pml_vox=setup.grid.pml_vox, extra=extra
-    )
+    return _metrics.interior_slices(result, field_frame(setup), extra=extra)
 
 
 def analyze(setup: Setup, result: SolverResult) -> dict:
     """All scalar metrics for one run (JSON-ready)."""
     metrics = focus_metrics(
         result,
-        dx=setup.grid.dx,
-        grid_shape=setup.grid.shape,
-        pml_vox=setup.grid.pml_vox,
-        apex_vox=setup.apex_vox,
-        focus_vox=setup.focus_vox,
+        field_frame(setup),
         source_amplitude=setup.knobs.amplitude,
         medium=setup.medium,
         solver=setup.knobs.solver,
@@ -94,13 +105,7 @@ def analyze(setup: Setup, result: SolverResult) -> dict:
 
 def profiles(setup: Setup, result: SolverResult) -> dict[str, np.ndarray]:
     """Coordinate/profile arrays used by the figures (mm, Pa)."""
-    out = axial_profiles(
-        result,
-        dx=setup.grid.dx,
-        grid_shape=setup.grid.shape,
-        pml_vox=setup.grid.pml_vox,
-        apex_vox=setup.apex_vox,
-    )
+    out = axial_profiles(result, field_frame(setup))
     if setup.aperture_radius is not None and setup.medium.c_max == setup.medium.c_min:
         out["axial_oneill"] = np.abs(
             axial_pressure(

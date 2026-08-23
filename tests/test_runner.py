@@ -5,6 +5,7 @@ Colab path are the same code (`run_job_file`), only the backend differs.
 """
 
 import json
+import warnings
 from pathlib import Path
 
 import h5py
@@ -13,6 +14,7 @@ import pytest
 
 import caustica.runner as runner_mod
 from caustica.config.job import JOB_FORMAT
+from caustica.core.backend import CausticaWarning
 from caustica.io.store import load_result, validate_result_file
 from caustica.runner import (
     CANCEL_FILE,
@@ -832,3 +834,60 @@ def test_the_plan_reports_warmup_separately_from_the_per_step_cost(tmp_path):
     assert plan["t_expected_s"] == pytest.approx(
         plan["warmup_s"] + plan["t_step_s"] * plan["steps_expected"], rel=0.02, abs=0.05
     )
+
+
+# ------------------------- janitor ticket 08 (2026-08-23): the beta=0 trap
+
+
+def _beta_zero_warnings(job: Path, out: Path) -> list[str]:
+    """Run the job; return the "linear solve" warnings it raised, if any.
+
+    Recorded rather than asserted with ``pytest.warns`` because a mini CPU run
+    legitimately raises other CausticaWarnings (backend fallback, slow CPU) —
+    this test is about ONE of them being there, or not.
+    """
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        assert run_job_file(job, opts(out=out)) == EXIT_OK
+    return [
+        str(w.message)
+        for w in caught
+        if issubclass(w.category, CausticaWarning) and "BIT-IDENTICAL" in str(w.message)
+    ]
+
+
+def test_runner_warns_that_westervelt_on_a_beta_zero_medium_is_a_linear_solve(tmp_path):
+    """The gate phase says out loud what the engine silently does (ticket 08).
+
+    The default homogeneous medium is ``water()``, beta=0 by design, so the
+    westervelt engine drops its nonlinear term and reproduces `linear` bit for
+    bit. The run is correct; the EXPECTATION is the thing that breaks, so the
+    runner names the fix instead of leaving a2 unexplained.
+    """
+    job = mini_job(tmp_path, "beta0", solver="westervelt")
+    hits = _beta_zero_warnings(job, tmp_path / "out_beta0")
+    assert len(hits) == 1
+    assert "medium.material.beta" in hits[0] and "3.5" in hits[0]
+
+
+def test_runner_is_quiet_when_the_solver_and_the_medium_agree(tmp_path):
+    """`linear` on beta=0, and westervelt on a real beta: neither is a trap."""
+    honest = mini_job(tmp_path, "honest", solver="linear")
+    assert _beta_zero_warnings(honest, tmp_path / "out_linear") == []
+
+    nonlinear = mini_job(
+        tmp_path,
+        "nonlinear",
+        solver="westervelt",
+        medium={
+            "kind": "homogeneous",
+            "material": {
+                "name": "water",
+                "c": 1500.0,
+                "rho": 1000.0,
+                "alpha_np_m": 0.0,
+                "beta": 3.5,
+            },
+        },
+    )
+    assert _beta_zero_warnings(nonlinear, tmp_path / "out_nonlinear") == []
