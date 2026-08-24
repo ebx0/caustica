@@ -116,6 +116,7 @@ class KWaveSolver(SolverBase):
                 )
         self.validate(grid, medium, source)
         try:
+            import kwave
             from kwave.kgrid import kWaveGrid
             from kwave.kmedium import kWaveMedium
             from kwave.ksensor import kSensor
@@ -331,5 +332,8 @@ class KWaveSolver(SolverBase):
                 "kwave_binary_gpu": use_gpu_binary,
                 "fixed_schedule_periods": total_periods,
                 "source": source.label,
+                # An external engine has its own generation: ours is the
+                # adapter's contract, theirs is the binary's version.
+                "numerics_scheme": f"kwave/{getattr(kwave, '__version__', 'unknown')}",
             },
         )

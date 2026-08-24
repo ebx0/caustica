@@ -61,6 +61,13 @@ from caustica.sources import CWSource, ramp_envelope
 
 log = logging.getLogger("caustica")
 
+#: Which numerics produced a field. Bumped whenever a change moves the
+#: trajectory this engine follows, so a checkpoint from an older one is
+#: refused rather than spliced and a stored result says which generation it
+#: came from. /2 zeroed the Nyquist wavenumber (2026-08-24); /3 gave sources
+#: per-voxel drive weights (2026-08-24).
+NUMERICS_SCHEME = "cw-kspace-pstd/3"
+
 
 def normalize_record_region(region: tuple[slice, ...], shape: tuple[int, ...]) -> tuple[slice, ...]:
     """Resolve record-region slices against the ACTIVE grid shape.
@@ -318,11 +325,7 @@ def run_cw_kspace_pstd(
             # produces on every even-length axis. A checkpoint written by /1
             # holds a state the current step loop would never have reached, and
             # splicing the two would produce a field that is neither.
-            # Bumped to /3 on 2026-08-24: a source can now carry per-voxel
-            # drive weights, and the default bowl uses them. A checkpoint from
-            # /2 was written by a run whose source had a different strength at
-            # every voxel, so resuming into this one splices two trajectories.
-            "scheme": "cw-kspace-pstd/3",
+            "scheme": NUMERICS_SCHEME,
             "solver": solver_name,
             "backend": b.name,
             "grid_shape": list(grid.shape),
@@ -593,5 +596,6 @@ def run_cw_kspace_pstd(
             "c_ref": c_max,
             "nonlinear_active": beta2_dt is not None,
             "source": source.label,
+            "numerics_scheme": NUMERICS_SCHEME,
         },
     )

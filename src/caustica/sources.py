@@ -53,6 +53,12 @@ class CWSource:
         and needs the weights to say so (see
         :mod:`caustica.geometry.offgrid`). Weights may be negative — a
         band-limited interpolant has side-lobes.
+    discretization:
+        How the continuous geometry became these voxels, for the record. It
+        travels into ``result.h5`` so a stored pressure says which generation
+        of the source model produced it — the difference is 13-18 % of an
+        absolute amplitude, which is not something a reader should have to
+        infer from a commit date.
     """
 
     indices: np.ndarray
@@ -62,6 +68,7 @@ class CWSource:
     ramp_periods: float = 3.0
     label: str = field(default="", compare=False)
     weights: np.ndarray | None = None
+    discretization: str = field(default="", compare=False)
 
     def __post_init__(self) -> None:
         idx = np.asarray(self.indices)
@@ -223,6 +230,7 @@ def bowl_cw_source(
             amplitude=amplitude,
             f0=f0,
             label=label + " binary",
+            discretization="binary",
         )
         src.check_inside(grid)
         return src
@@ -262,4 +270,5 @@ def bowl_cw_source(
         f0=f0,
         weights=dep.weights.astype(np.float32),
         label=label,
+        discretization="offgrid",
     )

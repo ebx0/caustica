@@ -186,6 +186,7 @@ class TransducerArray:
             amplitude=amplitude,
             f0=f0,
             label=f"array(n={self.n_elements}, r_elem={self.elem_radius * 1e3:.2f}mm) binary",
+            discretization="binary",
         )
         source.check_inside(grid)
         return ArraySource(source=source, element_of_voxel=elem_of_voxel)
@@ -289,6 +290,7 @@ class TransducerArray:
             amplitude=amplitude,
             f0=f0,
             label=f"array(n={self.n_elements}, r_elem={self.elem_radius * 1e3:.2f}mm)",
+            discretization="offgrid",
         )
         source.check_inside(grid)
         log.debug("off-grid array: %d points, |drive| total %.1f grid squares", len(idx), total)
