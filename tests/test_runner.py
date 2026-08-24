@@ -601,7 +601,7 @@ ERROR_SCENARIOS = [
     ids=[b.__name__.lstrip("_") for b, *_ in ERROR_SCENARIOS],
 )
 def test_every_failure_class_writes_a_conformant_error_json(
-    tmp_path, monkeypatch, build, stage, code, error_class, wants_advice
+    tmp_path, monkeypatch, no_gpu, build, stage, code, error_class, wants_advice
 ):
     job, options = build(tmp_path, monkeypatch)
     assert run_job_file(job, options) == code  # the exit code is UNCHANGED
@@ -628,7 +628,7 @@ def test_every_failure_class_writes_a_conformant_error_json(
 
 
 @pytest.mark.parametrize("build", [_vram_refusal, _cpu_refusal], ids=["vram", "cpu"])
-def test_a_refusal_prints_the_same_advice_it_writes(tmp_path, monkeypatch, capsys, build):
+def test_a_refusal_prints_the_same_advice_it_writes(tmp_path, monkeypatch, capsys, no_gpu, build):
     """A gate that refuses without saying what to do is a dead end.
 
     The two pre-run gates exist to be ACTIONABLE, so both renderings are

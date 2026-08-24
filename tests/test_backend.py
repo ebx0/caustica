@@ -21,9 +21,7 @@ def test_auto_backend_resolves():
         assert b.name == "numpy"
 
 
-def test_cupy_request_fails_actionably_without_gpu():
-    if cupy_available():
-        pytest.skip("machine has a GPU; failure path not reachable")
+def test_cupy_request_fails_actionably_without_gpu(no_gpu):
     with pytest.raises(RuntimeError, match="cupy"):
         get_backend("cupy")
 

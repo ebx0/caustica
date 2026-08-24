@@ -101,7 +101,7 @@ def test_t_end_floor_enters_the_step_count():
 # ------------------------------------------------------------ estimate sources
 
 
-def test_estimate_source_labels_db_calibrated_measured(tmp_path):
+def test_estimate_source_labels_db_calibrated_measured(tmp_path, no_gpu):
     grid, med, src = tiny_setup()
 
     est = planner.estimate(grid, med, src, gpu="A100")
