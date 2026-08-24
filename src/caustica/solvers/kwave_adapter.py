@@ -42,7 +42,13 @@ import numpy as np
 
 from caustica.core.grid import Grid
 from caustica.medium import Medium
-from caustica.solvers.base import CWRunSpec, SolverBase, SolverCaps, SolverResult
+from caustica.solvers.base import (
+    PML_DAMPED_LIMIT,
+    CWRunSpec,
+    SolverBase,
+    SolverCaps,
+    SolverResult,
+)
 from caustica.solvers.registry import register
 from caustica.sources import CWSource
 from caustica.spectral import single_bin_phasor
@@ -180,13 +186,21 @@ class KWaveSolver(SolverBase):
         order_f = np.flatnonzero(src_mask.flatten(order="F"))
         coords_f = np.stack(np.unravel_index(order_f, grid.shape, order="F"), axis=1)
         lut = {tuple(row): i for i, row in enumerate(map(tuple, source.indices))}
-        phase_f = np.array([source.phases[lut[tuple(c)]] for c in map(tuple, coords_f)])
+        order_in_source = np.array([lut[tuple(c)] for c in map(tuple, coords_f)])
+        phase_f = source.phases[order_in_source]
+        # Per-voxel drive weights reorder with the phases, for the same reason:
+        # k-Wave reads its source points in Fortran order and ours are stored
+        # in whatever order the constructor produced.
+        weight_f = source.drive_weights[order_in_source]
 
         t = np.arange(nt) * dt
         env = 0.5 * (1.0 - np.cos(np.pi * np.minimum(t / (source.ramp_periods * period), 1.0)))
         omega = 2.0 * np.pi * source.f0
         signals = (
-            source.amplitude * env[None, :] * np.sin(omega * t[None, :] - phase_f[:, None])
+            source.amplitude
+            * weight_f[:, None]
+            * env[None, :]
+            * np.sin(omega * t[None, :] - phase_f[:, None])
         ).astype(np.float32)
 
         ksource = kSource()
@@ -208,14 +222,29 @@ class KWaveSolver(SolverBase):
                 f"from the native (periodic) solvers.",
                 stacklevel=2,
             )
-        lo = source.indices.min(axis=0)
-        hi = source.indices.max(axis=0)
-        if (lo < pml_size).any() or (hi >= np.asarray(grid.shape) - pml_size).any():
+        # Graded on the DRIVE, not on the bounding box: a band-limited source
+        # has a halo whose outermost voxels carry a fraction of a percent, and
+        # refusing a run because that tail touched the band would refuse every
+        # off-grid bowl with a normal standoff. The threshold and the reasoning
+        # are the native solvers' (caustica.solvers.base).
+        idx = source.indices
+        w = np.abs(source.drive_weights.astype(np.float64))
+        upper = np.asarray(grid.shape) - pml_size
+        outside = ~((idx >= pml_size) & (idx < upper)).all(axis=1)
+        damped = float(w[outside].sum() / w.sum()) if w.sum() else 0.0
+        lo, hi = idx.min(axis=0), idx.max(axis=0)
+        if damped > PML_DAMPED_LIMIT:
             raise ValueError(
-                f"source voxels (span {tuple(lo)}..{tuple(hi)}) intersect k-Wave's "
-                f"inner PML band ({pml_size} voxels on each face of {grid.shape}, "
-                f"pml_inside=True) and would be silently damped. Enlarge the grid "
-                f"or move the source inward."
+                f"{damped * 100:.1f}% of this source's drive (span {tuple(lo)}.."
+                f"{tuple(hi)}) lies inside k-Wave's inner PML band ({pml_size} voxels "
+                f"on each face of {grid.shape}, pml_inside=True) and would be silently "
+                f"damped. Enlarge the grid or move the source inward."
+            )
+        if damped > 0.01:
+            warnings.warn(
+                f"{damped * 100:.1f}% of the source drive sits inside k-Wave's inner "
+                f"PML band ({pml_size} voxels) and is damped as it is applied.",
+                stacklevel=2,
             )
         sim_options = SimulationOptions(
             pml_inside=True, pml_size=pml_size, data_cast="single", save_to_disk=True

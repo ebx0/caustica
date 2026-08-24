@@ -275,7 +275,14 @@ def run_cw_kspace_pstd(
     # 2*c*dt/dx at the source voxels makes the realized amplitude
     # ~= source.amplitude, grid- and medium-invariant (few-% residual).
     c_src = medium.c[tuple(source.indices[:, d] for d in range(nd))]
-    src_scale = xp.asarray(2.0 * c_src.astype(np.float64) * dt / dx, dtype=xp.float32)
+    # The per-voxel drive weight rides along in the same factor. It is 1.0 for
+    # a uniform source, so nothing about the plane-source calibration above
+    # changes; a curved source uses it to carry its own AREA instead of its
+    # voxel count, which a binary mask cannot do (see caustica.geometry.offgrid).
+    src_scale = xp.asarray(
+        2.0 * c_src.astype(np.float64) * dt / dx * source.drive_weights.astype(np.float64),
+        dtype=xp.float32,
+    )
 
     # ---- time of flight: farthest reference the wave must reach ----
     tof_periods = cw_tof_periods(grid, medium, source, reference_point)
@@ -311,7 +318,11 @@ def run_cw_kspace_pstd(
             # produces on every even-length axis. A checkpoint written by /1
             # holds a state the current step loop would never have reached, and
             # splicing the two would produce a field that is neither.
-            "scheme": "cw-kspace-pstd/2",
+            # Bumped to /3 on 2026-08-24: a source can now carry per-voxel
+            # drive weights, and the default bowl uses them. A checkpoint from
+            # /2 was written by a run whose source had a different strength at
+            # every voxel, so resuming into this one splices two trajectories.
+            "scheme": "cw-kspace-pstd/3",
             "solver": solver_name,
             "backend": b.name,
             "grid_shape": list(grid.shape),
@@ -329,7 +340,7 @@ def run_cw_kspace_pstd(
                 None if reference_point is None else [int(r) for r in reference_point]
             ),
             "spec": spec.model_dump(),
-            "source_sha1": arrays_sha1(source.indices, source.phases),
+            "source_sha1": arrays_sha1(source.indices, source.phases, source.drive_weights),
             "medium_sha1": arrays_sha1(medium.c, medium.rho, medium.alpha, medium.beta),
         }
 

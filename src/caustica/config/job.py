@@ -400,6 +400,16 @@ class BowlArrayConfig(ArrayKindConfig):
     kind: Literal["bowl"] = "bowl"
     d_outer_mm: float = Field(..., gt=0.0)
     roc_mm: float = Field(..., gt=0.0)
+    discretization: Literal["offgrid", "binary"] = Field(
+        "offgrid",
+        description=(
+            "How the continuous cap becomes grid quantities. 'offgrid' (default) "
+            "spreads the cap's closed-form area over band-limited weights, so the "
+            "realized amplitude matches the request; 'binary' is the pre-2026-08-24 "
+            "one-voxel-thick shell, kept for reproducing older results, and "
+            "over-drives a bowl by 13-25%"
+        ),
+    )
 
     @model_validator(mode="after")
     def _check(self) -> BowlArrayConfig:
@@ -443,9 +453,12 @@ class BowlArrayConfig(ArrayKindConfig):
             aperture_radius=self.d_outer_mm / 2.0 * _MM,
             roc=self.roc_mm * _MM,
             apex_vox=apex_vox,
+            discretization=self.discretization,
         )
         extra: dict[str, Any] = dict(self.derived())
         extra["source_voxels"] = int(src.n_points)
+        extra["discretization"] = self.discretization
+        extra["drive_area_grid_squares"] = float(src.drive_weights.sum())
         return src, extra
 
 

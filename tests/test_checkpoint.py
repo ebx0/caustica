@@ -211,7 +211,9 @@ def test_a_checkpoint_from_older_numerics_is_refused(tmp_path):
     # Rewrite the stored fingerprint as an older scheme would have left it.
     stored = dict(np.load(ck_path, allow_pickle=True))
     meta = json.loads(str(stored["meta_json"]))
-    assert meta["fingerprint"]["scheme"] == "cw-kspace-pstd/2", meta["fingerprint"]["scheme"]
+    # Pinned on purpose: bumping the scheme is a deliberate act (it says the
+    # trajectory changed), so it has to come here and say so too.
+    assert meta["fingerprint"]["scheme"] == "cw-kspace-pstd/3", meta["fingerprint"]["scheme"]
     meta["fingerprint"]["scheme"] = "cw-kspace-pstd/1"
     stored["meta_json"] = np.asarray(json.dumps(meta))
     with open(ck_path, "wb") as fh:

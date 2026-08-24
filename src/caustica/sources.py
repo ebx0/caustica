@@ -14,11 +14,13 @@ validation geometries (plane, bowl) needed by the solver test gates.
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass, field
 
 import numpy as np
 
 from caustica.analytic.geometry import spherical_cap_points
+from caustica.core.backend import CausticaWarning
 from caustica.core.grid import Grid
 
 
@@ -42,6 +44,15 @@ class CWSource:
         Drive frequency [Hz].
     ramp_periods:
         Cosine-taper ramp length in periods (notebook default: 3).
+    weights:
+        ``(n,)`` per-voxel drive weight, or ``None`` for a uniform drive.
+        This is what lets a source carry its own *area* instead of its voxel
+        count. A flat source has exactly one voxel per ``dx**2`` of aperture,
+        so its weights are all 1.0 and ``None`` is the honest spelling of
+        that; a curved one crosses more voxels per unit area than a flat one
+        and needs the weights to say so (see
+        :mod:`caustica.geometry.offgrid`). Weights may be negative — a
+        band-limited interpolant has side-lobes.
     """
 
     indices: np.ndarray
@@ -50,6 +61,7 @@ class CWSource:
     f0: float
     ramp_periods: float = 3.0
     label: str = field(default="", compare=False)
+    weights: np.ndarray | None = None
 
     def __post_init__(self) -> None:
         idx = np.asarray(self.indices)
@@ -73,6 +85,20 @@ class CWSource:
             )
         object.__setattr__(self, "indices", np.ascontiguousarray(idx.astype(np.int64)))
         object.__setattr__(self, "phases", np.ascontiguousarray(ph))
+        if self.weights is not None:
+            wt = np.asarray(self.weights, dtype=np.float32)
+            if wt.shape != (idx.shape[0],):
+                raise ValueError(f"weights must be ({idx.shape[0]},), got {wt.shape}")
+            if not np.isfinite(wt).all():
+                raise ValueError("source weights must all be finite")
+            object.__setattr__(self, "weights", np.ascontiguousarray(wt))
+
+    @property
+    def drive_weights(self) -> np.ndarray:
+        """Per-voxel weights, materialized — ones when the drive is uniform."""
+        if self.weights is None:
+            return np.ones(self.n_points, dtype=np.float32)
+        return self.weights
 
     @property
     def n_points(self) -> int:
@@ -148,28 +174,92 @@ def bowl_cw_source(
     roc: float,
     apex_vox: tuple[int, ...],
     spacing: float | None = None,
+    *,
+    discretization: str = "offgrid",
+    bli_tolerance: float = 0.2,
+    upsampling: int = 10,
 ) -> CWSource:
-    """Focused spherical-cap source voxelized onto a 3-D grid.
+    """Focused spherical-cap source on a 3-D grid.
 
     The cap axis is +z (last grid axis); ``apex_vox`` is the voxel of the
-    bowl apex, the geometric focus lands at ``apex_vox + roc/dx`` along z.
-    Sub-voxel cap sampling (default dx/2) is deduplicated to one voxel set,
-    uniform phase (natural geometric focusing).
+    bowl apex and the geometric focus lands at ``apex_vox + roc/dx`` along z.
+    Phase is uniform (natural geometric focusing).
+
+    ``discretization`` chooses how the continuous cap becomes grid quantities:
+
+    ``"offgrid"`` (default)
+        Weighted, band-limited: the cap's closed-form area is divided over
+        equal-area quadrature points and each is deposited through a
+        band-limited interpolant, so the grid weights sum to the area in
+        grid squares. This is what makes the realized amplitude match the
+        request for a *curved* source; ``spacing`` is ignored and
+        ``upsampling`` sets the quadrature density instead. See
+        :mod:`caustica.geometry.offgrid`.
+
+    ``"binary"``
+        The pre-2026-08-24 behaviour: sample the cap at ``spacing``
+        (default dx/2), round to voxels, deduplicate, drive each equally.
+        Kept because it is what every result before that date was computed
+        with, and reproducing one needs it. It over-drives a bowl by 13-25 %
+        and leaves 10 % of the shell undriven; both are measured in
+        ``benchmarks/reports/geometry/``.
     """
     if grid.ndim != 3:
         raise ValueError("bowl_cw_source requires a 3-D grid")
     if len(apex_vox) != 3:
         raise ValueError(f"apex_vox must have 3 entries, got {apex_vox}")
-    ds = grid.dx / 2.0 if spacing is None else float(spacing)
-    points, _normals, _areas = spherical_cap_points(aperture_radius, roc, ds)
-    idx = np.round(points / grid.dx).astype(np.int64) + np.asarray(apex_vox, np.int64)
-    idx = np.unique(idx, axis=0)
-    src = CWSource(
-        indices=idx,
-        phases=np.zeros(idx.shape[0], np.float32),
+    if discretization not in ("offgrid", "binary"):
+        raise ValueError(f"discretization must be 'offgrid' or 'binary', got {discretization!r}")
+    label = f"bowl(a={aperture_radius * 1e3:.1f}mm, roc={roc * 1e3:.1f}mm)"
+
+    if discretization == "binary":
+        ds = grid.dx / 2.0 if spacing is None else float(spacing)
+        points, _normals, _areas = spherical_cap_points(aperture_radius, roc, ds)
+        idx = np.round(points / grid.dx).astype(np.int64) + np.asarray(apex_vox, np.int64)
+        idx = np.unique(idx, axis=0)
+        src = CWSource(
+            indices=idx,
+            phases=np.zeros(idx.shape[0], np.float32),
+            amplitude=amplitude,
+            f0=f0,
+            label=label + " binary",
+        )
+        src.check_inside(grid)
+        return src
+
+    from caustica.geometry.offgrid import spherical_cap_deposit  # noqa: PLC0415
+
+    dep = spherical_cap_deposit(
+        grid.shape,
+        grid.dx,
+        aperture_radius,
+        roc,
+        apex_vox,
+        upsampling=upsampling,
+        tolerance=bli_tolerance,
+    )
+    if not len(dep.indices):
+        raise ValueError(
+            f"the bowl (a={aperture_radius * 1e3:g} mm, roc={roc * 1e3:g} mm, "
+            f"apex {tuple(apex_vox)}) deposited nothing inside grid {grid.shape}"
+        )
+    # A band-limited source has a halo, and a halo that runs off the edge is
+    # a transducer that is partly outside the domain. Silence there would be
+    # the same failure as the bowl that dissolved into the sponge.
+    if dep.dropped_fraction > 1e-6:
+        warnings.warn(
+            f"{dep.dropped_fraction * 100:.2f}% of this bowl's drive falls outside "
+            f"grid {grid.shape}: the band-limited source reaches several voxels "
+            f"beyond the cap and the domain does not hold it. Enlarge the grid or "
+            f"move the apex inward.",
+            CausticaWarning,
+            stacklevel=2,
+        )
+    return CWSource(
+        indices=dep.indices,
+        phases=np.zeros(len(dep.indices), np.float32),
         amplitude=amplitude,
         f0=f0,
-        label=f"bowl(a={aperture_radius * 1e3:.1f}mm, roc={roc * 1e3:.1f}mm)",
+        weights=dep.weights.astype(np.float32),
+        label=label,
     )
-    src.check_inside(grid)
-    return src

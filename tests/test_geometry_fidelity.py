@@ -85,21 +85,20 @@ def test_the_bowls_aperture_does_not_exceed_the_one_requested_by_more_than_a_vox
     assert aperture - dx <= rim <= aperture + dx
 
 
-def test_the_shipped_cap_sampling_leaves_holes_in_the_shell():
-    """A characterization test: this is a KNOWN defect, pinned deliberately.
+def test_the_binary_cap_sampling_leaves_holes_in_the_shell():
+    """Why ``discretization="binary"`` is legacy and not merely an option.
 
-    ``bowl_cw_source`` samples the cap at dx/2 and rounds to voxels. Sampling
-    the same cap sixteen times finer reaches voxels the shipped spacing never
-    does — measured 2026-08-24 as 10.4 % to 12.1 % of the shell across dx from
+    The binary path samples the cap at dx/2 and rounds to voxels. Sampling
+    the same cap sixteen times finer reaches voxels that spacing never does —
+    measured 2026-08-24 as 10.4 % to 12.1 % of the shell across dx from
     0.5 mm to 0.05 mm, roughly independent of dx because it is a property of
-    the sampling ratio and not of the grid. Those voxels are undriven, so the
-    bowl radiates from a porous shell.
+    the sampling ratio and not of the grid. Those voxels are undriven, so a
+    binary bowl radiates from a porous shell.
 
-    The bound below is the current behaviour, not the desired one. It exists
-    so that closing the holes has to be a deliberate act with a measurement
-    attached — refining the default sampling also raises the voxel count
-    above the cap's own area, which makes the drive normalization worse
-    before it makes it better (see the staircase test below).
+    Pinned rather than repaired: closing the holes alone makes the answer
+    WORSE, because it raises the voxel count further above the cap's own area
+    (see the staircase test below). The default path fixes both at once by
+    not being a shell at all.
     """
     dx, aperture, roc = 0.25 * MM, 5.0 * MM, 12.0 * MM
     shipped = {tuple(v) for v in bowl_voxels(dx, aperture, roc)}
@@ -112,20 +111,20 @@ def test_the_shipped_cap_sampling_leaves_holes_in_the_shell():
 
 @pytest.mark.parametrize("denom,low,high", [(2, 1.10, 1.25), (16, 1.28, 1.40)])
 def test_a_digitized_cap_carries_more_voxels_than_its_area(denom, low, high):
-    """The staircase factor, characterized: it is why a bowl over-drives.
+    """The staircase factor: the reason a binary bowl over-drives.
 
     A flat source has exactly one voxel per dx^2 of aperture. A tilted
     surface crosses more, and the engine drives every source voxel with the
-    same normalized amplitude — so a bowl radiates in proportion to its voxel
-    count, not to its area. Measured 2026-08-24 on an f/1.2 cap: 1.18 voxels
-    per dx^2 at the shipped dx/2 sampling and 1.33 at dx/16, and the focal
-    pressure sits 1.15x and 1.25x O'Neil's closed form respectively — the
-    excess tracks the ratio, and it does NOT fall as dx shrinks, because it
-    is a property of digitizing a tilted surface rather than a discretization
-    error.
+    same normalized amplitude — so a binary bowl radiates in proportion to
+    its voxel count, not to its area. Measured 2026-08-24 on an f/1.2 cap:
+    1.18 voxels per dx^2 at dx/2 sampling and 1.33 at dx/16, with the focal
+    pressure at 1.15x and 1.25x O'Neil's closed form respectively. The excess
+    tracked the ratio and did NOT fall as dx shrank, because digitizing a
+    tilted surface is not a discretization error.
 
-    Pinned rather than fixed: correcting it rescales every focused-bowl
-    pressure this library has ever produced.
+    Kept as the standing measurement of what the legacy path does, and of
+    what the default path had to overcome: see
+    ``test_the_offgrid_bowl_carries_the_caps_own_area``.
     """
     dx, aperture, roc = 0.25 * MM, 5.0 * MM, 12.0 * MM
     n = len(bowl_voxels(dx, aperture, roc, spacing=dx / denom))
@@ -354,17 +353,27 @@ def test_the_bowl_a_job_orders_is_the_bowl_the_builder_makes(dx_mm, d_outer_mm, 
     )
     built = build_job(job, base_dir=None, with_medium=False)
     dx = built.grid.dx
-    idx = np.asarray(built.source.indices)
+    idx = np.asarray(built.source.indices).astype(np.float64)
+    w = built.source.drive_weights.astype(np.float64)
     apex_expected = np.round(np.array([size[0] / 2, size[1] / 2, apex_mm]) * MM / dx)
     focus_expected = apex_expected + np.array([0.0, 0.0, round(roc_mm * MM / dx)])
 
     assert list(built.focus_vox) == [int(v) for v in focus_expected]
-    assert idx[:, 2].min() == int(apex_expected[2])
-    err = np.linalg.norm(idx * dx - focus_expected * dx, axis=1) - roc_mm * MM
-    assert np.abs(err).max() / dx < 0.80
+
+    # The default source is a weighted halo, not a shell, so "every voxel is
+    # on the sphere" is no longer the question — the drive's own first moment
+    # is. It has to sit on the axis, and at the radius that was ordered.
+    com = (idx * w[:, None]).sum(axis=0) / w.sum()
+    assert com[0] == pytest.approx(apex_expected[0], abs=0.05)
+    assert com[1] == pytest.approx(apex_expected[1], abs=0.05)
+    radius = np.linalg.norm((idx - focus_expected) * dx, axis=1)
+    assert float((radius * w).sum() / w.sum()) == pytest.approx(roc_mm * MM, rel=0.02)
+    # ...and its total is the cap's area, which is the whole point of it.
+    area = 2.0 * np.pi * (roc_mm * MM) ** 2 * (1.0 - np.sqrt(1.0 - (d_outer_mm / 2 / roc_mm) ** 2))
+    assert float(w.sum()) == pytest.approx(area / dx**2, rel=1e-3)
 
 
-def test_no_shipped_job_puts_a_source_voxel_in_the_pml():
+def test_no_shipped_job_loses_its_drive_to_the_pml():
     """The mistake that cost a night, made a gate.
 
     A bowl whose rim lands inside the absorbing layer is not a bowl; it is a
@@ -373,20 +382,20 @@ def test_no_shipped_job_puts_a_source_voxel_in_the_pml():
     a 26 % sensitivity to PML thickness before anyone looked at the geometry.
     The control below is a job deliberately built that way, so the check is
     known to be able to fail.
+
+    Graded on how much DRIVE the sponge takes, not on whether any voxel is in
+    it: the default source is band-limited, so its outermost voxels carry
+    thousandths of the drive and their presence in the band means nothing.
     """
     from caustica import examples
     from caustica.config.job import build_job, load_job, parse_job
-
-    def source_voxels_in_the_pml(built) -> int:
-        idx = np.asarray(built.source.indices)
-        shape = np.asarray(built.grid.shape)
-        pml = int(built.grid.pml_vox)
-        return int(((idx < pml) | (idx >= shape - pml)).any(1).sum())
+    from caustica.solvers.base import source_damped_fraction
 
     for name in examples.available():
         job, base = load_job(examples.path(name))
         built = build_job(job, base_dir=base, with_medium=False)
-        assert source_voxels_in_the_pml(built) == 0, f"{name} drives voxels inside the sponge"
+        damped = source_damped_fraction(built.grid, built.source)
+        assert damped < 0.05, f"{name} loses {damped:.1%} of its drive to the sponge"
 
     control = parse_job(
         {
@@ -412,4 +421,5 @@ def test_no_shipped_job_puts_a_source_voxel_in_the_pml():
         "control",
     )
     built = build_job(control, base_dir=None, with_medium=False)
-    assert source_voxels_in_the_pml(built) > 0, "the control no longer fails; this check is blind"
+    damped = source_damped_fraction(built.grid, built.source)
+    assert damped > 0.05, "the control no longer fails; this check is blind"
