@@ -147,6 +147,51 @@ def test_skip_guard_never_produces_twice(tmp_path):
     assert (out / "result.h5").stat().st_mtime_ns == mtime  # untouched
 
 
+def test_the_skip_guard_refuses_to_hand_one_jobs_result_to_another(tmp_path):
+    """Skipping a *complete* run is a feature; skipping a DIFFERENT one is not.
+
+    Point a second job at a folder that already holds a result — edit the
+    drive and rerun the same command line, the shape a parameter sweep takes
+    — and the old field used to come back as EXIT_OK with no mention that it
+    answers a different question. The folder records the job that filled it,
+    so the guard now compares against it and names the section that moved.
+    """
+    out = tmp_path / "out"
+    assert run_job_file(mini_job(tmp_path, name="a"), opts(out=out)) == EXIT_OK
+    louder = mini_job(tmp_path, name="b", drive={"f0_mhz": 1.0, "amplitude_kpa": 250.0})
+
+    code = run_job_file(louder, opts(out=out))
+
+    assert code == EXIT_CONFIG
+    payload = json.loads((out / ERROR_FILE).read_text(encoding="utf-8"))
+    assert payload["error_class"] == "ResultFolderConflict"
+    assert "drive" in payload["message"] and "name" in payload["message"]
+    assert any("--out" in line for line in payload["advice"])
+
+
+def test_the_skip_guard_still_skips_when_only_the_output_folder_was_renamed(tmp_path):
+    """``--out`` sends a job somewhere other than the folder its config names.
+
+    That is routing, not a different computation, so it must not trip the
+    conflict check — otherwise every ``--out`` rerun of a job whose file
+    names a folder would refuse instead of skipping.
+    """
+    out = tmp_path / "out"
+    assert run_job_file(mini_job(tmp_path, name="a"), opts(out=out)) == EXIT_OK
+    moved = mini_job(tmp_path, name="a", output={"folder": "somewhere/else"})
+    assert run_job_file(moved, opts(out=out)) == EXIT_OK
+    assert not (out / ERROR_FILE).exists()
+
+
+def test_the_skip_guard_keeps_working_on_a_folder_written_before_the_check(tmp_path):
+    """No ``job.json``: an older folder still skips rather than refusing."""
+    out = tmp_path / "out"
+    job = mini_job(tmp_path)
+    assert run_job_file(job, opts(out=out)) == EXIT_OK
+    (out / "job.json").unlink()
+    assert run_job_file(job, opts(out=out)) == EXIT_OK
+
+
 # ----------------------------------------------------------------- exit codes
 
 

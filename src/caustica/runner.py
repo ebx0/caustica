@@ -52,6 +52,7 @@ The whole surface a GUI may rely on — this folder, the exit codes,
 
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import os
@@ -68,7 +69,7 @@ from typing import Any
 import numpy as np
 
 import caustica
-from caustica.config.job import BuiltJob, build_job, dump_job, load_job
+from caustica.config.job import BuiltJob, ExplicitJobConfig, build_job, dump_job, load_job
 from caustica.core.backend import CausticaWarning, check_backend_name, get_backend
 from caustica.env import env_report, git_commit, gpu_environment
 from caustica.io.atomic import atomic_write
@@ -207,6 +208,62 @@ def _clear_stale(path: Path) -> None:
         path.unlink(missing_ok=True)
     except OSError as exc:  # pragma: no cover - locked file on Windows
         log.warning("could not remove stale %s: %s", path.name, exc)
+
+
+#: Ignored when deciding whether a folder's result belongs to this job:
+#: ``--out`` routinely sends a job somewhere other than the folder its own
+#: config names, and that is not a difference in what was computed. Every
+#: other field is, ``output.quantize`` and ``output.max_norm_err`` included —
+#: they change the bytes in ``result.h5``.
+_IDENTITY_EXEMPT = (("output", "folder"),)
+
+
+def _job_identity(job: ExplicitJobConfig | dict) -> dict:
+    """The part of a job that decides what ``result.h5`` contains."""
+    data = job if isinstance(job, dict) else json.loads(job.model_dump_json())
+    data = copy.deepcopy(data)
+    for *path, leaf in _IDENTITY_EXEMPT:
+        node = data
+        for key in path:
+            node = node.get(key) if isinstance(node, dict) else None
+            if node is None:
+                break
+        if isinstance(node, dict):
+            node.pop(leaf, None)
+    return data
+
+
+def _foreign_result_in(outdir: Path, job: ExplicitJobConfig) -> str | None:
+    """Say what differs when ``outdir`` holds a result from ANOTHER job.
+
+    The skip-guard below returns a complete ``result.h5`` untouched, which is
+    the whole point of it — a sweep that dies at run 40 of 50 resumes without
+    recomputing the first 39. It becomes a hazard the moment the job changes
+    underneath it: edit the drive amplitude, rerun the same command, and the
+    old field is handed back as though it were the new answer. The folder
+    already records the job that filled it, so compare against that.
+
+    ``None`` means "no objection": the jobs agree, or the folder predates
+    ``job.json`` and there is nothing to compare with. Silence is the right
+    answer in that second case — refusing on a missing file would strand
+    every folder written before this check existed.
+    """
+    recorded = outdir / "job.json"
+    if not recorded.is_file():
+        return None
+    try:
+        previous = json.loads(recorded.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        log.debug("unreadable %s: %s", recorded, exc)
+        return None
+    was, now = _job_identity(previous), _job_identity(job)
+    if was == now:
+        return None
+    changed = sorted(k for k in set(was) | set(now) if was.get(k) != now.get(k))
+    return (
+        f"{outdir / 'result.h5'} was produced by a DIFFERENT job "
+        f"(differs in: {', '.join(changed)}); refusing to pass it off as this one"
+    )
 
 
 # Promoted to caustica.env (fix A1) — and no longer git-only: a wheel install
@@ -822,6 +879,22 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
 
     # ---- file-level resume: a complete result is never produced twice ----
     if result_path.exists() and validate_result_file(result_path):
+        conflict = _foreign_result_in(outdir, job)
+        if conflict is not None:
+            print(f"CONFIG ERROR: {conflict}", file=sys.stderr)
+            record_failure(
+                outdir,
+                stage="config",
+                exit_code=EXIT_CONFIG,
+                error_class="ResultFolderConflict",
+                message=conflict,
+                advice=(
+                    "send this job to its own folder with --out",
+                    f"or delete {result_path} to recompute it here",
+                    f"the job that produced it is recorded in {outdir / 'job.json'}",
+                ),
+            )
+            return EXIT_CONFIG
         # A folder holding a complete result did not fail, so an old failure
         # record is stale. `cancel` is deliberately NOT touched here: it may
         # belong to a run still in flight in another process.
