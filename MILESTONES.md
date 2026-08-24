@@ -1159,6 +1159,10 @@ bu harness'in İÇİNE doğar.
   - [x] Çok-motor: linear-vs-kwave çaprazı harness'ten r=0.99924 (relL2 0.0286, tepe kayması
         0 voksel) — `benchmarks/reports/compare/20260823-065728/`; linear-vs-westervelt(β=0)
         r=1.0 relL2=0 birebir (M5 garantisi). `@pytest.mark.kwave` ile CI'da atlanabilir
+        (Nyquist düzeltmesinden SONRA yeniden koşuldu, 2026-08-24:
+        `benchmarks/reports/compare/20260824-093305/`, üç motor PASS. Aynı gün
+        `benchmarks/reports/resolution/` dx=0.2/0.1/0.05 mm merdiveninde iki kodun odak
+        tepesini %9.1'den %0.1'e yakınsattı — 15 nokta/dalgaboyunda)
 
 ### M18 — Termal modül: Pennes + CEM43 `[x]` (2026-08-23 — iki fazda KAPANDI)
 Ablasyon planlamanın çıktısı basınç değil DOZ. ITRUSST güvenlik konsensüsü (Brain Stim 2025)
@@ -1181,7 +1185,10 @@ eşikleri rapora girer: ≤2 CEM43 beyin / ≤16 kemik / ≤21 deri; ΔT≤2°C.
       %8-15 uyuşmazlık) kapının görebildiğini kanıtlıyor. Uçtan uca: westervelt →
       HeatingSource → 20 s açık + 40 s kapalı (doz taşınır) → 37→53.06→40.29 °C, doz 80.5→88.3
       CEM43 tekdüze; `ThermalResult.chain` faz-üstü maks + doz-gerileyen faz reddi.
-      Kanıt: `benchmarks/reports/thermal/20260823-120953/` (Brain EXCEEDED / Skin PASS)
+      Kanıt: `benchmarks/reports/thermal/20260823-120953/` (Brain EXCEEDED / Skin PASS);
+      Nyquist düzeltmesinden sonra yeniden üretildi (2026-08-24,
+      `benchmarks/reports/thermal/20260824-093230/`): tepe |p| 1.946→1.938 MPa, Q_max
+      1.873e7→1.858e7 W/m³, karar değişmedi
 - Başarı kriterleri:
   - Analitik nokta-kaynak/Gaussian difüzyon rel err < %2; perfüzyon kararlı-durum < %2
   - Uçtan uca sonication → T(r,t) → CEM43; **bağımsız-gerçekleştirme çaprazı < %5**
