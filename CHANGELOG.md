@@ -83,31 +83,59 @@ evidence — lives in [`MILESTONES.md`](https://github.com/ebx0/caustica/blob/ma
 - **Calibration** sizes its probes as a fraction of free VRAM and interpolates
   its measurements instead of forcing one power law per card.
 
+### Changed
+
+- **A focused bowl is now a band-limited source carrying the cap's area, not a
+  voxel shell.** This changes every absolute pressure the library produces from
+  a bowl, by roughly −13%.
+
+  The engine drives every source voxel with the same normalized amplitude,
+  which is exact for a flat source — one voxel per `dx²` of aperture — and is
+  not for a curved one. A digitized cap crosses 1.18 voxels per `dx²` of its own
+  area, so a binary bowl radiated in proportion to its voxel count. Measured on
+  an f/1.2 bowl: 1.15–1.17× O'Neil's closed form, *flat* from 3.8 to 15 points
+  per wavelength, because a staircase factor is not a discretization error and
+  refinement does not remove it. The same sampling also left 10–12% of the
+  shell undriven, and closing those holes alone made it worse, not better.
+
+  `bowl_cw_source` now takes the cap's closed-form area, divides it over
+  equal-area quadrature points, and deposits each through a band-limited
+  interpolant (`caustica.geometry.offgrid`), so the grid weights sum to the
+  area in grid squares whatever the orientation. This is the method k-Wave uses
+  for the same reason (Wise, Cox, Jaros and Treeby, JASA 146, 2019); our
+  deposit reproduces `kWaveArray`'s weights to the last printed digit.
+  Measured after: 1.083 → 1.032 → **1.004** over the same three rungs, which is
+  what an ordinary discretization error looks like. The truncated kernel is
+  renormalized per point, which removes its ringing and lets a two-voxel window
+  do the work of a seven-voxel one.
+
+  `CWSource` gained a `weights` field (`None` still means a uniform drive, and
+  a plane source is unchanged bit for bit). Jobs take
+  `source.array.discretization`, `"offgrid"` by default and `"binary"` for
+  reproducing an older result. The checkpoint fingerprint scheme is
+  `cw-kspace-pstd/3`; a checkpoint from before this refuses to resume into it.
+- **The PML clearance check grades the drive, not voxel presence.** A
+  band-limited source has a halo whose outermost voxels carry thousandths of
+  the drive, so "is any source voxel in the sponge" stopped meaning anything.
+  A setup is now refused when more than 90% of `|drive|` lands in the band —
+  measured separations: a bowl deliberately buried damps 94.5%, a legitimate
+  full-width plane source damps 44%, a bowl with proper standoff damps none.
+
 ### Known issues
 
-- **A focused bowl radiates ~15% too strongly, and refining it makes that
-  worse before it makes it better.** The engine drives every source voxel with
-  the same normalized amplitude, which is exact for a flat source (one voxel per
-  `dx²` of aperture) and is not for a curved one: a digitized cap crosses 1.18
-  voxels per `dx²` of its own area at the shipped `dx/2` sampling. The focal
-  pressure tracks that ratio — measured at 1.15–1.17× O'Neil's closed form on an
-  f/1.2 bowl, and *flat* from 3.8 to 15 points per wavelength, so it is not a
-  discretization error that refinement removes. The same `dx/2` sampling also
-  leaves 10–12% of the shell undriven, and closing those holes raises the voxel
-  count to 1.33 per `dx²` and the level to 1.25×. Both have to be fixed
-  together, and the fix rescales every focused-bowl pressure the library has
-  produced. Nothing in the shipped gates would have caught it: the analytic
-  suite compares normalized shape, peak position and −6 dB width, all of which
-  agree well and improve with resolution. k-Wave, driven from the same voxel set
-  but smoothing its source mask, sits closer to the closed form at 1.07–1.11×.
-  Measured in `benchmarks/reports/geometry/` and `benchmarks/reports/resolution/`;
-  characterized by `tests/test_geometry_fidelity.py` so that changing it is a
-  deliberate act.
+- **Element arrays still carry the staircase.** The repair above applies to
+  `bowl` sources. `archimedean_spiral` and explicit element tables go through
+  `TransducerArray.voxelize`, which projects each element as a disc sheared onto
+  its own plane — an area of `π r² / cos(tilt)`, about 14% over at the
+  production rim's 28°, kept for parity with the notebook the datasets came
+  from. `caustica.geometry.offgrid` is the machinery to fix it the same way;
+  nothing has measured what it would move yet.
 - **`kappa` is cross-axis inconsistent** since the Nyquist fix. `sinc(c dt |k|/2)`
   still evaluates `|k|` with the true Nyquist component included, so on a
   Nyquist hyperplane the surviving transverse derivative is scaled by a
   dispersion factor evaluated at a wavevector the operator has just declared
   unrepresentable: up to ~10% amplitude error there at the shipped CFL, over
-  planes carrying ~0.1% of the field's energy.
+  planes carrying ~0.1% of the field's energy. Both conventions are defensible
+  and neither has been measured against the analytic references yet.
 
 [Unreleased]: https://github.com/ebx0/caustica/commits/master

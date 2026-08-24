@@ -19,45 +19,65 @@ automated under `pytest`, and a milestone does not close until its gate is green
   0.9–3.2 %) across σ = 0.06–0.61.
 - **`linear` vs `kwave`.** Against the real OMP binary, 2-D water:
   normalized-field correlation r > 0.99.
-- **Calibrated source amplitude — for a *plane* source.** The realized plane
-  amplitude matches `source.amplitude` on both the native and the k-Wave path,
-  invariant to grid, CFL and remote medium content. It does **not** carry over
-  to a curved source: see the focused-bowl amplitude limit below.
+- **Calibrated source amplitude.** The realized plane amplitude matches
+  `source.amplitude` on both the native and the k-Wave path, invariant to grid,
+  CFL and remote medium content. For a *curved* source the same calibration
+  needs the source to carry its own area rather than its voxel count — see
+  below.
 - **Grid refinement, 1.9 to 15 points per wavelength.** An f/1.2 bowl in a few
   cubic millimetres of water at dx = 0.4, 0.2, 0.1 and 0.05 mm. Axial
   correlation with O'Neil reaches 0.998 by 7.5 points per wavelength and
   plateaus; the −6 dB width lands within 0.1 mm.
 - **Two propagators on one digitized source.** Over the same ladder, the native
-  solver and k-Wave converge onto each other: focal peaks 9.1 % apart at 3.8
-  points per wavelength and 0.1 % apart at 15.
+  solver and k-Wave converge onto each other: focal peaks 8.7 % apart at 3.8
+  points per wavelength and 0.2 % apart at 15, where both land on O'Neil's
+  absolute prediction to within a percent.
 - **One phasor convention library-wide.** `p(t) = Re{P·e^(−iωt)}`, shared with
   the analytic references — see [the conventions that bite](conventions.md).
 
 Figure-based comparison reports live under `benchmarks/reports/` in the
 repository.
 
-## A limit worth knowing before you quote a pressure
+## How a curved source is represented, and why it matters
 
-**A focused bowl radiates about 15 % more than its aperture implies.** The
-engine drives every source voxel with the same normalized amplitude, which is
-exact for a flat source — one voxel per `dx²` of aperture — and is not for a
-curved one. A digitized spherical cap crosses 1.18 voxels per `dx²` of its own
-area at the sampling the library ships, so the bowl radiates in proportion to
-its voxel count rather than its area, and the on-axis focal pressure sits
-1.13–1.17× O'Neil's closed form.
+A flat source is easy: one voxel per `dx²` of aperture, exactly. A curved one
+is not, and getting it wrong costs an absolute pressure rather than a shape.
 
-That figure does **not** shrink with resolution: it is flat from 3.8 to 15
-points per wavelength, because a staircase factor is a property of digitizing a
-tilted surface and not a discretization error. k-Wave, driven from the same
-voxel set through a completely different propagator, lands on the same excess.
+Until 2026-08-24 a bowl was a one-voxel-thick shell with every voxel driven
+alike. A digitized spherical cap crosses **1.18 voxels per `dx²` of its own
+area**, so the bowl radiated in proportion to its voxel count instead of its
+area, and the on-axis focal pressure sat 1.13–1.17× O'Neil's closed form. That
+figure did *not* shrink with resolution — flat from 3.8 to 15 points per
+wavelength — because a staircase factor is a property of digitizing a tilted
+surface, not a discretization error. Nothing in the gates above would have
+caught it: they compare normalized shape, peak position and −6 dB width, all of
+which agreed well and improved with dx.
 
-None of the gates above would catch it, and that is the point of naming it
-here: the analytic suite compares normalized shape, peak position and −6 dB
-width, all of which agree well and improve with resolution. **Beam shapes,
-focal positions and relative comparisons are unaffected. An absolute pressure
-in pascals is high by roughly this factor.** Measured in
-`benchmarks/reports/geometry/` and `benchmarks/reports/resolution/`, and pinned
-by `tests/test_geometry_fidelity.py`.
+A bowl is now an **off-grid source**: the cap's closed-form area is divided
+over equal-area quadrature points and each is deposited through a band-limited
+interpolant, so the grid weights sum to that area whatever the surface's
+orientation. This is the method k-Wave adopted for the same problem (Wise, Cox,
+Jaros and Treeby, JASA 146, 2019). Measured over the same three rungs, the
+absolute level now goes 1.136 → 1.023 → **0.999**, while the binary shell's
+stayed at 1.162 → 1.146 → 1.165 — the difference between an ordinary
+discretization error and a bias.
+
+Two practical consequences:
+
+- **A band-limited source is not thin.** It reaches a couple of voxels beyond
+  the cap in every direction and carries negative weights in the interpolant's
+  side-lobes; both are correct, and both mean a bowl needs slightly more
+  clearance from the absorbing layer than its shell did. The constructor warns
+  when part of the drive falls outside the domain.
+- **`discretization: "binary"`** in a job's `source.array` block restores the
+  old shell, for reproducing a result computed before this change.
+- **This applies to `bowl` sources only.** Element arrays
+  (`archimedean_spiral`, explicit element tables) still project each element as
+  a sheared disc, whose area runs about 14 % over at a 28° rim tilt. Same
+  defect, same available cure, not yet measured.
+
+Measured in `benchmarks/reports/geometry/` and `benchmarks/reports/resolution/`;
+pinned by `tests/test_geometry_fidelity.py` and `tests/test_sources.py`.
 
 ## What is *not* validated yet
 
