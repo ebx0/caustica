@@ -20,11 +20,12 @@ and the same four commands on a laptop and in a Colab cell.
 
 </div>
 <div class="hero-art" markdown>
-![A 1 MHz focused ultrasound beam converging on its focus in water, with the wavefronts animated over one acoustic period](assets/hero-field.svg#only-light)
-![A 1 MHz focused ultrasound beam converging on its focus in water, with the wavefronts animated over one acoustic period](assets/hero-field-dark.svg#only-dark)
+![An isometric cutaway of a focused ultrasound solve: the converging cone on two cut planes, the focal spot on the top face, with the wavefronts animated over one acoustic period](assets/hero-field.svg#only-light)
+![An isometric cutaway of a focused ultrasound solve: the converging cone on two cut planes, the focal spot on the top face, with the wavefronts animated over one acoustic period](assets/hero-field-dark.svg#only-dark)
 <small markdown>
-One x–z plane of a real solve. Brightness is |P|; the moving fringes are Re{P·e^(−iωt)}
-over one acoustic period, so the loop closes on itself exactly.
+An isometric cutaway of a real solve, from the transducer's apex plane up to the focal plane:
+the converging cone on the two cut walls, the focal spot on the top face. Brightness is |P|,
+rippled by Re{P·e^(−iωt)} over one acoustic period — so the loop closes on itself exactly.
 </small>
 </div>
 </div>
