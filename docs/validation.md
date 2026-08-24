@@ -32,6 +32,9 @@ automated under `pytest`, and a milestone does not close until its gate is green
   solver and k-Wave converge onto each other: focal peaks 8.7 % apart at 3.8
   points per wavelength and 0.2 % apart at 15, where both land on O'Neil's
   absolute prediction to within a percent.
+- **A 32-element spiral array vs the Rayleigh integral** over its true element
+  discs: 1.001× at fifteen points per wavelength, converging from 1.142× at
+  3.75.
 - **One phasor convention library-wide.** `p(t) = Re{P·e^(−iωt)}`, shared with
   the analytic references — see [the conventions that bite](conventions.md).
 
@@ -71,13 +74,18 @@ Two practical consequences:
   when part of the drive falls outside the domain.
 - **`discretization: "binary"`** in a job's `source.array` block restores the
   old shell, for reproducing a result computed before this change.
-- **This applies to `bowl` sources only.** Element arrays
-  (`archimedean_spiral`, explicit element tables) still project each element as
-  a sheared disc, whose area runs about 14 % over at a 28° rim tilt. Same
-  defect, same available cure, not yet measured.
+- **Element arrays get the same treatment, for a bigger reason.** Their
+  elements used to be rounded onto the voxel lattice, which is up to half a
+  voxel of path length to the focus and a *different* error per element, so it
+  defocuses instead of averaging out: 0.61 rad rms on the production spiral at
+  dx = 0.5 mm, costing 17.6 % of the coherent focal sum. Graded against the
+  Rayleigh integral over the true element discs, the old voxelizer goes
+  0.861 → 0.931 → **0.951** across 3.75 → 15 points per wavelength and is still
+  5 % short at the finest; the off-grid elements go 1.142 → 1.018 → **1.001**.
 
 Measured in `benchmarks/reports/geometry/` and `benchmarks/reports/resolution/`;
-pinned by `tests/test_geometry_fidelity.py` and `tests/test_sources.py`.
+pinned by `tests/test_geometry_fidelity.py`, `tests/test_sources.py` and
+`tests/test_arrays.py`.
 
 ## What is *not* validated yet
 

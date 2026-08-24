@@ -121,15 +121,39 @@ evidence — lives in [`MILESTONES.md`](https://github.com/ebx0/caustica/blob/ma
   measured separations: a bowl deliberately buried damps 94.5%, a legitimate
   full-width plane source damps 44%, a bowl with proper standoff damps none.
 
+- **An element array's elements now sit where they are, not on the lattice.**
+  `TransducerArray.voxelize` rounded each element centre to a voxel. That is up
+  to half a voxel of path length to the focus, a *different* error for every
+  element, so it does not average out — it defocuses. Measured on the
+  production 128-element spiral at dx = 0.5 mm and 1 MHz: 0.61 rad rms, costing
+  17.6% of the coherent focal sum, which `exp(-σ²/2)` predicts to three
+  decimals.
+
+  Two smaller errors rode along and pulled the other way: the notebook's
+  in-plane disc test sheared onto the element plane inflates a tilted element
+  by `1/cos(tilt)` (8% on average at production tilts, 14% at the rim), while
+  voxel quantization of a small disc takes some back — the net landed at +4.4%
+  on the production array and −2.5% on a smaller one, wrong by a few percent
+  with a sign that depends on the grid. And where two elements claimed a voxel,
+  the first one's phase won and the other's drive was dropped (1.7% of the
+  pairs on the production array, up to 5.8% of one element).
+
+  Elements are now deposited at their own positions through the same
+  band-limited interpolant, each carrying `π r²` exactly, and overlapping
+  contributions are summed as complex phasors — `Σ wᵢ sin(ωt − φᵢ)` is exactly
+  `|S| sin(ωt − Φ)` for `S = Σ wᵢ e^(−iφᵢ)`, so `CWSource` can hold the result.
+  Graded against the Rayleigh integral over the true element discs on a
+  refinement ladder: the binary path goes 0.861 → 0.931 → **0.951** and is still
+  5% short at fifteen points per wavelength; the off-grid path goes 1.142 →
+  1.018 → **1.001**. `voxelize(discretization="binary")` restores the old one.
+
+  An element smaller than half a voxel is now refused as a resolution error
+  rather than as "lost all voxels to deduplication" — there is no deduplication
+  any more, overlapping elements superpose, which is what two real elements
+  would do.
+
 ### Known issues
 
-- **Element arrays still carry the staircase.** The repair above applies to
-  `bowl` sources. `archimedean_spiral` and explicit element tables go through
-  `TransducerArray.voxelize`, which projects each element as a disc sheared onto
-  its own plane — an area of `π r² / cos(tilt)`, about 14% over at the
-  production rim's 28°, kept for parity with the notebook the datasets came
-  from. `caustica.geometry.offgrid` is the machinery to fix it the same way;
-  nothing has measured what it would move yet.
 - **`kappa` is cross-axis inconsistent** since the Nyquist fix. `sinc(c dt |k|/2)`
   still evaluates `|k|` with the true Nyquist component included, so on a
   Nyquist hyperplane the surviving transverse derivative is scaled by a
