@@ -13,6 +13,37 @@
 
 ---
 
+## Sabit kısıtlar — kullanıcının kullanım profili (2026-08-25)
+
+Bunlar milestone değil; **her milestone'un içinde geçerli olan koşullar.** Bir
+tasarım kararı bunlardan biriyle çelişiyorsa karar yanlıştır.
+
+1. **Mutlak basınç doğru olmak zorunda.** Kütüphane bilimsel bir araç; MPa
+   cinsinden bir sayı yayınlanacak. Normalize şekil uyuşması yeterli DEĞİL.
+   Bu, 2026-08-24/25'te iki bağımsız ~%15 mutlak hatanın bütün kapılar yeşilken
+   aylarca yaşamasının sebebiydi (kase merdiven çarpanı; dizi elemanlarının
+   ızgaraya yuvarlanması). → **M30**.
+2. **Hedef kullanım: kullanıcının kendi HIFU uygulaması, makale seviyesinde**,
+   ve büyük olasılıkla **`kwave` çözücüsüyle dataset üretimi.** k-Wave yolu bir
+   çapraz-kontrol değil, birinci sınıf üretim yolu olarak ele alınır. → **M31**.
+3. **Kayıt kontratı:** reel ve imajiner ayrı ayrı, harmonik başına (f0, 2f0, …),
+   bilimsel tutarlılıkla. (Bugün sağlanıyor: `output/p_real_h{n}` +
+   `output/p_imag_h{n}`, genlik/faz asla saklanmaz, float16 yalnız ölçülen
+   yuvarlama hatası ≤ %0.1 iken ve hata dosyaya yazılıyken kullanılır.)
+4. **Yönlendirme kullanılıyor:** hem DAS ile hem de her eleman ayrı ayrı
+   sürülerek. Faz doğruluğu birinci sınıf gereksinim.
+5. **Süre sınırı yok, VRAM bol.** RTX PRO 6000 (Blackwell) ile 24 saatlik
+   koşular mümkün. Bu, M8.time'ın önceliğini DÜŞÜRÜR (yanlış tahmin işi
+   öldürmüyor) ve büyük ızgara/ince dx'i mümkün kılar.
+6. **Geriye uyumluluk derdi yok (v0.1'e kadar).** Numerik nesil değişebilir;
+   eski sonuçlar silinebilir. Kütüphane önce gelir. Ama her sonuç dosyası hangi
+   nesilden olduğunu SÖYLEMEK zorunda. → **M32**.
+
+Çalışma düzeni: bu repoda ikinci bir Claude oturumu (docs) var; **sıralı
+çalışılır**, paralel değil (kullanıcı kararı 2026-08-25).
+
+---
+
 ## Faz Grubu A — Temel (yerel, CPU)
 
 ### M0 — Repo iskeleti ve araç zinciri `[x]` (2026-08-10)
@@ -1202,6 +1233,34 @@ eşikleri rapora girer: ≤2 CEM43 beyin / ≤16 kemik / ≤21 deri; ΔT≤2°C.
     aynı bağımsız-gerçekleştirme mutabakatı. MATLAB erişimi olursa kWaveDiffusion ek kanıt
     olarak eklenebilir, ölçüt değil)
   - Tıbbi sorumluluk notu (araştırma amaçlı; klinik karar aracı değil)
+
+### M30 — Mutlak genlik kapısı `[ ]` (YENİ — kullanıcı 2026-08-25, sabit kısıt 1; SIRADAKİ)
+Kütüphanenin hiçbir kapısı mutlak genliği notlandırmıyor. Analitik süit normalize şekil,
+tepe konumu ve −6 dB genişlik ölçüyor; çok-motor karşılaştırması normalize korelasyon; mutlak
+sayının göründüğü tek yer T0 gözcüsü ve o **5 kat** toleransla geçiriyor. İki bağımsız ~%15
+hata (kase merdiveni, dizi ızgara yuvarlaması) bu körlükte aylarca yaşadı.
+- [ ] Kase: odak basıncı O'Neil'in tam eksende çözümüne karşı, SABİT çözünürlükte
+- [ ] Dizi: odak basıncı gerçek eleman disklerinin Rayleigh integraline karşı
+- [ ] Düzlem: gerçekleşen düzlem genliği `source.amplitude`'a karşı (zaten var, kapıya bağlanacak)
+- Başarı kriteri: tolerans **ölçülerek** seçilir, tahminle değil. Ölçüm zemini (2026-08-24/25,
+  f/1.2 kase, 2 MHz): 15 nokta/dalgaboyunda 0.999, 7.5'te 1.023, 3.75'te 1.136 — yani hata
+  çözünürlükten ayrılamaz, kapı ya ppw'yi sabitler ya da toleransı ppw'ye bağlar. 32 elemanlı
+  spiral, Rayleigh'e karşı: 1.001 / 1.018 / 1.142 aynı üç basamakta
+- Not: bu kapı ITRUSST'ın ön provasıdır; M21'in ilk iki benchmark'ı buraya çekilebilir (A kararı)
+
+### M31 — k-Wave üretim yolu `[ ]` (YENİ — kullanıcı 2026-08-25, sabit kısıt 2)
+Kullanıcı dataset'ini büyük olasılıkla `kwave` çözücüsüyle üretecek. Adaptör bugüne kadar
+çapraz-kontrol olarak tasarlandı; birinci sınıf üretim yolu olarak denetlenecek.
+- [ ] Denetim: GPU ikilisi, yönlendirme (DAS + eleman-başı), harmonik kaydı, ağırlıklı kaynak,
+      checkpoint/resume, CFL politikası (adaptörde 0.3 sabit), bellek tavanı, hata mesajları
+- [ ] Native çözücüyle kayıt kontratı BİREBİR aynı olmalı (aynı `result.h5`, aynı harmonikler)
+- Başarı kriteri: aynı iş her iki çözücüde koşar, aynı şemayı yazar, M30 kapısını ikisi de geçer
+
+### M32 — Numerik nesil damgası `[ ]` (YENİ — kullanıcı 2026-08-25, sabit kısıt 6)
+Checkpoint parmak izi nesli taşıyor (`cw-kspace-pstd/3`), `result.h5` taşımıyor. Geriye
+uyumluluk derdi yok ama bir MPa'nın hangi nesilden olduğu dosyadan okunabilmeli.
+- [ ] `result.h5` kökünde numerik nesil + kaynak ayrıklaştırması (`offgrid`/`binary`) damgası
+- Başarı kriteri: eski nesilden bir dosya okunduğunda okuyucu bunu SÖYLER
 
 ### M15 — Eksenel simetri (AS) çözücüsü `[ ]` (KZK'nın önüne geçti — kullanıcı 2026-08-22)
 - [ ] VERIFY: güncel CuPy'de DCT/DST; yoksa ayna-genişletme DTT katmanı; WSWA/WSWS
