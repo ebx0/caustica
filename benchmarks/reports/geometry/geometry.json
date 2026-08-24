@@ -1,0 +1,1301 @@
+{
+  "format": "caustica-geometry-fidelity/1",
+  "environment": {
+    "caustica": "0.1.0.dev0",
+    "python": "3.12.10",
+    "numpy": "2.2.6",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "generated": "2026-08-24T09:34:15+00:00"
+  },
+  "checks": [
+    {
+      "id": "G1",
+      "title": "focused bowl: surface error against the sphere that was ordered",
+      "data": {
+        "aperture_m": 0.005,
+        "roc_m": 0.012,
+        "sag_m": 0.0010912878853642852,
+        "rows": [
+          {
+            "dx_mm": 0.5,
+            "n_voxels": 405,
+            "voxels_per_roc": 24.0,
+            "surface_rms_error_m": 0.00016202985485990972,
+            "surface_rms_error_vox": 0.32405970971981946,
+            "surface_max_error_vox": 0.6547649401424972,
+            "phase_error_rms_rad_at_1mhz": 0.6787090689201504,
+            "aperture_radius": {
+              "expected": 0.005,
+              "produced": 0.005220153254455275,
+              "abs_error": 0.00022015325445527527,
+              "rel_error": 0.044030650891055054,
+              "unit": "m"
+            },
+            "apex_z_vox": 0,
+            "free_fit_roc": {
+              "expected": 0.012,
+              "produced": 0.00968029603551247,
+              "abs_error": 0.002319703964487531,
+              "rel_error": 0.19330866370729424,
+              "unit": "m"
+            },
+            "free_fit_focus_z": {
+              "expected": 0.012,
+              "produced": 0.009511801488948209,
+              "abs_error": 0.0024881985110517917,
+              "rel_error": 0.20734987592098264,
+              "unit": "m"
+            },
+            "free_fit_offaxis_m": 1.2122895058777563e-05,
+            "free_fit_rms_vox": 0.3511163674645877
+          },
+          {
+            "dx_mm": 0.25,
+            "n_voxels": 1558,
+            "voxels_per_roc": 48.0,
+            "surface_rms_error_m": 8.346672716361071e-05,
+            "surface_rms_error_vox": 0.33386690865444285,
+            "surface_max_error_vox": 0.6607984858214982,
+            "phase_error_rms_rad_at_1mhz": 0.34962460916851074,
+            "aperture_radius": {
+              "expected": 0.005,
+              "produced": 0.005129571132170798,
+              "abs_error": 0.00012957113217079794,
+              "rel_error": 0.02591422643415959,
+              "unit": "m"
+            },
+            "apex_z_vox": 0,
+            "free_fit_roc": {
+              "expected": 0.012,
+              "produced": 0.011390163082870223,
+              "abs_error": 0.0006098369171297774,
+              "rel_error": 0.050819743094148113,
+              "unit": "m"
+            },
+            "free_fit_focus_z": {
+              "expected": 0.012,
+              "produced": 0.011348723906715368,
+              "abs_error": 0.0006512760932846327,
+              "rel_error": 0.05427300777371939,
+              "unit": "m"
+            },
+            "free_fit_offaxis_m": 5.4518154458559e-06,
+            "free_fit_rms_vox": 0.34200593168197885
+          },
+          {
+            "dx_mm": 0.15,
+            "n_voxels": 4268,
+            "voxels_per_roc": 80.00000000000001,
+            "surface_rms_error_m": 4.974850841180313e-05,
+            "surface_rms_error_vox": 0.33165672274535424,
+            "surface_max_error_vox": 0.7031597894407068,
+            "phase_error_rms_rad_at_1mhz": 0.2083860647380943,
+            "aperture_radius": {
+              "expected": 0.005,
+              "produced": 0.005075677294706589,
+              "abs_error": 7.567729470658868e-05,
+              "rel_error": 0.015135458941317737,
+              "unit": "m"
+            },
+            "apex_z_vox": 0,
+            "free_fit_roc": {
+              "expected": 0.012,
+              "produced": 0.011722025726397758,
+              "abs_error": 0.00027797427360224183,
+              "rel_error": 0.02316452280018682,
+              "unit": "m"
+            },
+            "free_fit_focus_z": {
+              "expected": 0.012,
+              "produced": 0.011706959915297932,
+              "abs_error": 0.0002930400847020679,
+              "rel_error": 0.02442000705850566,
+              "unit": "m"
+            },
+            "free_fit_offaxis_m": 1.9550329880470266e-06,
+            "free_fit_rms_vox": 0.33523795470614276
+          },
+          {
+            "dx_mm": 0.1,
+            "n_voxels": 9686,
+            "voxels_per_roc": 120.0,
+            "surface_rms_error_m": 3.3633937859398766e-05,
+            "surface_rms_error_vox": 0.33633937859398766,
+            "surface_max_error_vox": 0.7103972323842591,
+            "phase_error_rms_rad_at_1mhz": 0.1408855094538437,
+            "aperture_radius": {
+              "expected": 0.005,
+              "produced": 0.005060632371551998,
+              "abs_error": 6.063237155199807e-05,
+              "rel_error": 0.012126474310399614,
+              "unit": "m"
+            },
+            "apex_z_vox": 0,
+            "free_fit_roc": {
+              "expected": 0.012,
+              "produced": 0.01184324910271609,
+              "abs_error": 0.000156750897283911,
+              "rel_error": 0.01306257477365925,
+              "unit": "m"
+            },
+            "free_fit_focus_z": {
+              "expected": 0.012,
+              "produced": 0.0118350157246151,
+              "abs_error": 0.0001649842753849006,
+              "rel_error": 0.013748689615408384,
+              "unit": "m"
+            },
+            "free_fit_offaxis_m": 4.2219255351019123e-07,
+            "free_fit_rms_vox": 0.3378323920204487
+          },
+          {
+            "dx_mm": 0.05,
+            "n_voxels": 38577,
+            "voxels_per_roc": 240.0,
+            "surface_rms_error_m": 1.6908652749630106e-05,
+            "surface_rms_error_vox": 0.3381730549926021,
+            "surface_max_error_vox": 0.7176769578836131,
+            "phase_error_rms_rad_at_1mhz": 0.07082679901378507,
+            "aperture_radius": {
+              "expected": 0.005,
+              "produced": 0.005024937810560445,
+              "abs_error": 2.4937810560445202e-05,
+              "rel_error": 0.00498756211208904,
+              "unit": "m"
+            },
+            "apex_z_vox": 0,
+            "free_fit_roc": {
+              "expected": 0.012,
+              "produced": 0.0119584224341231,
+              "abs_error": 4.157756587690013e-05,
+              "rel_error": 0.0034647971564083445,
+              "unit": "m"
+            },
+            "free_fit_focus_z": {
+              "expected": 0.012,
+              "produced": 0.011956383024131371,
+              "abs_error": 4.3616975868628755e-05,
+              "rel_error": 0.003634747989052396,
+              "unit": "m"
+            },
+            "free_fit_offaxis_m": 9.162857473091731e-08,
+            "free_fit_rms_vox": 0.33855910978803033
+          }
+        ],
+        "verdict": "every voxel lands within 0.72 voxel of the sphere that was ordered (0.338 voxels rms at worst), which is 0.68 rad of wavefront error at 1 MHz at dx=0.5 mm and 0.071 rad at dx=0.05 mm; a free sphere fit to the same voxels reads the curvature 19 % short at the coarsest dx and 0.3 % at the finest, because a cap this shallow does not determine its own radius from a voxel shell"
+      },
+      "status": "OK",
+      "elapsed_s": 0.63
+    },
+    {
+      "id": "G2",
+      "title": "focused bowl: holes in the digitized shell at the shipped sampling",
+      "data": {
+        "rows": [
+          {
+            "dx_mm": 0.5,
+            "shipped_sampling": "dx/2",
+            "n_shipped": 405,
+            "n_reference": 461,
+            "n_missing": 56,
+            "missing_fraction": 0.12147505422993492,
+            "extra_not_in_reference": 0
+          },
+          {
+            "dx_mm": 0.25,
+            "shipped_sampling": "dx/2",
+            "n_shipped": 1558,
+            "n_reference": 1752,
+            "n_missing": 194,
+            "missing_fraction": 0.11073059360730593,
+            "extra_not_in_reference": 0
+          },
+          {
+            "dx_mm": 0.1,
+            "shipped_sampling": "dx/2",
+            "n_shipped": 9686,
+            "n_reference": 10851,
+            "n_missing": 1166,
+            "missing_fraction": 0.10745553405216109,
+            "extra_not_in_reference": 1
+          },
+          {
+            "dx_mm": 0.05,
+            "shipped_sampling": "dx/2",
+            "n_shipped": 38577,
+            "n_reference": 43072,
+            "n_missing": 4500,
+            "missing_fraction": 0.10447622585438336,
+            "extra_not_in_reference": 5
+          }
+        ],
+        "worst_missing_fraction": 0.12147505422993492,
+        "verdict": "the shipped dx/2 sampling misses up to 12.15 % of the voxels a 16x-finer sampling of the same cap reaches \u2014 those voxels are undriven holes in the shell"
+      },
+      "status": "OK",
+      "elapsed_s": 11.33
+    },
+    {
+      "id": "G3",
+      "title": "CSG primitives: rasterized volume and voxel-level agreement vs the closed form",
+      "data": {
+        "rows": [
+          {
+            "shape": "ball",
+            "dx_mm": 0.5,
+            "grid": 24,
+            "volume_supersample_1": {
+              "expected": 2.68082573106329e-07,
+              "produced": 2.72e-07,
+              "abs_error": 3.917426893670983e-09,
+              "rel_error": 0.014612762210832788,
+              "unit": "m^3"
+            },
+            "volume_supersample_3": {
+              "expected": 2.68082573106329e-07,
+              "produced": 2.72e-07,
+              "abs_error": 3.917426893670983e-09,
+              "rel_error": 0.014612762210832788,
+              "unit": "m^3"
+            },
+            "misclassified_supersample_1": {
+              "voxels": 0,
+              "fraction_of_the_object": 0.0
+            },
+            "misclassified_supersample_3": {
+              "voxels": 0,
+              "fraction_of_the_object": 0.0
+            },
+            "supersampling_helps_volume": false,
+            "supersampling_helps_the_interface": false
+          },
+          {
+            "shape": "ball",
+            "dx_mm": 0.25,
+            "grid": 48,
+            "volume_supersample_1": {
+              "expected": 2.68082573106329e-07,
+              "produced": 2.6962500000000003e-07,
+              "abs_error": 1.5424268936710164e-09,
+              "rel_error": 0.005753551511381708,
+              "unit": "m^3"
+            },
+            "volume_supersample_3": {
+              "expected": 2.68082573106329e-07,
+              "produced": 2.6962500000000003e-07,
+              "abs_error": 1.5424268936710164e-09,
+              "rel_error": 0.005753551511381708,
+              "unit": "m^3"
+            },
+            "misclassified_supersample_1": {
+              "voxels": 0,
+              "fraction_of_the_object": 0.0
+            },
+            "misclassified_supersample_3": {
+              "voxels": 0,
+              "fraction_of_the_object": 0.0
+            },
+            "supersampling_helps_volume": false,
+            "supersampling_helps_the_interface": false
+          },
+          {
+            "shape": "ball",
+            "dx_mm": 0.1,
+            "grid": 120,
+            "volume_supersample_1": {
+              "expected": 2.68082573106329e-07,
+              "produced": 2.6809600000000007e-07,
+              "abs_error": 1.3426893671056122e-11,
+              "rel_error": 5.00849179246375e-05,
+              "unit": "m^3"
+            },
+            "volume_supersample_3": {
+              "expected": 2.68082573106329e-07,
+              "produced": 2.6809600000000007e-07,
+              "abs_error": 1.3426893671056122e-11,
+              "rel_error": 5.00849179246375e-05,
+              "unit": "m^3"
+            },
+            "misclassified_supersample_1": {
+              "voxels": 0,
+              "fraction_of_the_object": 0.0
+            },
+            "misclassified_supersample_3": {
+              "voxels": 0,
+              "fraction_of_the_object": 0.0
+            },
+            "supersampling_helps_volume": false,
+            "supersampling_helps_the_interface": false
+          },
+          {
+            "shape": "ellipsoid",
+            "dx_mm": 0.5,
+            "grid": 24,
+            "volume_supersample_1": {
+              "expected": 2.2518936140931634e-07,
+              "produced": 2.27e-07,
+              "abs_error": 1.810638590683666e-09,
+              "rel_error": 0.008040515676904255,
+              "unit": "m^3"
+            },
+            "volume_supersample_3": {
+              "expected": 2.2518936140931634e-07,
+              "produced": 2.26e-07,
+              "abs_error": 8.106385906836703e-10,
+              "rel_error": 0.0035998085593848717,
+              "unit": "m^3"
+            },
+            "misclassified_supersample_1": {
+              "voxels": 8,
+              "fraction_of_the_object": 0.004424778761061947
+            },
+            "misclassified_supersample_3": {
+              "voxels": 0,
+              "fraction_of_the_object": 0.0
+            },
+            "supersampling_helps_volume": true,
+            "supersampling_helps_the_interface": true
+          },
+          {
+            "shape": "ellipsoid",
+            "dx_mm": 0.25,
+            "grid": 48,
+            "volume_supersample_1": {
+              "expected": 2.2518936140931634e-07,
+              "produced": 2.2525e-07,
+              "abs_error": 6.063859068366688e-11,
+              "rel_error": 0.0002692782212453052,
+              "unit": "m^3"
+            },
+            "volume_supersample_3": {
+              "expected": 2.2518936140931634e-07,
+              "produced": 2.2512500000000003e-07,
+              "abs_error": 6.436140931631604e-11,
+              "rel_error": 0.0002858101684445442,
+              "unit": "m^3"
+            },
+            "misclassified_supersample_1": {
+              "voxels": 32,
+              "fraction_of_the_object": 0.002224694104560623
+            },
+            "misclassified_supersample_3": {
+              "voxels": 40,
+              "fraction_of_the_object": 0.0027808676307007787
+            },
+            "supersampling_helps_volume": false,
+            "supersampling_helps_the_interface": false
+          },
+          {
+            "shape": "ellipsoid",
+            "dx_mm": 0.1,
+            "grid": 120,
+            "volume_supersample_1": {
+              "expected": 2.2518936140931634e-07,
+              "produced": 2.2528000000000004e-07,
+              "abs_error": 9.06385906837009e-11,
+              "rel_error": 0.0004024994347710383,
+              "unit": "m^3"
+            },
+            "volume_supersample_3": {
+              "expected": 2.2518936140931634e-07,
+              "produced": 2.2528000000000004e-07,
+              "abs_error": 9.06385906837009e-11,
+              "rel_error": 0.0004024994347710383,
+              "unit": "m^3"
+            },
+            "misclassified_supersample_1": {
+              "voxels": 24,
+              "fraction_of_the_object": 0.00010654544163085556
+            },
+            "misclassified_supersample_3": {
+              "voxels": 24,
+              "fraction_of_the_object": 0.00010654544163085556
+            },
+            "supersampling_helps_volume": false,
+            "supersampling_helps_the_interface": false
+          },
+          {
+            "shape": "cylinder",
+            "dx_mm": 0.5,
+            "grid": 24,
+            "volume_supersample_1": {
+              "expected": 3.0159289474462016e-07,
+              "produced": 3.1200000000000004e-07,
+              "abs_error": 1.0407105255379883e-08,
+              "rel_error": 0.034507130097319795,
+              "unit": "m^3"
+            },
+            "volume_supersample_3": {
+              "expected": 3.0159289474462016e-07,
+              "produced": 3.1200000000000004e-07,
+              "abs_error": 1.0407105255379883e-08,
+              "rel_error": 0.034507130097319795,
+              "unit": "m^3"
+            },
+            "misclassified_supersample_1": {
+              "voxels": 0,
+              "fraction_of_the_object": 0.0
+            },
+            "misclassified_supersample_3": {
+              "voxels": 0,
+              "fraction_of_the_object": 0.0
+            },
+            "supersampling_helps_volume": false,
+            "supersampling_helps_the_interface": false
+          },
+          {
+            "shape": "cylinder",
+            "dx_mm": 0.25,
+            "grid": 48,
+            "volume_supersample_1": {
+              "expected": 3.0159289474462016e-07,
+              "produced": 3.045e-07,
+              "abs_error": 2.907105255379849e-09,
+              "rel_error": 0.009639170239211035,
+              "unit": "m^3"
+            },
+            "volume_supersample_3": {
+              "expected": 3.0159289474462016e-07,
+              "produced": 3.045e-07,
+              "abs_error": 2.907105255379849e-09,
+              "rel_error": 0.009639170239211035,
+              "unit": "m^3"
+            },
+            "misclassified_supersample_1": {
+              "voxels": 0,
+              "fraction_of_the_object": 0.0
+            },
+            "misclassified_supersample_3": {
+              "voxels": 0,
+              "fraction_of_the_object": 0.0
+            },
+            "supersampling_helps_volume": false,
+            "supersampling_helps_the_interface": false
+          },
+          {
+            "shape": "cylinder",
+            "dx_mm": 0.1,
+            "grid": 120,
+            "volume_supersample_1": {
+              "expected": 3.0159289474462016e-07,
+              "produced": 3.0144000000000003e-07,
+              "abs_error": 1.5289474462012663e-10,
+              "rel_error": 0.0005069573828972109,
+              "unit": "m^3"
+            },
+            "volume_supersample_3": {
+              "expected": 3.0159289474462016e-07,
+              "produced": 3.0144000000000003e-07,
+              "abs_error": 1.5289474462012663e-10,
+              "rel_error": 0.0005069573828972109,
+              "unit": "m^3"
+            },
+            "misclassified_supersample_1": {
+              "voxels": 0,
+              "fraction_of_the_object": 0.0
+            },
+            "misclassified_supersample_3": {
+              "voxels": 0,
+              "fraction_of_the_object": 0.0
+            },
+            "supersampling_helps_volume": false,
+            "supersampling_helps_the_interface": false
+          },
+          {
+            "shape": "box",
+            "dx_mm": 0.5,
+            "grid": 24,
+            "volume_supersample_1": {
+              "expected": 4.8e-08,
+              "produced": 4.8000000000000006e-08,
+              "abs_error": 6.617444900424222e-24,
+              "rel_error": 1.378634354255046e-16,
+              "unit": "m^3"
+            },
+            "volume_supersample_3": {
+              "expected": 4.8e-08,
+              "produced": 4.8000000000000006e-08,
+              "abs_error": 6.617444900424222e-24,
+              "rel_error": 1.378634354255046e-16,
+              "unit": "m^3"
+            },
+            "misclassified_supersample_1": {
+              "voxels": 0,
+              "fraction_of_the_object": 0.0
+            },
+            "misclassified_supersample_3": {
+              "voxels": 0,
+              "fraction_of_the_object": 0.0
+            },
+            "supersampling_helps_volume": false,
+            "supersampling_helps_the_interface": false
+          },
+          {
+            "shape": "box",
+            "dx_mm": 0.25,
+            "grid": 48,
+            "volume_supersample_1": {
+              "expected": 4.8e-08,
+              "produced": 4.8000000000000006e-08,
+              "abs_error": 6.617444900424222e-24,
+              "rel_error": 1.378634354255046e-16,
+              "unit": "m^3"
+            },
+            "volume_supersample_3": {
+              "expected": 4.8e-08,
+              "produced": 4.8000000000000006e-08,
+              "abs_error": 6.617444900424222e-24,
+              "rel_error": 1.378634354255046e-16,
+              "unit": "m^3"
+            },
+            "misclassified_supersample_1": {
+              "voxels": 0,
+              "fraction_of_the_object": 0.0
+            },
+            "misclassified_supersample_3": {
+              "voxels": 0,
+              "fraction_of_the_object": 0.0
+            },
+            "supersampling_helps_volume": false,
+            "supersampling_helps_the_interface": false
+          },
+          {
+            "shape": "box",
+            "dx_mm": 0.1,
+            "grid": 120,
+            "volume_supersample_1": {
+              "expected": 4.8e-08,
+              "produced": 4.8000000000000006e-08,
+              "abs_error": 6.617444900424222e-24,
+              "rel_error": 1.378634354255046e-16,
+              "unit": "m^3"
+            },
+            "volume_supersample_3": {
+              "expected": 4.8e-08,
+              "produced": 4.8000000000000006e-08,
+              "abs_error": 6.617444900424222e-24,
+              "rel_error": 1.378634354255046e-16,
+              "unit": "m^3"
+            },
+            "misclassified_supersample_1": {
+              "voxels": 0,
+              "fraction_of_the_object": 0.0
+            },
+            "misclassified_supersample_3": {
+              "voxels": 0,
+              "fraction_of_the_object": 0.0
+            },
+            "supersampling_helps_volume": false,
+            "supersampling_helps_the_interface": false
+          }
+        ],
+        "occupancy_truth_subdivision": 9,
+        "cases_with_no_misclassified_voxel": "9/12",
+        "worst_misclassified_fraction": 0.004424778761061947,
+        "supersampling_helped_volume_in": "1/12",
+        "supersampling_helped_the_interface_in": "1/9",
+        "verdict": "centre sampling already agrees with majority occupancy in 9 of 12 cases (worst disagreement 0.442 % of the object, on the ellipsoid where curvature is highest relative to dx), so the volume error of up to 3.5 % on curved primitives is the price of binary voxels, not a rasterizer defect \u2014 the flat-faced box is exact to 1e-16. Supersampling has correspondingly little to correct: it moved the volume in 1 of 12 cases and the classification in 1 of 9 curved ones"
+      },
+      "status": "OK",
+      "elapsed_s": 23.55
+    },
+    {
+      "id": "G4",
+      "title": "boolean algebra: set identities hold voxel-for-voxel",
+      "data": {
+        "grid": [
+          48,
+          48,
+          48
+        ],
+        "dx_mm": 0.25,
+        "rows": [
+          {
+            "identity": "union",
+            "expected_voxels": 8748,
+            "produced_voxels": 8748,
+            "mismatched_voxels": 0,
+            "exact": true
+          },
+          {
+            "identity": "intersection",
+            "expected_voxels": 2556,
+            "produced_voxels": 2556,
+            "mismatched_voxels": 0,
+            "exact": true
+          },
+          {
+            "identity": "difference",
+            "expected_voxels": 4652,
+            "produced_voxels": 4652,
+            "mismatched_voxels": 0,
+            "exact": true
+          },
+          {
+            "identity": "complement_of_a",
+            "expected_voxels": 103384,
+            "produced_voxels": 103384,
+            "mismatched_voxels": 0,
+            "exact": true
+          },
+          {
+            "identity": "de_morgan",
+            "expected_voxels": 101844,
+            "produced_voxels": 101844,
+            "mismatched_voxels": 0,
+            "exact": true
+          },
+          {
+            "identity": "inclusion_exclusion",
+            "expected_voxels": 0,
+            "produced_voxels": 0,
+            "mismatched_voxels": 0,
+            "exact": true
+          }
+        ],
+        "verdict": "all 6 set identities hold voxel-for-voxel, no tolerance"
+      },
+      "status": "OK",
+      "elapsed_s": 0.07
+    },
+    {
+      "id": "G5",
+      "title": "affine transforms: a moved shape keeps its volume and lands on its target",
+      "data": {
+        "dx_mm": 0.2,
+        "rows": [
+          {
+            "transform": "translate",
+            "volume_voxels": {
+              "expected": 14328.0,
+              "produced": 14328.0,
+              "abs_error": 0.0,
+              "rel_error": 0.0,
+              "unit": "voxels"
+            },
+            "centroid_x": {
+              "expected": 0.0014,
+              "produced": 0.0014000000000000043,
+              "abs_error": 4.336808689942018e-18,
+              "rel_error": 3.097720492815727e-15,
+              "unit": "m"
+            },
+            "centroid_y": {
+              "expected": -0.0007999999999999999,
+              "produced": -0.0007999999999999958,
+              "abs_error": 4.119968255444917e-18,
+              "rel_error": 5.149960319306147e-15,
+              "unit": "m"
+            },
+            "centroid_z": {
+              "expected": 0.0020000000000000005,
+              "produced": 0.0020000000000000282,
+              "abs_error": 2.7755575615628914e-17,
+              "rel_error": 1.3877787807814454e-14,
+              "unit": "m"
+            }
+          },
+          {
+            "transform": "rotate a ball (volume is the invariant)",
+            "volume_voxels": {
+              "expected": 14328.0,
+              "produced": 14328.0,
+              "abs_error": 0.0,
+              "rel_error": 0.0,
+              "unit": "voxels"
+            }
+          },
+          {
+            "transform": "rotate an ellipsoid a quarter turn about z (semiaxes swap)",
+            "extent_x": {
+              "expected": 0.0026000000000000007,
+              "produced": 0.0026000000000000007,
+              "abs_error": 0.0,
+              "rel_error": 0.0,
+              "unit": "m"
+            },
+            "extent_y": {
+              "expected": 0.0078,
+              "produced": 0.0078,
+              "abs_error": 0.0,
+              "rel_error": 0.0,
+              "unit": "m"
+            },
+            "extent_z": {
+              "expected": 0.0046,
+              "produced": 0.0046,
+              "abs_error": 0.0,
+              "rel_error": 0.0,
+              "unit": "m"
+            }
+          }
+        ],
+        "worst_centroid_error_vox": 1.3877787807814457e-13,
+        "translated_volume_rel_error": 0.0,
+        "rotated_volume_rel_error": 0.0,
+        "verdict": "a translated shape lands within 0.00 voxel of its target and keeps its volume to 0.00 %; rotating a ball moves its volume by 0.00 % (rasterization only \u2014 the exact volume is unchanged)"
+      },
+      "status": "OK",
+      "elapsed_s": 0.1
+    },
+    {
+      "id": "G6",
+      "title": "spherical cap sampling: area, normals and angular span",
+      "data": {
+        "rows": [
+          {
+            "aperture_mm": 5.0,
+            "roc_mm": 12.0,
+            "f_number": 1.2,
+            "n_points": 22856,
+            "cap_area": {
+              "expected": 8.228116808668753e-05,
+              "produced": 8.228116808668755e-05,
+              "abs_error": 1.3552527156068805e-20,
+              "rel_error": 1.6470995090626942e-16,
+              "unit": "m^2"
+            },
+            "on_sphere_max_dev_m": 1.734723475976807e-18,
+            "normal_norm_max_dev": 2.220446049250313e-16,
+            "normal_alignment_max_dev": 2.220446049250313e-16,
+            "apex_z_m": 2.3873116147932195e-08,
+            "rim_radius": {
+              "expected": 0.005,
+              "produced": 0.004999947914681452,
+              "abs_error": 5.2085318547751e-08,
+              "rel_error": 1.04170637095502e-05,
+              "unit": "m (<= a)"
+            },
+            "equal_area": true
+          },
+          {
+            "aperture_mm": 32.0,
+            "roc_mm": 64.0,
+            "f_number": 1.0,
+            "n_points": 33672,
+            "cap_area": {
+              "expected": 0.003447960430497518,
+              "produced": 0.003447960430497518,
+              "abs_error": 0.0,
+              "rel_error": 0.0,
+              "unit": "m^2"
+            },
+            "on_sphere_max_dev_m": 1.3877787807814457e-17,
+            "normal_norm_max_dev": 2.220446049250313e-16,
+            "normal_alignment_max_dev": 4.440892098500626e-16,
+            "apex_z_m": 1.2732202063858722e-07,
+            "rim_radius": {
+              "expected": 0.032,
+              "produced": 0.031999779470778145,
+              "abs_error": 2.2052922185600288e-07,
+              "rel_error": 6.89153818300009e-06,
+              "unit": "m (<= a)"
+            },
+            "equal_area": true
+          },
+          {
+            "aperture_mm": 1.0,
+            "roc_mm": 50.0,
+            "f_number": 25.0,
+            "n_points": 51,
+            "cap_area": {
+              "expected": 3.1419068757025435e-06,
+              "produced": 3.141906875702544e-06,
+              "abs_error": 4.235164736271502e-22,
+              "rel_error": 1.3479599822080982e-16,
+              "unit": "m^2"
+            },
+            "on_sphere_max_dev_m": 0.0,
+            "normal_norm_max_dev": 0.0,
+            "normal_alignment_max_dev": 2.220446049250313e-16,
+            "apex_z_m": 9.80490215685137e-08,
+            "rim_radius": {
+              "expected": 0.001,
+              "produced": 0.0009950864532321383,
+              "abs_error": 4.913546767861725e-06,
+              "rel_error": 0.004913546767861725,
+              "unit": "m (<= a)"
+            },
+            "equal_area": true
+          }
+        ],
+        "verdict": "the sampled areas sum to the exact cap area to 1.6e-16 relative, every point sits on the sphere to 1.4e-17 m, and the normals are unit and aimed at the centre of curvature to machine precision"
+      },
+      "status": "OK",
+      "elapsed_s": 0.02
+    },
+    {
+      "id": "G7",
+      "title": "spiral array: element count, placement on the shell and aperture bounds",
+      "data": {
+        "rows": [
+          {
+            "requested": {
+              "n_elements": 128,
+              "d_outer_mm": 100.0,
+              "d_inner_mm": 44.0,
+              "roc_mm": 100.0,
+              "active_fraction": 0.6
+            },
+            "n_elements": {
+              "expected": 128.0,
+              "produced": 128.0,
+              "abs_error": 0.0,
+              "rel_error": 0.0,
+              "unit": "elements"
+            },
+            "focal_length": {
+              "expected": 0.1,
+              "produced": 0.1,
+              "abs_error": 0.0,
+              "rel_error": 0.0,
+              "unit": "m"
+            },
+            "on_shell_max_dev_m": 2.7755575615628914e-17,
+            "outer_radius": {
+              "expected": 0.05,
+              "produced": 0.05,
+              "abs_error": 0.0,
+              "rel_error": 0.0,
+              "unit": "m (<= a_out)"
+            },
+            "inner_radius_min_m": 0.022,
+            "inner_radius_requested_m": 0.022,
+            "respects_central_hole": true,
+            "normal_alignment_max_dev": 4.440892098500626e-16,
+            "active_fraction": {
+              "expected": 0.6,
+              "produced": 0.6516337385484359,
+              "abs_error": 0.05163373854843589,
+              "rel_error": 0.08605623091405983,
+              "unit": "of the annulus"
+            },
+            "elem_radius_mm": 3.2036278470099906
+          },
+          {
+            "requested": {
+              "n_elements": 64,
+              "d_outer_mm": 40.0,
+              "d_inner_mm": 12.0,
+              "roc_mm": 50.0,
+              "active_fraction": 0.6
+            },
+            "n_elements": {
+              "expected": 64.0,
+              "produced": 64.0,
+              "abs_error": 0.0,
+              "rel_error": 0.0,
+              "unit": "elements"
+            },
+            "focal_length": {
+              "expected": 0.05,
+              "produced": 0.05,
+              "abs_error": 0.0,
+              "rel_error": 0.0,
+              "unit": "m"
+            },
+            "on_shell_max_dev_m": 1.3877787807814457e-17,
+            "outer_radius": {
+              "expected": 0.02,
+              "produced": 0.02,
+              "abs_error": 0.0,
+              "rel_error": 0.0,
+              "unit": "m (<= a_out)"
+            },
+            "inner_radius_min_m": 0.006,
+            "inner_radius_requested_m": 0.006,
+            "respects_central_hole": true,
+            "normal_alignment_max_dev": 4.440892098500626e-16,
+            "active_fraction": {
+              "expected": 0.6,
+              "produced": 0.6285062034733557,
+              "abs_error": 0.02850620347335575,
+              "rel_error": 0.04751033912225959,
+              "unit": "of the annulus"
+            },
+            "elem_radius_mm": 1.8906689377716845
+          }
+        ],
+        "verdict": "both requests come back with exactly the elements asked for, all on the shell to 2.8e-17 m, inside the outer diameter and outside the central hole; the active fraction lands at 0.652, 0.629 against the 0.600 target"
+      },
+      "status": "OK",
+      "elapsed_s": 0.29
+    },
+    {
+      "id": "G8",
+      "title": "does the source fit its grid, clear of the PML?",
+      "data": {
+        "rows": [
+          {
+            "job": "example:water_bowl_mini",
+            "grid": [
+              36,
+              36,
+              48
+            ],
+            "dx_mm": 0.5,
+            "pml_vox": 6,
+            "n_source_voxels": 405,
+            "source_voxels_inside_the_pml": 0,
+            "source_voxels_inside_the_pml_pct": 0.0,
+            "clearance_to_the_domain_edge_vox": 7,
+            "clearance_beyond_the_pml_vox": 1,
+            "fits_clear_of_the_pml": true
+          },
+          {
+            "job": "harness:compare-mini",
+            "grid": [
+              48,
+              48,
+              60
+            ],
+            "dx_mm": 0.5,
+            "pml_vox": 10,
+            "n_source_voxels": 637,
+            "source_voxels_inside_the_pml": 0,
+            "source_voxels_inside_the_pml_pct": 0.0,
+            "clearance_to_the_domain_edge_vox": 11,
+            "clearance_beyond_the_pml_vox": 1,
+            "fits_clear_of_the_pml": true
+          },
+          {
+            "job": "harness:t0-sanity",
+            "grid": [
+              40,
+              40,
+              48
+            ],
+            "dx_mm": 0.5,
+            "pml_vox": 6,
+            "n_source_voxels": 677,
+            "source_voxels_inside_the_pml": 0,
+            "source_voxels_inside_the_pml_pct": 0.0,
+            "clearance_to_the_domain_edge_vox": 7,
+            "clearance_beyond_the_pml_vox": 1,
+            "fits_clear_of_the_pml": true
+          },
+          {
+            "job": "control:bowl deliberately overlapping the PML",
+            "grid": [
+              38,
+              38,
+              48
+            ],
+            "dx_mm": 0.5,
+            "pml_vox": 6,
+            "n_source_voxels": 1170,
+            "source_voxels_inside_the_pml": 280,
+            "source_voxels_inside_the_pml_pct": 23.931623931623932,
+            "clearance_to_the_domain_edge_vox": 2,
+            "clearance_beyond_the_pml_vox": -4,
+            "fits_clear_of_the_pml": false
+          }
+        ],
+        "n_jobs_audited": 4,
+        "offenders": [],
+        "control_was_caught": true,
+        "verdict": "3 shipped jobs audited; none puts a source voxel in the PML; the tightest is example:water_bowl_mini with 1 voxels of clearance beyond the sponge; the deliberately-broken control was caught, with 24 % of its bowl in the sponge"
+      },
+      "status": "OK",
+      "elapsed_s": 0.07
+    },
+    {
+      "id": "G9",
+      "title": "job to voxels: the bowl a job file orders is the bowl the runner builds",
+      "data": {
+        "rows": [
+          {
+            "dx_mm": 0.5,
+            "grid": [
+              80,
+              80,
+              44
+            ],
+            "n_source_voxels": 637,
+            "surface_rms_error_vox": 0.34414414681148675,
+            "surface_max_error_vox": 0.6881608655772038,
+            "aperture_radius": {
+              "expected": 6.0,
+              "produced": 6.264982043070835,
+              "abs_error": 0.2649820430708347,
+              "rel_error": 0.04416367384513912,
+              "unit": "mm"
+            },
+            "apex_z": {
+              "expected": 6.0,
+              "produced": 6.0,
+              "abs_error": 0.0,
+              "rel_error": 0.0,
+              "unit": "mm"
+            },
+            "focus_vox_reported": [
+              40,
+              40,
+              32
+            ],
+            "focus_vox_expected": [
+              40,
+              40,
+              32
+            ]
+          },
+          {
+            "dx_mm": 0.25,
+            "grid": [
+              160,
+              160,
+              88
+            ],
+            "n_source_voxels": 2503,
+            "surface_rms_error_vox": 0.3497930569468727,
+            "surface_max_error_vox": 0.7185461430046641,
+            "aperture_radius": {
+              "expected": 6.0,
+              "produced": 6.103277807866852,
+              "abs_error": 0.10327780786685192,
+              "rel_error": 0.017212967977808653,
+              "unit": "mm"
+            },
+            "apex_z": {
+              "expected": 6.0,
+              "produced": 6.0,
+              "abs_error": 0.0,
+              "rel_error": 0.0,
+              "unit": "mm"
+            },
+            "focus_vox_reported": [
+              80,
+              80,
+              64
+            ],
+            "focus_vox_expected": [
+              80,
+              80,
+              64
+            ]
+          },
+          {
+            "dx_mm": 0.1,
+            "grid": [
+              240,
+              240,
+              140
+            ],
+            "n_source_voxels": 2401,
+            "surface_rms_error_vox": 0.33628236719911897,
+            "surface_max_error_vox": 0.7042008431047512,
+            "aperture_radius": {
+              "expected": 2.5,
+              "produced": 2.5612496949731396,
+              "abs_error": 0.06124969497313959,
+              "rel_error": 0.024499877989255837,
+              "unit": "mm"
+            },
+            "apex_z": {
+              "expected": 2.0,
+              "produced": 2.0,
+              "abs_error": 0.0,
+              "rel_error": 0.0,
+              "unit": "mm"
+            },
+            "focus_vox_reported": [
+              120,
+              120,
+              80
+            ],
+            "focus_vox_expected": [
+              120,
+              120,
+              80
+            ]
+          }
+        ],
+        "focus_vox_matches_the_job_file": true,
+        "verdict": "the focus the builder reports is exactly the one the job file implies at every dx; the shell it built sits within 0.72 voxel of the ordered sphere and its apex within 0.0000 mm of the ordered depth"
+      },
+      "status": "OK",
+      "elapsed_s": 0.02
+    },
+    {
+      "id": "G10",
+      "title": "how many voxels carry the drive, and what that does to the focal pressure",
+      "data": {
+        "dx_mm": 0.25,
+        "drive_pa": 100000.0,
+        "rows": [
+          {
+            "geometry": "f/1.2",
+            "f_number": 1.2,
+            "sampling": "dx/2 (shipped)",
+            "n_source_voxels": 1558,
+            "voxels_per_cap_area": 1.1834421200414937,
+            "on_axis_focal_pressure": {
+              "expected": 544999.2216342456,
+              "produced": 625598.3125,
+              "abs_error": 80599.0908657544,
+              "rel_error": 0.1478884513340558,
+              "unit": "Pa vs O'Neil"
+            },
+            "peak_mpa": 0.6255983125,
+            "oneill_mpa": 0.5449992216342456,
+            "peak_z_mm": 8.75,
+            "oneill_peak_z_mm": 8.75,
+            "global_peak_mpa": 0.6255983114242554
+          },
+          {
+            "geometry": "f/1.2",
+            "f_number": 1.2,
+            "sampling": "dx/4",
+            "n_source_voxels": 1667,
+            "voxels_per_cap_area": 1.2662374930097369,
+            "on_axis_focal_pressure": {
+              "expected": 544999.2216342456,
+              "produced": 662187.75,
+              "abs_error": 117188.5283657544,
+              "rel_error": 0.21502512978706748,
+              "unit": "Pa vs O'Neil"
+            },
+            "peak_mpa": 0.66218775,
+            "oneill_mpa": 0.5449992216342456,
+            "peak_z_mm": 8.75,
+            "oneill_peak_z_mm": 8.75,
+            "global_peak_mpa": 0.6621877551078796
+          },
+          {
+            "geometry": "f/1.2",
+            "f_number": 1.2,
+            "sampling": "dx/8",
+            "n_source_voxels": 1731,
+            "voxels_per_cap_area": 1.3148512899819165,
+            "on_axis_focal_pressure": {
+              "expected": 544999.2216342456,
+              "produced": 677165.125,
+              "abs_error": 132165.9033657544,
+              "rel_error": 0.2425065910542754,
+              "unit": "Pa vs O'Neil"
+            },
+            "peak_mpa": 0.677165125,
+            "oneill_mpa": 0.5449992216342456,
+            "peak_z_mm": 8.75,
+            "oneill_peak_z_mm": 8.75,
+            "global_peak_mpa": 0.677165150642395
+          },
+          {
+            "geometry": "f/1.2",
+            "f_number": 1.2,
+            "sampling": "dx/16",
+            "n_source_voxels": 1752,
+            "voxels_per_cap_area": 1.3308026921134128,
+            "on_axis_focal_pressure": {
+              "expected": 544999.2216342456,
+              "produced": 682504.625,
+              "abs_error": 137505.4033657544,
+              "rel_error": 0.25230385275308825,
+              "unit": "Pa vs O'Neil"
+            },
+            "peak_mpa": 0.682504625,
+            "oneill_mpa": 0.5449992216342456,
+            "peak_z_mm": 8.75,
+            "oneill_peak_z_mm": 8.75,
+            "global_peak_mpa": 0.6825046539306641
+          },
+          {
+            "geometry": "f/2.0",
+            "f_number": 2.0,
+            "sampling": "dx/2 (shipped)",
+            "n_source_voxels": 2090,
+            "voxels_per_cap_area": 1.136640890771173,
+            "on_axis_focal_pressure": {
+              "expected": 432727.9611435544,
+              "produced": 490550.78125,
+              "abs_error": 57822.82010644558,
+              "rel_error": 0.13362395153213422,
+              "unit": "Pa vs O'Neil"
+            },
+            "peak_mpa": 0.49055078125,
+            "oneill_mpa": 0.43272796114355444,
+            "peak_z_mm": 14.0,
+            "oneill_peak_z_mm": 14.5,
+            "global_peak_mpa": 0.49055078625679016
+          },
+          {
+            "geometry": "f/2.0",
+            "f_number": 2.0,
+            "sampling": "dx/4",
+            "n_source_voxels": 2195,
+            "voxels_per_cap_area": 1.1937448589678108,
+            "on_axis_focal_pressure": {
+              "expected": 432727.9611435544,
+              "produced": 508967.5625,
+              "abs_error": 76239.60135644558,
+              "rel_error": 0.17618367242775337,
+              "unit": "Pa vs O'Neil"
+            },
+            "peak_mpa": 0.5089675625,
+            "oneill_mpa": 0.43272796114355444,
+            "peak_z_mm": 14.0,
+            "oneill_peak_z_mm": 14.5,
+            "global_peak_mpa": 0.5089675784111023
+          },
+          {
+            "geometry": "f/2.0",
+            "f_number": 2.0,
+            "sampling": "dx/8",
+            "n_source_voxels": 2237,
+            "voxels_per_cap_area": 1.216586446246466,
+            "on_axis_focal_pressure": {
+              "expected": 432727.9611435544,
+              "produced": 516464.40625,
+              "abs_error": 83736.44510644558,
+              "rel_error": 0.19350828378447818,
+              "unit": "Pa vs O'Neil"
+            },
+            "peak_mpa": 0.51646440625,
+            "oneill_mpa": 0.43272796114355444,
+            "peak_z_mm": 14.75,
+            "oneill_peak_z_mm": 14.5,
+            "global_peak_mpa": 0.5164644122123718
+          },
+          {
+            "geometry": "f/2.0",
+            "f_number": 2.0,
+            "sampling": "dx/16",
+            "n_source_voxels": 2274,
+            "voxels_per_cap_area": 1.236708796944329,
+            "on_axis_focal_pressure": {
+              "expected": 432727.9611435544,
+              "produced": 522545.0625,
+              "abs_error": 89817.10135644558,
+              "rel_error": 0.2075601981417822,
+              "unit": "Pa vs O'Neil"
+            },
+            "peak_mpa": 0.5225450625,
+            "oneill_mpa": 0.43272796114355444,
+            "peak_z_mm": 14.75,
+            "oneill_peak_z_mm": 14.5,
+            "global_peak_mpa": 0.5225450396537781
+          }
+        ],
+        "f/1.2": {
+          "extra_voxels_from_refining_the_sampling": 0.12451861360718874,
+          "peak_moved_by": 0.08337864743407417,
+          "voxels_per_cap_area_shipped": 1.1834421200414937,
+          "voxels_per_cap_area_converged": 1.3308026921134128,
+          "over_oneill_shipped": 1.1478884513340557,
+          "over_oneill_converged": 1.252303852753088
+        },
+        "f/2.0": {
+          "extra_voxels_from_refining_the_sampling": 0.0880382775119617,
+          "peak_moved_by": 0.06122779363167359,
+          "voxels_per_cap_area_shipped": 1.136640890771173,
+          "voxels_per_cap_area_converged": 1.236708796944329,
+          "over_oneill_shipped": 1.1336239515321342,
+          "over_oneill_converged": 1.207560198141782
+        },
+        "verdict": "f/1.2: refining dx/2 to dx/16 adds 12 % more driven voxels and moves the focus by 8.3 %; the shell carries 1.18 voxels per dx^2 of cap area at the shipped sampling and 1.33 at dx/16, against 1.00 for a flat source; the on-axis focus sits 1.15x and 1.25x O'Neil's absolute prediction | f/2.0: refining dx/2 to dx/16 adds 9 % more driven voxels and moves the focus by 6.1 %; the shell carries 1.14 voxels per dx^2 of cap area at the shipped sampling and 1.24 at dx/16, against 1.00 for a flat source; the on-axis focus sits 1.13x and 1.21x O'Neil's absolute prediction"
+      },
+      "status": "OK",
+      "elapsed_s": 133.6
+    }
+  ]
+}
