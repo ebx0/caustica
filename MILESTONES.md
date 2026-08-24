@@ -1234,18 +1234,34 @@ eşikleri rapora girer: ≤2 CEM43 beyin / ≤16 kemik / ≤21 deri; ΔT≤2°C.
     olarak eklenebilir, ölçüt değil)
   - Tıbbi sorumluluk notu (araştırma amaçlı; klinik karar aracı değil)
 
-### M30 — Mutlak genlik kapısı `[ ]` (YENİ — kullanıcı 2026-08-25, sabit kısıt 1; SIRADAKİ)
+### M30 — Mutlak genlik kapısı `[~]` (kase KAPANDI 2026-08-25; dizi kapısı açık)
 Kütüphanenin hiçbir kapısı mutlak genliği notlandırmıyor. Analitik süit normalize şekil,
 tepe konumu ve −6 dB genişlik ölçüyor; çok-motor karşılaştırması normalize korelasyon; mutlak
 sayının göründüğü tek yer T0 gözcüsü ve o **5 kat** toleransla geçiriyor. İki bağımsız ~%15
 hata (kase merdiveni, dizi ızgara yuvarlaması) bu körlükte aylarca yaşadı.
-- [ ] Kase: odak basıncı O'Neil'in tam eksende çözümüne karşı, SABİT çözünürlükte
-- [ ] Dizi: odak basıncı gerçek eleman disklerinin Rayleigh integraline karşı
-- [ ] Düzlem: gerçekleşen düzlem genliği `source.amplitude`'a karşı (zaten var, kapıya bağlanacak)
-- Başarı kriteri: tolerans **ölçülerek** seçilir, tahminle değil. Ölçüm zemini (2026-08-24/25,
-  f/1.2 kase, 2 MHz): 15 nokta/dalgaboyunda 0.999, 7.5'te 1.023, 3.75'te 1.136 — yani hata
-  çözünürlükten ayrılamaz, kapı ya ppw'yi sabitler ya da toleransı ppw'ye bağlar. 32 elemanlı
-  spiral, Rayleigh'e karşı: 1.001 / 1.018 / 1.142 aynı üç basamakta
+- [x] **Kase kapısı: `M30.absolute`**, analitik süitte, üç kontrollü
+      (`caustica.validation run-analytic`). Tasarım ölçümden çıktı: aynı kaseyi
+      6 basamakta koşup mutlak hatanın **temiz bir güç yasası** izlediğini gördüm
+      (f/1.2, 2 MHz): ppw 3.75/5/7.5/10/15/20 → +.136/+.063/+.023/+.012/−.001/−.003,
+      yani `err ≈ 3.7·ppw^−2.5`, ppw≈12'de sıfırı geçip −%0.3'te oturuyor. Dolayısıyla
+      "O'Neil'in %X'i içinde" TEK BAŞINA çözünürlükten bağımsız bir ifade değil: 4
+      nokta/dalgaboyunda %15'lik bir kaynak hatası ile dürüst bir ayrıklaştırma hatası
+      birbirine benziyor. Ayıran şey ayrıklaştırma hatasının **küçülmesi**, kaynak
+      hatasının küçülmemesi. Kapı bu yüzden üç katmanlı:
+      1. **Kaynağın kendi ölçüsü** — `Σw·dx² / kase alanı = 1.000 ± %0.5`. Anlık, tam,
+         çözünürlükten bağımsız; bozulan da tam olarak buydu
+      2. **Mutlak seviye** ince basamakta, bant 0.90–1.10
+      3. **Yakınsama** — 2× inceltme hatayı ≤ 0.60'a indirmeli (ölçülen: 0.10; ölçülen
+         yasa 2^2.5 = 5.7× diyor, yani 6 kat marj)
+      Sahte-kusur sınavı (eski ikili kabuk geri konarak): **üç kontrolün üçü de FAIL**
+      (sürüş/alan 1.215, ince basamak 1.193, ve hata inceltmeyle *büyüyor*: 1.515).
+      İşlek kodda üçü de PASS. Meta-testler: `tests/test_validation_analytic.py`
+- [ ] Dizi kapısı: odak basıncı gerçek eleman disklerinin Rayleigh integraline karşı.
+      Ölçüm zemini var (32 elemanlı spiral: 1.142 / 1.018 / 1.001 @ 3.75/7.5/15 ppw;
+      eski yol 0.861 / 0.931 / 0.951 ve orada takılıyor) — süite bağlanmadı, çünkü ince
+      basamak 30 Mvoksel ve CPU süitine ağır. GPU süitine (M7/M8 merdiveni) ait
+- [x] Düzlem: gerçekleşen düzlem genliği `source.amplitude`'a karşı — `M4.planewave`
+      içinde `AMPLITUDE_BAND` olarak zaten vardı; kase kapısı bunun eğri-yüzey karşılığı
 - Not: bu kapı ITRUSST'ın ön provasıdır; M21'in ilk iki benchmark'ı buraya çekilebilir (A kararı)
 
 ### M31 — k-Wave üretim yolu `[ ]` (YENİ — kullanıcı 2026-08-25, sabit kısıt 2)

@@ -85,6 +85,7 @@ FORMAT = "caustica-analytic/1"
 
 F0 = 1.0e6  # [Hz]
 C0 = 1500.0  # [m/s]
+RHO0 = 1000.0  # [kg/m^3] — water, and the impedance O'Neil is driven through
 BETA = 3.5  # water's nonlinearity parameter
 DRIVE_PA = 1.0e5  # linear-scenario drive amplitude [Pa]
 ALPHA_NP_M = 30.0  # absorbing-scenario alpha [Np/m] -> e^{-1.35} over the window
@@ -131,6 +132,18 @@ FOCUS_POS_TOL_VOX = 1.0
 FOCUS_POS_SOURCE = "tests/test_linear_oneill_3d.py::test_focus_lands_within_one_voxel"
 
 LINEAR_LIMIT_SOURCE = "tests/test_westervelt.py::test_beta_zero_is_bitwise_identical_to_linear"
+
+#: Absolute-amplitude band at the FINE rung, and the shrink a refinement must
+#: buy. Chosen from measurement (2026-08-24, f/1.2 bowl at 2 MHz): the error
+#: follows 3.7 * ppw**-2.5, so at the suite's fine rung it is a couple of
+#: percent, and a 2x refinement divides it by ~5.7. The band is set three times
+#: the measured residual and the shrink limit three times the measured need, so
+#: neither fails on an honest improvement -- but a source-model error, which
+#: does not shrink at all, fails the second one outright.
+ABSOLUTE_BAND = (0.90, 1.10)
+ABSOLUTE_SHRINK_MAX = 0.60
+ABSOLUTE_DRIVE_TOL_PCT = 0.5
+ABSOLUTE_SOURCE = "tests/test_sources.py::test_the_offgrid_bowl_carries_the_caps_own_area"
 
 FUBINI_TOL = 0.05
 FUBINI_STATIONS_REQUIRED = 4  # the source test's own `assert checked >= 4`
@@ -630,6 +643,105 @@ def measure_oneill(size: Size, *, backend: str = "auto") -> dict:
     }
 
 
+def measure_absolute_amplitude(size: Size, *, backend: str = "auto") -> dict:
+    """Does a focused bowl radiate the amount of pressure it was asked to?
+
+    Every other check in this suite grades a NORMALIZED quantity — shape
+    correlation, peak position, -6 dB width. That is why two independent
+    source-model errors of 13-18 % of absolute amplitude lived here for
+    months with every gate green (2026-08-24: the bowl's staircase factor,
+    the array's lattice-rounded element centres). A library whose output is
+    quoted in megapascals cannot be blind in exactly that place.
+
+    The difficulty is that "within X % of O'Neil" is not a resolution-free
+    statement. Measured on an f/1.2 bowl at 2 MHz, the error follows a clean
+    power law in points per wavelength:
+
+        ppw    3.75    5.00    7.50   10.00   15.00   20.00
+        err   +.136   +.063   +.023   +.012   -.001   -.003
+
+    which is ``err ~ 3.7 * ppw**-2.5`` over the positive rungs, crossing zero
+    near twelve and settling at about -0.3 %. So a single number at one
+    spacing cannot separate "coarse grid" from "wrong source": at four points
+    per wavelength a 15 % source error and an honest discretization error
+    look alike.
+
+    What separates them is that a discretization error SHRINKS and a
+    source-model error does not. So this measures the same bowl twice, once
+    at the suite's spacing and once at half of it, and reports both the level
+    and how much the error moved. The legacy binary shell, for the record,
+    reads 1.162 / 1.193 / 1.146 / 1.165 / 1.165 / 1.161 over those same six
+    rungs: flat, and not even monotone.
+    """
+    from caustica import Grid, Medium, PMLSpec  # noqa: PLC0415
+    from caustica.analytic import axial_pressure  # noqa: PLC0415
+    from caustica.materials import water  # noqa: PLC0415
+    from caustica.solvers import CWRunSpec  # noqa: PLC0415
+    from caustica.sources import bowl_cw_source  # noqa: PLC0415
+
+    a, roc = size.aperture_m, size.roc_m
+    cap_area = 2.0 * np.pi * roc**2 * (1.0 - np.sqrt(1.0 - (a / roc) ** 2))
+    spec = CWRunSpec(min_settle_periods=8, max_settle_periods=30, n_record_periods=2)
+
+    t0 = time.perf_counter()
+    rungs = []
+    legs = []
+    for refine in (1, 2):
+        dx = size.dx_mm * 1e-3 / refine
+        shape = tuple(n * refine for n in size.shape)
+        apex = tuple(v * refine for v in size.apex_vox)
+        grid = Grid(shape=shape, dx=dx, pml=PMLSpec(thickness=size.pml_mm * 1e-3))
+        medium = Medium.homogeneous(grid.shape, water(c=C0))
+        source = bowl_cw_source(
+            grid, f0=F0, amplitude=DRIVE_PA, aperture_radius=a, roc=roc, apex_vox=apex
+        )
+        focus = (apex[0], apex[1], apex[2] + int(round(roc / dx)))
+        res, leg = _planned_run(
+            "linear", grid, medium, source, spec, backend=backend, reference_point=focus
+        )
+        legs.append(leg)
+        resolved_backend = res.meta.get("backend")
+        z = (np.arange(shape[2]) - apex[2]) * dx
+        z_pml = (shape[2] - grid.pml_vox - 2 - apex[2]) * dx
+        sel = (z > 0.25 * roc) & (z < z_pml)
+        oneill = np.abs(axial_pressure(z[sel], a, roc, F0, C0, RHO0, DRIVE_PA / (RHO0 * C0)))
+        axial = np.asarray(res.amp, dtype=np.float64)[apex[0], apex[1], :][sel]
+        rungs.append(
+            {
+                "dx_mm": size.dx_mm / refine,
+                "points_per_wavelength": C0 / F0 / dx,
+                "shape": list(shape),
+                "source_points": int(source.n_points),
+                # The source's own measure: this is the quantity that was
+                # wrong, and unlike the field it is exact and instant.
+                "drive_over_cap_area": float(source.drive_weights.sum()) * dx**2 / cap_area,
+                "simulated_pa": float(axial.max()),
+                "oneill_pa": float(oneill.max()),
+                "ratio": float(axial.max() / oneill.max()),
+            }
+        )
+
+    coarse, fine = rungs
+    return {
+        "backend": resolved_backend,
+        "f_number": roc / (2.0 * a),
+        "rungs": rungs,
+        "ratio_coarse": coarse["ratio"],
+        "ratio_fine": fine["ratio"],
+        "drive_over_cap_area": fine["drive_over_cap_area"],
+        # A discretization error halves and then some under a 2x refinement
+        # (the measured law gives 2**2.5 = 5.7x); a source-model error does
+        # not move at all. Anything at or above 1.0 means it did not shrink.
+        "error_shrink_factor": (
+            abs(fine["ratio"] - 1.0) / abs(coarse["ratio"] - 1.0)
+            if abs(coarse["ratio"] - 1.0) > 1e-9
+            else 0.0
+        ),
+        "planner": merge_plan(legs),
+        "elapsed_s": time.perf_counter() - t0,
+    }
+
+
 def measure_linear_limit(size: Size, *, backend: str = "auto") -> dict:
     """westervelt with ``beta = 0`` against the linear solver.
 
@@ -756,6 +868,7 @@ class Harness:
 SCENARIOS: dict[str, Callable[..., dict]] = {
     "planewave": measure_planewave,
     "oneill": measure_oneill,
+    "absolute": measure_absolute_amplitude,
     "linear_limit": measure_linear_limit,
     "fubini": measure_fubini,
 }
@@ -854,6 +967,35 @@ def evaluate(scenarios: dict[str, dict]) -> list[Gate]:
         ],
     )
 
+    absolute = Gate(
+        id="M30.absolute",
+        criterion=(
+            "the focused bowl radiates the pressure it was asked to: the source "
+            "carries the cap's own area, the on-axis focal pressure sits inside an "
+            "absolute band against O'Neil, and refining the grid SHRINKS the error "
+            "(a discretization error does; a source-model error does not)"
+        ),
+        required=3,
+        checks=[
+            Check.relative(
+                "absolute: source drive / cap area",
+                _num(scenarios, "absolute", "drive_over_cap_area"),
+                1.0,
+                ABSOLUTE_DRIVE_TOL_PCT,
+            ).citing(ABSOLUTE_SOURCE),
+            Check.in_range(
+                "absolute: focal pressure / O'Neil (fine rung)",
+                _num(scenarios, "absolute", "ratio_fine"),
+                *ABSOLUTE_BAND,
+            ).citing(ABSOLUTE_SOURCE),
+            Check.at_most(
+                "absolute: error after a 2x refinement, as a fraction of before",
+                _num(scenarios, "absolute", "error_shrink_factor"),
+                ABSOLUTE_SHRINK_MAX,
+            ).citing(ABSOLUTE_SOURCE),
+        ],
+    )
+
     limit_data = scenarios.get("linear_limit") or {}
     nonlinear_active = None if limit_data.get("error") else limit_data.get("nonlinear_active")
     linear_limit = Gate(
@@ -915,7 +1057,7 @@ def evaluate(scenarios: dict[str, dict]) -> list[Gate]:
             )
         )
 
-    return [planewave, oneill, linear_limit, fubini]
+    return [planewave, oneill, absolute, linear_limit, fubini]
 
 
 # ---------------------------------------------------- the planner's own row
