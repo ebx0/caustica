@@ -1,0 +1,602 @@
+{
+  "format": "caustica-compare/1",
+  "generated": "2026-08-24T09:41:21+00:00",
+  "caustica": "0.1.0.dev0",
+  "git_commit": "55e4ee8a8666ade2e5d46aca6451a811525e1584",
+  "host": "LOQ",
+  "backend": "cupy",
+  "backend_requested": "cupy",
+  "environment": {
+    "caustica": "0.1.0.dev0",
+    "python": "3.12.10",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "numpy": "2.2.6",
+    "scipy": "1.15.3",
+    "pydantic": "2.13.4",
+    "h5py": "3.16.0",
+    "resolved_backend": "cupy",
+    "gpu_name": "NVIDIA GeForce RTX 5050 Laptop GPU",
+    "driver_version": 13020,
+    "cuda_runtime_version": 12090,
+    "cupy_version": "14.2.0",
+    "vram_total_gib": 7.96,
+    "vram_free_gib": 6.188
+  },
+  "job_source": "dict",
+  "job_name": "t0-sanity",
+  "job": {
+    "format": "caustica-job/1",
+    "kind": "explicit",
+    "name": "t0-sanity",
+    "medium": {
+      "kind": "homogeneous"
+    },
+    "grid": {
+      "ndim": 3,
+      "dx_mm": 0.5,
+      "size_mm": [
+        20.0,
+        20.0,
+        24.0
+      ],
+      "pml": {
+        "thickness_mm": 3.0
+      }
+    },
+    "source": {
+      "kind": "array",
+      "array": {
+        "kind": "bowl",
+        "d_outer_mm": 12.0,
+        "roc_mm": 9.0
+      },
+      "apex_mm": [
+        10.0,
+        10.0,
+        4.0
+      ]
+    },
+    "drive": {
+      "f0_mhz": 0.5,
+      "amplitude_kpa": 100.0
+    },
+    "run": {
+      "spec": {
+        "min_settle_periods": 4,
+        "max_settle_periods": 16,
+        "n_record_periods": 2
+      },
+      "harmonics": [
+        1
+      ]
+    },
+    "solver": "linear"
+  },
+  "grid_shape": [
+    40,
+    40,
+    48
+  ],
+  "dx_mm": 0.5,
+  "pml_vox": 6,
+  "t0_job": {
+    "name": "t0-sanity",
+    "expected_peak_pa": 479992.6459457306,
+    "band": 5.0
+  },
+  "solvers": [
+    "linear",
+    "westervelt",
+    "kwave"
+  ],
+  "reference": "linear",
+  "excluded": {},
+  "runs": {
+    "linear": {
+      "solver": "linear",
+      "status": "ok",
+      "message": "",
+      "takes_backend": true,
+      "caps": {
+        "ndim": [
+          1,
+          2,
+          3
+        ],
+        "nonlinear": false,
+        "backends": [
+          "cupy",
+          "numpy"
+        ]
+      },
+      "t0": {
+        "status": "ok",
+        "message": "",
+        "expected_peak_pa": 479992.6459457306,
+        "finite": true,
+        "peak_pa": 697159.25,
+        "peak_over_expected": 1.452437356881553,
+        "elapsed_s": 0.21004829998128116,
+        "steps_total": 120
+      },
+      "run": {
+        "elapsed_s": 0.17927530012093484,
+        "steps_total": 120,
+        "spp": 12,
+        "dt_s": 1.6666666666666665e-07,
+        "converged_period": 8,
+        "settle_capped": false,
+        "engine_backend": "cupy",
+        "peak_pa": 697159.25,
+        "interior_shape": [
+          24,
+          24,
+          32
+        ]
+      },
+      "metrics": {
+        "peak": {
+          "p_pa": 697159.2,
+          "p_mpa": 0.6972,
+          "voxel_grid": [
+            20,
+            20,
+            22
+          ],
+          "position_mm_from_apex": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 7.0
+          },
+          "gain_vs_source": 6.97,
+          "isppa_w_cm2": 16.2,
+          "p_max_time_domain_pa": 695853.7
+        },
+        "target": {
+          "voxel_grid": [
+            20,
+            20,
+            26
+          ],
+          "p_pa": 585048.4,
+          "hit_ratio": 0.8392,
+          "displacement_mm": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": -2.0
+          },
+          "displacement_norm_mm": 2.0
+        },
+        "focal_spot": {
+          "axial_6db": {
+            "left_mm": 4.19,
+            "right_mm": 14.158,
+            "width_mm": 9.968,
+            "truncated": false
+          },
+          "lateral_x_6db": {
+            "left_mm": -1.281,
+            "right_mm": 1.286,
+            "width_mm": 2.567,
+            "truncated": false
+          },
+          "lateral_y_6db": {
+            "left_mm": -1.288,
+            "right_mm": 1.295,
+            "width_mm": 2.583,
+            "truncated": false
+          },
+          "volume_above_6db_mm3": 39.625
+        },
+        "run": {
+          "solver": "linear",
+          "dt_s": 1.6666666666666665e-07,
+          "steps_per_period": 12,
+          "steps_total": 120,
+          "t_end_us": 20.0,
+          "tof_periods": 4,
+          "converged_period": 8,
+          "settle_capped": false,
+          "harmonics_recorded": [
+            1
+          ]
+        },
+        "warnings": []
+      }
+    },
+    "westervelt": {
+      "solver": "westervelt",
+      "status": "ok",
+      "message": "",
+      "takes_backend": true,
+      "caps": {
+        "ndim": [
+          1,
+          2,
+          3
+        ],
+        "nonlinear": true,
+        "backends": [
+          "cupy",
+          "numpy"
+        ]
+      },
+      "t0": {
+        "status": "ok",
+        "message": "",
+        "expected_peak_pa": 479992.6459457306,
+        "finite": true,
+        "peak_pa": 697159.25,
+        "peak_over_expected": 1.452437356881553,
+        "elapsed_s": 0.19471510010771453,
+        "steps_total": 120
+      },
+      "run": {
+        "elapsed_s": 0.22897689999081194,
+        "steps_total": 120,
+        "spp": 12,
+        "dt_s": 1.6666666666666665e-07,
+        "converged_period": 8,
+        "settle_capped": false,
+        "engine_backend": "cupy",
+        "peak_pa": 697159.25,
+        "interior_shape": [
+          24,
+          24,
+          32
+        ]
+      },
+      "metrics": {
+        "peak": {
+          "p_pa": 697159.2,
+          "p_mpa": 0.6972,
+          "voxel_grid": [
+            20,
+            20,
+            22
+          ],
+          "position_mm_from_apex": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 7.0
+          },
+          "gain_vs_source": 6.97,
+          "isppa_w_cm2": 16.2,
+          "p_max_time_domain_pa": 695853.7
+        },
+        "target": {
+          "voxel_grid": [
+            20,
+            20,
+            26
+          ],
+          "p_pa": 585048.4,
+          "hit_ratio": 0.8392,
+          "displacement_mm": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": -2.0
+          },
+          "displacement_norm_mm": 2.0
+        },
+        "focal_spot": {
+          "axial_6db": {
+            "left_mm": 4.19,
+            "right_mm": 14.158,
+            "width_mm": 9.968,
+            "truncated": false
+          },
+          "lateral_x_6db": {
+            "left_mm": -1.281,
+            "right_mm": 1.286,
+            "width_mm": 2.567,
+            "truncated": false
+          },
+          "lateral_y_6db": {
+            "left_mm": -1.288,
+            "right_mm": 1.295,
+            "width_mm": 2.583,
+            "truncated": false
+          },
+          "volume_above_6db_mm3": 39.625
+        },
+        "run": {
+          "solver": "westervelt",
+          "dt_s": 1.6666666666666665e-07,
+          "steps_per_period": 12,
+          "steps_total": 120,
+          "t_end_us": 20.0,
+          "tof_periods": 4,
+          "converged_period": 8,
+          "settle_capped": false,
+          "harmonics_recorded": [
+            1
+          ]
+        },
+        "warnings": []
+      }
+    },
+    "kwave": {
+      "solver": "kwave",
+      "status": "ok",
+      "message": "",
+      "takes_backend": false,
+      "caps": {
+        "ndim": [
+          2,
+          3
+        ],
+        "nonlinear": true,
+        "backends": [
+          "external"
+        ]
+      },
+      "t0": {
+        "status": "ok",
+        "message": "",
+        "expected_peak_pa": 479992.6459457306,
+        "finite": true,
+        "peak_pa": 660654.0625,
+        "peak_over_expected": 1.3763837177094906,
+        "elapsed_s": 1.5150681999512017,
+        "steps_total": 220
+      },
+      "run": {
+        "elapsed_s": 1.1186555998865515,
+        "steps_total": 220,
+        "spp": 20,
+        "dt_s": 1e-07,
+        "converged_period": 9,
+        "settle_capped": false,
+        "engine_backend": "kwave-omp",
+        "peak_pa": 660654.0625,
+        "interior_shape": [
+          24,
+          24,
+          32
+        ]
+      },
+      "metrics": {
+        "peak": {
+          "p_pa": 660654.1,
+          "p_mpa": 0.6607,
+          "voxel_grid": [
+            20,
+            20,
+            22
+          ],
+          "position_mm_from_apex": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 7.0
+          },
+          "gain_vs_source": 6.61,
+          "isppa_w_cm2": 14.5,
+          "p_max_time_domain_pa": 654470.6
+        },
+        "target": {
+          "voxel_grid": [
+            20,
+            20,
+            26
+          ],
+          "p_pa": 581868.9,
+          "hit_ratio": 0.8807,
+          "displacement_mm": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": -2.0
+          },
+          "displacement_norm_mm": 2.0
+        },
+        "focal_spot": {
+          "axial_6db": {
+            "left_mm": 4.189,
+            "right_mm": 14.134,
+            "width_mm": 9.946,
+            "truncated": false
+          },
+          "lateral_x_6db": {
+            "left_mm": -1.281,
+            "right_mm": 1.287,
+            "width_mm": 2.568,
+            "truncated": false
+          },
+          "lateral_y_6db": {
+            "left_mm": -1.288,
+            "right_mm": 1.297,
+            "width_mm": 2.585,
+            "truncated": false
+          },
+          "volume_above_6db_mm3": 41.125
+        },
+        "run": {
+          "solver": "kwave",
+          "dt_s": 1e-07,
+          "steps_per_period": 20,
+          "steps_total": 220,
+          "t_end_us": 22.0,
+          "tof_periods": 4,
+          "converged_period": 9,
+          "settle_capped": false,
+          "harmonics_recorded": [
+            1
+          ]
+        },
+        "warnings": []
+      }
+    }
+  },
+  "pairs": [
+    {
+      "reference": "linear",
+      "compared": "westervelt",
+      "status": "ok",
+      "n_voxels": 18432,
+      "ref_peak_pa": 697159.25,
+      "cmp_peak_pa": 697159.25,
+      "peak_ratio": 1.0,
+      "rel_l2": 0.0,
+      "pearson_r": 0.9999999999999999,
+      "peak_idx_ref": [
+        12,
+        12,
+        14
+      ],
+      "peak_idx_cmp": [
+        12,
+        12,
+        14
+      ],
+      "peak_shift_vox": 0.0,
+      "peak_shift_norm_vox": 0.0,
+      "note": null
+    },
+    {
+      "reference": "linear",
+      "compared": "kwave",
+      "status": "ok",
+      "n_voxels": 18432,
+      "ref_peak_pa": 697159.25,
+      "cmp_peak_pa": 660654.0625,
+      "peak_ratio": 0.9476372328130194,
+      "rel_l2": 0.03855525611345041,
+      "pearson_r": 0.9987917130545931,
+      "peak_idx_ref": [
+        12,
+        12,
+        14
+      ],
+      "peak_idx_cmp": [
+        12,
+        12,
+        14
+      ],
+      "peak_shift_vox": 0.0,
+      "peak_shift_norm_vox": 0.0,
+      "note": null
+    }
+  ],
+  "gates": [
+    {
+      "id": "M11.t0",
+      "criterion": "every solver with a working environment produces a finite field on the trivial T0 job, with an interior peak within a factor 5 of the analytic focal gain, BEFORE its field is allowed into any comparison",
+      "required": 6,
+      "verdict": "PASS",
+      "n_pass": 6,
+      "checks": [
+        {
+          "name": "t0.linear.finite",
+          "verdict": "PASS",
+          "detail": "phasor and p_max are finite everywhere",
+          "observed": true,
+          "expected": true,
+          "source": "tests/test_divergence_guard.py::test_a_diverging_run_raises_instead_of_returning_nan"
+        },
+        {
+          "name": "t0.linear.peak",
+          "verdict": "PASS",
+          "detail": "1.45244 x analytic (band 0.2..5 x analytic)",
+          "value": 1.452437356881553,
+          "low": 0.2,
+          "high": 5.0,
+          "unit": " x analytic",
+          "source": "tests/test_linear_oneill_3d.py::test_axial_profile_matches_oneill (via caustica.analytic.oneill.focal_gain)"
+        },
+        {
+          "name": "t0.westervelt.finite",
+          "verdict": "PASS",
+          "detail": "phasor and p_max are finite everywhere",
+          "observed": true,
+          "expected": true,
+          "source": "tests/test_divergence_guard.py::test_a_diverging_run_raises_instead_of_returning_nan"
+        },
+        {
+          "name": "t0.westervelt.peak",
+          "verdict": "PASS",
+          "detail": "1.45244 x analytic (band 0.2..5 x analytic)",
+          "value": 1.452437356881553,
+          "low": 0.2,
+          "high": 5.0,
+          "unit": " x analytic",
+          "source": "tests/test_linear_oneill_3d.py::test_axial_profile_matches_oneill (via caustica.analytic.oneill.focal_gain)"
+        },
+        {
+          "name": "t0.kwave.finite",
+          "verdict": "PASS",
+          "detail": "phasor and p_max are finite everywhere",
+          "observed": true,
+          "expected": true,
+          "source": "tests/test_divergence_guard.py::test_a_diverging_run_raises_instead_of_returning_nan"
+        },
+        {
+          "name": "t0.kwave.peak",
+          "verdict": "PASS",
+          "detail": "1.37638 x analytic (band 0.2..5 x analytic)",
+          "value": 1.3763837177094906,
+          "low": 0.2,
+          "high": 5.0,
+          "unit": " x analytic",
+          "source": "tests/test_linear_oneill_3d.py::test_axial_profile_matches_oneill (via caustica.analytic.oneill.focal_gain)"
+        }
+      ]
+    },
+    {
+      "id": "M11.cross",
+      "criterion": "normalized |phasor| correlation r >= 0.99 between the reference solver 'linear' and every other compared solver",
+      "required": 2,
+      "verdict": "PASS",
+      "n_pass": 2,
+      "checks": [
+        {
+          "name": "linear-vs-westervelt.corr",
+          "verdict": "PASS",
+          "detail": "1 (floor 0.99)",
+          "value": 0.9999999999999999,
+          "floor": 0.99,
+          "unit": "",
+          "source": "tests/test_kwave_adapter.py::test_kwave_vs_linear_2d_water"
+        },
+        {
+          "name": "linear-vs-kwave.corr",
+          "verdict": "PASS",
+          "detail": "0.998792 (floor 0.99)",
+          "value": 0.9987917130545931,
+          "floor": 0.99,
+          "unit": "",
+          "source": "tests/test_kwave_adapter.py::test_kwave_vs_linear_2d_water"
+        }
+      ]
+    },
+    {
+      "id": "M11.focus",
+      "criterion": "the interior peak of the normalized field agrees within 1 voxel per axis across engines",
+      "required": 2,
+      "verdict": "PASS",
+      "n_pass": 2,
+      "checks": [
+        {
+          "name": "linear-vs-westervelt.peak_shift",
+          "verdict": "PASS",
+          "detail": "0.000e+00 vox (limit 1.000e+00 vox)",
+          "value": 0.0,
+          "limit": 1.0,
+          "unit": " vox",
+          "source": "tests/test_kwave_adapter.py::test_kwave_vs_linear_2d_water"
+        },
+        {
+          "name": "linear-vs-kwave.peak_shift",
+          "verdict": "PASS",
+          "detail": "0.000e+00 vox (limit 1.000e+00 vox)",
+          "value": 0.0,
+          "limit": 1.0,
+          "unit": " vox",
+          "source": "tests/test_kwave_adapter.py::test_kwave_vs_linear_2d_water"
+        }
+      ]
+    }
+  ],
+  "verdict": "PASS",
+  "elapsed_s": 3.506280899979174,
+  "notes": []
+}

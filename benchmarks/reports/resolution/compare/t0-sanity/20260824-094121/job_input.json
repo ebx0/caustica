@@ -1,0 +1,48 @@
+{
+  "format": "caustica-job/1",
+  "kind": "explicit",
+  "name": "t0-sanity",
+  "medium": {
+    "kind": "homogeneous"
+  },
+  "grid": {
+    "ndim": 3,
+    "dx_mm": 0.5,
+    "size_mm": [
+      20.0,
+      20.0,
+      24.0
+    ],
+    "pml": {
+      "thickness_mm": 3.0
+    }
+  },
+  "source": {
+    "kind": "array",
+    "array": {
+      "kind": "bowl",
+      "d_outer_mm": 12.0,
+      "roc_mm": 9.0
+    },
+    "apex_mm": [
+      10.0,
+      10.0,
+      4.0
+    ]
+  },
+  "drive": {
+    "f0_mhz": 0.5,
+    "amplitude_kpa": 100.0
+  },
+  "run": {
+    "spec": {
+      "min_settle_periods": 4,
+      "max_settle_periods": 16,
+      "n_record_periods": 2
+    },
+    "harmonics": [
+      1
+    ]
+  },
+  "solver": "linear"
+}

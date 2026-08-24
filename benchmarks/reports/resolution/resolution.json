@@ -1,0 +1,596 @@
+{
+  "format": "caustica-resolution/1",
+  "environment": {
+    "caustica": "0.1.0.dev0",
+    "python": "3.12.10",
+    "numpy": "2.2.6",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "generated": "2026-08-24T09:41:49+00:00",
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 5050 Laptop GPU",
+      "cupy": "14.2.0",
+      "total_gib": 7.95953369140625
+    },
+    "kwave": "0.6.2"
+  },
+  "settings": {
+    "backend": "cupy",
+    "ladder": [
+      0.4,
+      0.2,
+      0.1,
+      0.05
+    ],
+    "kwave_ladder": [
+      0.2,
+      0.1,
+      0.05
+    ],
+    "attribution_sizes": [
+      96,
+      128,
+      144,
+      160,
+      192,
+      243,
+      255,
+      256
+    ],
+    "outdir": "benchmarks\\reports\\resolution"
+  },
+  "experiments": [
+    {
+      "id": "R1",
+      "title": "small volume, fine dx: the bowl against O'Neil as dx shrinks",
+      "data": {
+        "geometry": {
+          "aperture_mm": 2.5,
+          "roc_mm": 6.0,
+          "f_number": 1.2,
+          "f0_mhz": 2.0,
+          "drive_kpa": 100.0
+        },
+        "backend": "cupy",
+        "rows": [
+          {
+            "dx_mm": 0.4,
+            "points_per_wavelength": 1.875,
+            "grid": [
+              29,
+              29,
+              44
+            ],
+            "megavoxels": 0.037004,
+            "n_source_voxels": 154,
+            "voxels_per_cap_area": 1.1978439573945021,
+            "shape_correlation": -0.18437880209720542,
+            "width_mm": {
+              "simulated": null,
+              "oneill": 6.310346887898885
+            },
+            "peak_z_mm": {
+              "simulated": 1.6,
+              "oneill": 4.4
+            },
+            "absolute_mpa": {
+              "simulated": 0.3547270894050598,
+              "oneill": 0.5448589363523372,
+              "ratio": 0.6510439126222077
+            },
+            "converged_period": 17,
+            "elapsed_s": 0.5
+          },
+          {
+            "dx_mm": 0.2,
+            "points_per_wavelength": 3.75,
+            "grid": [
+              45,
+              45,
+              78
+            ],
+            "megavoxels": 0.15795,
+            "n_source_voxels": 637,
+            "voxels_per_cap_area": 1.2386795468511327,
+            "shape_correlation": 0.9796529794947045,
+            "width_mm": {
+              "simulated": 5.930000607301939,
+              "oneill": 6.31211490882628
+            },
+            "peak_z_mm": {
+              "simulated": 4.2,
+              "oneill": 4.4
+            },
+            "absolute_mpa": {
+              "simulated": 0.6332223415374756,
+              "oneill": 0.5448589363523372,
+              "ratio": 1.1621766116918784
+            },
+            "converged_period": 17,
+            "elapsed_s": 0.18
+          },
+          {
+            "dx_mm": 0.1,
+            "points_per_wavelength": 7.5,
+            "grid": [
+              79,
+              79,
+              148
+            ],
+            "megavoxels": 0.923668,
+            "n_source_voxels": 2401,
+            "voxels_per_cap_area": 1.167217265302029,
+            "shape_correlation": 0.9983907349190052,
+            "width_mm": {
+              "simulated": 6.216550217518413,
+              "oneill": 6.311533896221861
+            },
+            "peak_z_mm": {
+              "simulated": 4.3,
+              "oneill": 4.3
+            },
+            "absolute_mpa": {
+              "simulated": 0.6246581673622131,
+              "oneill": 0.5449535466314134,
+              "ratio": 1.1462595139737588
+            },
+            "converged_period": 17,
+            "elapsed_s": 0.53
+          },
+          {
+            "dx_mm": 0.05,
+            "points_per_wavelength": 15.0,
+            "grid": [
+              149,
+              149,
+              288
+            ],
+            "megavoxels": 6.393888,
+            "n_source_voxels": 9686,
+            "voxels_per_cap_area": 1.1771830936813257,
+            "shape_correlation": 0.9977454449658301,
+            "width_mm": {
+              "simulated": 6.586706976330114,
+              "oneill": 6.31051053501995
+            },
+            "peak_z_mm": {
+              "simulated": 4.45,
+              "oneill": 4.3500000000000005
+            },
+            "absolute_mpa": {
+              "simulated": 0.6350768804550171,
+              "oneill": 0.545063480934746,
+              "ratio": 1.165142955295569
+            },
+            "converged_period": 17,
+            "elapsed_s": 6.66
+          }
+        ],
+        "resolved_rungs": [
+          0.2,
+          0.1,
+          0.05
+        ],
+        "shape_correlation_span": [
+          0.9796529794947045,
+          0.9983907349190052
+        ],
+        "absolute_ratio_span": [
+          1.1462595139737588,
+          1.165142955295569
+        ],
+        "voxels_per_cap_area_span": [
+          1.167217265302029,
+          1.2386795468511327
+        ],
+        "verdict": "from 3.8 to 15.0 points per wavelength the shape correlation with O'Neil goes 0.9797 -> 0.9977 (plateauing, not still climbing) and the -6 dB width error stays 0.095-0.382 mm, while the ABSOLUTE level sits flat at 1.15-1.17x with the shell carrying 1.17-1.24 voxels per dx^2 of cap area. The level does not converge, which is the prediction: a staircase factor is not a discretization error (the under-resolved 0.4 mm rung, at 1.9 points per wavelength, correlates -0.18 and reads 0.65x \u2014 that is what under-resolution looks like)"
+      },
+      "status": "OK",
+      "elapsed_s": 8.27
+    },
+    {
+      "id": "R2",
+      "title": "the same ladder against k-Wave: does agreement improve with dx?",
+      "data": {
+        "rows": [
+          {
+            "dx_mm": 0.2,
+            "grid": [
+              45,
+              45,
+              78
+            ],
+            "megavoxels": 0.15795,
+            "points_per_wavelength": 3.75,
+            "linear": {
+              "peak_mpa": 0.6332223415374756,
+              "peak_z_mm": 4.2,
+              "width_mm": 5.930000607301939,
+              "over_oneill": 1.1621766116918784,
+              "elapsed_s": 0.3
+            },
+            "kwave": {
+              "peak_mpa": 0.5803428292274475,
+              "peak_z_mm": 4.4,
+              "width_mm": 5.863554850831696,
+              "over_oneill": 1.0651248860580622,
+              "elapsed_s": 3.4
+            },
+            "agreement": {
+              "peak_rel_difference": 0.09111769497394562,
+              "profile_correlation": 0.9985683290210029,
+              "profile_rms_rel_difference": 0.014545989222824574
+            },
+            "oneill_mpa": 0.5448589363523372
+          },
+          {
+            "dx_mm": 0.1,
+            "grid": [
+              79,
+              79,
+              148
+            ],
+            "megavoxels": 0.923668,
+            "points_per_wavelength": 7.5,
+            "linear": {
+              "peak_mpa": 0.6246581673622131,
+              "peak_z_mm": 4.3,
+              "width_mm": 6.216550217518413,
+              "over_oneill": 1.1462595139737588,
+              "elapsed_s": 0.6
+            },
+            "kwave": {
+              "peak_mpa": 0.6063598394393921,
+              "peak_z_mm": 4.4,
+              "width_mm": 6.429074413714693,
+              "over_oneill": 1.1126816519466007,
+              "elapsed_s": 25.3
+            },
+            "agreement": {
+              "peak_rel_difference": 0.030177420005202293,
+              "profile_correlation": 0.9996125205305201,
+              "profile_rms_rel_difference": 0.008958512917160988
+            },
+            "oneill_mpa": 0.5449535466314134
+          },
+          {
+            "dx_mm": 0.05,
+            "grid": [
+              149,
+              149,
+              288
+            ],
+            "megavoxels": 6.393888,
+            "points_per_wavelength": 15.0,
+            "linear": {
+              "peak_mpa": 0.6350768804550171,
+              "peak_z_mm": 4.45,
+              "width_mm": 6.586706976330114,
+              "over_oneill": 1.165142955295569,
+              "elapsed_s": 6.8
+            },
+            "kwave": {
+              "peak_mpa": 0.6346879601478577,
+              "peak_z_mm": 4.3500000000000005,
+              "width_mm": 6.278829079000704,
+              "over_oneill": 1.164429391621604,
+              "elapsed_s": 345.9
+            },
+            "agreement": {
+              "peak_rel_difference": 0.0006128011737018824,
+              "profile_correlation": 0.9994018709133785,
+              "profile_rms_rel_difference": 0.012466869316995144
+            },
+            "oneill_mpa": 0.545063480934746
+          }
+        ],
+        "shared_source_discretization": true,
+        "peak_difference_span": [
+          0.0006128011737018824,
+          0.09111769497394562
+        ],
+        "agreement_improves_with_dx": true,
+        "verdict": "across 3 rungs the two codes' focal peaks converge onto each other, 9.1 % apart at the coarsest and 0.1 % at 15 points per wavelength, with normalized profiles 0.9-1.5 % rms apart \u2014 and BOTH sit 1.17x and 1.16x above O'Neil there. Two propagators that share nothing but the digitized cap land on the same excess, which puts it in the source"
+      },
+      "status": "OK",
+      "elapsed_s": 382.48
+    },
+    {
+      "id": "R3",
+      "title": "the shipped k-Wave cross-check harness on its own jobs",
+      "data": {
+        "rows": [
+          {
+            "job": "compare-mini",
+            "exit_code": 0,
+            "verdict": "PASS",
+            "solvers": [
+              "linear",
+              "westervelt",
+              "kwave"
+            ],
+            "gates": [
+              {
+                "id": "M11.t0",
+                "criterion": "every solver with a working environment produces a finite field on the trivial T0 job, with an interior peak within a factor 5 of the analytic focal gain, BEFORE its field is allowed into any comparison",
+                "checks": [
+                  {
+                    "name": "t0.linear.finite",
+                    "verdict": "PASS",
+                    "detail": "phasor and p_max are finite everywhere"
+                  },
+                  {
+                    "name": "t0.linear.peak",
+                    "verdict": "PASS",
+                    "detail": "1.45244 x analytic (band 0.2..5 x analytic)"
+                  },
+                  {
+                    "name": "t0.westervelt.finite",
+                    "verdict": "PASS",
+                    "detail": "phasor and p_max are finite everywhere"
+                  },
+                  {
+                    "name": "t0.westervelt.peak",
+                    "verdict": "PASS",
+                    "detail": "1.45244 x analytic (band 0.2..5 x analytic)"
+                  },
+                  {
+                    "name": "t0.kwave.finite",
+                    "verdict": "PASS",
+                    "detail": "phasor and p_max are finite everywhere"
+                  },
+                  {
+                    "name": "t0.kwave.peak",
+                    "verdict": "PASS",
+                    "detail": "1.37638 x analytic (band 0.2..5 x analytic)"
+                  }
+                ]
+              },
+              {
+                "id": "M11.cross",
+                "criterion": "normalized |phasor| correlation r >= 0.99 between the reference solver 'linear' and every other compared solver",
+                "checks": [
+                  {
+                    "name": "linear-vs-westervelt.corr",
+                    "verdict": "PASS",
+                    "detail": "1 (floor 0.99)"
+                  },
+                  {
+                    "name": "linear-vs-kwave.corr",
+                    "verdict": "PASS",
+                    "detail": "0.999143 (floor 0.99)"
+                  }
+                ]
+              },
+              {
+                "id": "M11.focus",
+                "criterion": "the interior peak of the normalized field agrees within 1 voxel per axis across engines",
+                "checks": [
+                  {
+                    "name": "linear-vs-westervelt.peak_shift",
+                    "verdict": "PASS",
+                    "detail": "0.000e+00 vox (limit 1.000e+00 vox)"
+                  },
+                  {
+                    "name": "linear-vs-kwave.peak_shift",
+                    "verdict": "PASS",
+                    "detail": "0.000e+00 vox (limit 1.000e+00 vox)"
+                  }
+                ]
+              }
+            ],
+            "elapsed_s": 4.4
+          },
+          {
+            "job": "t0-sanity",
+            "exit_code": 0,
+            "verdict": "PASS",
+            "solvers": [
+              "linear",
+              "westervelt",
+              "kwave"
+            ],
+            "gates": [
+              {
+                "id": "M11.t0",
+                "criterion": "every solver with a working environment produces a finite field on the trivial T0 job, with an interior peak within a factor 5 of the analytic focal gain, BEFORE its field is allowed into any comparison",
+                "checks": [
+                  {
+                    "name": "t0.linear.finite",
+                    "verdict": "PASS",
+                    "detail": "phasor and p_max are finite everywhere"
+                  },
+                  {
+                    "name": "t0.linear.peak",
+                    "verdict": "PASS",
+                    "detail": "1.45244 x analytic (band 0.2..5 x analytic)"
+                  },
+                  {
+                    "name": "t0.westervelt.finite",
+                    "verdict": "PASS",
+                    "detail": "phasor and p_max are finite everywhere"
+                  },
+                  {
+                    "name": "t0.westervelt.peak",
+                    "verdict": "PASS",
+                    "detail": "1.45244 x analytic (band 0.2..5 x analytic)"
+                  },
+                  {
+                    "name": "t0.kwave.finite",
+                    "verdict": "PASS",
+                    "detail": "phasor and p_max are finite everywhere"
+                  },
+                  {
+                    "name": "t0.kwave.peak",
+                    "verdict": "PASS",
+                    "detail": "1.37638 x analytic (band 0.2..5 x analytic)"
+                  }
+                ]
+              },
+              {
+                "id": "M11.cross",
+                "criterion": "normalized |phasor| correlation r >= 0.99 between the reference solver 'linear' and every other compared solver",
+                "checks": [
+                  {
+                    "name": "linear-vs-westervelt.corr",
+                    "verdict": "PASS",
+                    "detail": "1 (floor 0.99)"
+                  },
+                  {
+                    "name": "linear-vs-kwave.corr",
+                    "verdict": "PASS",
+                    "detail": "0.998792 (floor 0.99)"
+                  }
+                ]
+              },
+              {
+                "id": "M11.focus",
+                "criterion": "the interior peak of the normalized field agrees within 1 voxel per axis across engines",
+                "checks": [
+                  {
+                    "name": "linear-vs-westervelt.peak_shift",
+                    "verdict": "PASS",
+                    "detail": "0.000e+00 vox (limit 1.000e+00 vox)"
+                  },
+                  {
+                    "name": "linear-vs-kwave.peak_shift",
+                    "verdict": "PASS",
+                    "detail": "0.000e+00 vox (limit 1.000e+00 vox)"
+                  }
+                ]
+              }
+            ],
+            "elapsed_s": 3.5
+          }
+        ],
+        "verdict": "2/2 jobs pass the shipped cross-check: compare-mini PASS; t0-sanity PASS"
+      },
+      "status": "OK",
+      "elapsed_s": 8.0
+    },
+    {
+      "id": "R4",
+      "title": "attribution: was it the Nyquist zeroing or the explicit axes?",
+      "data": {
+        "engine_carries_explicit_axes": true,
+        "rows": [
+          {
+            "n": 96,
+            "even": true,
+            "megavoxels": 0.884736,
+            "legacy": {
+              "peak_pa": 760919.375,
+              "finite": true
+            },
+            "fixed": {
+              "peak_pa": 761087.0,
+              "finite": true
+            }
+          },
+          {
+            "n": 128,
+            "even": true,
+            "megavoxels": 2.097152,
+            "legacy": {
+              "peak_pa": null,
+              "finite": false,
+              "diverged": "solver 'westervelt' diverged during settling period 3 (step 30): the peak pressure is nan, so the field is no longer fin"
+            },
+            "fixed": {
+              "peak_pa": 760606.9375,
+              "finite": true
+            }
+          },
+          {
+            "n": 144,
+            "even": true,
+            "megavoxels": 2.985984,
+            "legacy": {
+              "peak_pa": 760642.0,
+              "finite": true
+            },
+            "fixed": {
+              "peak_pa": 760672.0625,
+              "finite": true
+            }
+          },
+          {
+            "n": 160,
+            "even": true,
+            "megavoxels": 4.096,
+            "legacy": {
+              "peak_pa": 760641.4375,
+              "finite": true
+            },
+            "fixed": {
+              "peak_pa": 760675.4375,
+              "finite": true
+            }
+          },
+          {
+            "n": 192,
+            "even": true,
+            "megavoxels": 7.077888,
+            "legacy": {
+              "peak_pa": 760490.875,
+              "finite": true
+            },
+            "fixed": {
+              "peak_pa": 760531.875,
+              "finite": true
+            }
+          },
+          {
+            "n": 243,
+            "even": false,
+            "megavoxels": 14.348907,
+            "legacy": {
+              "peak_pa": 765307.0625,
+              "finite": true
+            },
+            "fixed": {
+              "peak_pa": 765307.0625,
+              "finite": true
+            }
+          },
+          {
+            "n": 255,
+            "even": false,
+            "megavoxels": 16.581375,
+            "legacy": {
+              "peak_pa": null,
+              "finite": false,
+              "diverged": "solver 'westervelt' diverged during settling period 3 (step 30): the peak pressure is nan, so the field is no longer fin"
+            },
+            "fixed": {
+              "peak_pa": 759939.75,
+              "finite": true
+            }
+          },
+          {
+            "n": 256,
+            "even": true,
+            "megavoxels": 16.777216,
+            "legacy": {
+              "peak_pa": null,
+              "finite": false,
+              "diverged": "solver 'westervelt' diverged during settling period 3 (step 30): the peak pressure is nan, so the field is no longer fin"
+            },
+            "fixed": {
+              "peak_pa": 759939.5,
+              "finite": true
+            }
+          }
+        ],
+        "sizes_diverging_with_the_old_operator": [
+          128,
+          255,
+          256
+        ],
+        "sizes_diverging_with_the_shipped_operator": [],
+        "verdict": "with today's engine \u2014 explicit axes= and all \u2014 the pre-fix derivative factory still diverges at [128, 255, 256] and the shipped one at []: the repair is the Nyquist zeroing"
+      },
+      "status": "OK",
+      "elapsed_s": 24.3
+    }
+  ]
+}
