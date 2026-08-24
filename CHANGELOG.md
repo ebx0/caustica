@@ -46,18 +46,68 @@ evidence — lives in [`MILESTONES.md`](https://github.com/ebx0/caustica/blob/ma
 - **The 256³ GPU divergence.** The collocated spectral first derivative kept a
   live Nyquist wavenumber on even-length axes, so `deriv * rfftn(p)` was not a
   legal half-spectrum: it violated the C2R Hermitian contract by ~150% of its
-  own magnitude. numpy's pocketfft projects that away; cuFFT, which documents
-  the input as Hermitian, resolved it differently at 256³ and reached NaN by
-  the second period while the identical CPU run stayed at 45 kPa. The Nyquist
-  bin is now dropped — which is also simply the right derivative on a
-  collocated grid — and the gates are written on the transform's *input*, so
-  they fail on any machine rather than only on a GPU.
+  own magnitude. cuFFT, which documents its input as Hermitian, resolved that
+  differently at 256³ and reached NaN by the second period while the identical
+  CPU run stayed at 45 kPa. The Nyquist bin is now dropped — which is also
+  simply the right derivative on a collocated grid, and is bit-for-bit the
+  canonical Hermitian projection on every axis and parity — and the gates are
+  written on the transform's *input*, so they fail on any machine rather than
+  only on a GPU.
+
+  Two corrections to what was first said about this, both measured
+  (2026-08-24, `benchmarks/reports/campaign/` and `benchmarks/reports/resolution/`):
+
+  - It was **not** a GPU-only defect. `irfftn` inverts the last axis with a
+    C2R transform and the rest with C2C, and only the C2R stage discards
+    illegal content — so on the *transverse* axes the violation entered the
+    answer on the CPU too, moving the shipped bowl example's field by ~1.4% of
+    peak. The GPU's visible failure and the CPU's silent error were the same
+    defect on different axes.
+  - The repair is the Nyquist zeroing, not the explicit `axes=` that landed in
+    the same commit. Restoring only the old derivative factory inside today's
+    engine still diverges at 128³ and 256³ on cupy while the shipped operator
+    diverges at none of the eight sizes tested.
 - **A diverged run no longer exits 0.** A NaN field used to run to the settle
   cap and write a result file full of NaN; it now raises `SolverDivergedError`
   at the first non-finite period.
+- **The skip-guard checks job identity.** A folder holding a complete
+  `result.h5` short-circuits to exit 0, which is what makes an interrupted
+  sweep resumable. It did so without asking whether the result answered *this*
+  job, so editing a job and rerunning the same command line handed back the old
+  field with no warning. The folder's own `job.json` is now compared against the
+  job about to run, and a mismatch is refused with the differing sections named.
+  Only `output.folder` is exempt, because `--out` routinely sends a job
+  somewhere other than the folder its config names.
 - **VRAM measurement** is taken in the rung's own fresh process, so an earlier
   rung's pool cannot be counted as this one's peak.
 - **Calibration** sizes its probes as a fraction of free VRAM and interpolates
   its measurements instead of forcing one power law per card.
+
+### Known issues
+
+- **A focused bowl radiates ~15% too strongly, and refining it makes that
+  worse before it makes it better.** The engine drives every source voxel with
+  the same normalized amplitude, which is exact for a flat source (one voxel per
+  `dx²` of aperture) and is not for a curved one: a digitized cap crosses 1.18
+  voxels per `dx²` of its own area at the shipped `dx/2` sampling. The focal
+  pressure tracks that ratio — measured at 1.15–1.17× O'Neil's closed form on an
+  f/1.2 bowl, and *flat* from 3.8 to 15 points per wavelength, so it is not a
+  discretization error that refinement removes. The same `dx/2` sampling also
+  leaves 10–12% of the shell undriven, and closing those holes raises the voxel
+  count to 1.33 per `dx²` and the level to 1.25×. Both have to be fixed
+  together, and the fix rescales every focused-bowl pressure the library has
+  produced. Nothing in the shipped gates would have caught it: the analytic
+  suite compares normalized shape, peak position and −6 dB width, all of which
+  agree well and improve with resolution. k-Wave, driven from the same voxel set
+  but smoothing its source mask, sits closer to the closed form at 1.07–1.11×.
+  Measured in `benchmarks/reports/geometry/` and `benchmarks/reports/resolution/`;
+  characterized by `tests/test_geometry_fidelity.py` so that changing it is a
+  deliberate act.
+- **`kappa` is cross-axis inconsistent** since the Nyquist fix. `sinc(c dt |k|/2)`
+  still evaluates `|k|` with the true Nyquist component included, so on a
+  Nyquist hyperplane the surviving transverse derivative is scaled by a
+  dispersion factor evaluated at a wavevector the operator has just declared
+  unrepresentable: up to ~10% amplitude error there at the shipped CFL, over
+  planes carrying ~0.1% of the field's energy.
 
 [Unreleased]: https://github.com/ebx0/caustica/commits/master
