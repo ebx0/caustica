@@ -14,6 +14,8 @@ geometry come from the same code.
 
 from __future__ import annotations
 
+import logging
+import warnings
 from dataclasses import dataclass
 
 import numpy as np
@@ -21,8 +23,11 @@ from scipy.integrate import cumulative_trapezoid
 from scipy.interpolate import interp1d
 
 from caustica.analytic.rayleigh import rayleigh_pressure
+from caustica.core.backend import CausticaWarning
 from caustica.core.grid import Grid
 from caustica.sources import CWSource
+
+log = logging.getLogger("caustica")
 
 
 @dataclass(frozen=True)
@@ -100,20 +105,43 @@ class TransducerArray:
         f0: float,
         amplitude: float,
         phases: np.ndarray | None = None,
+        *,
+        discretization: str = "offgrid",
+        bli_tolerance: float = 0.2,
+        upsampling: int = 10,
     ) -> ArraySource:
-        """Project elements onto the grid as 1-voxel curved shells.
+        """Project elements onto the grid.
 
-        Port of the notebook's source-placement loop: each element becomes a
-        disc of in-plane radius ``elem_radius`` whose z-offset follows the
-        element's normal plane; overlapping voxels keep the FIRST element's
-        phase (deduplicated exactly like the notebook's ``np.unique``).
+        ``discretization`` chooses how:
+
+        ``"offgrid"`` (default)
+            Each element is a flat disc of area ``pi r^2`` sampled at its own
+            position in metres and deposited through a band-limited
+            interpolant, and overlapping contributions are summed as complex
+            phasors rather than one of them being discarded. See
+            :func:`~caustica.arrays.transducer.TransducerArray._offgrid`.
+
+        ``"binary"``
+            The pre-2026-08-24 behaviour, kept for reproducing older results:
+            each element becomes a disc of in-plane radius ``elem_radius``
+            whose z-offset follows the element's normal plane, and overlapping
+            voxels keep the FIRST element's phase (deduplicated exactly like
+            the notebook's ``np.unique``). Its element CENTRES are rounded to
+            voxels, which is what costs the focus 12-18 % of its coherent sum.
         """
         if grid.ndim != 3:
             raise ValueError("voxelize requires a 3-D grid")
+        if discretization not in ("offgrid", "binary"):
+            raise ValueError(
+                f"discretization must be 'offgrid' or 'binary', got {discretization!r}"
+            )
         ph = np.zeros(self.n_elements, np.float32) if phases is None else phases
         ph = np.asarray(ph, np.float32)
         if ph.shape != (self.n_elements,):
             raise ValueError(f"phases must be ({self.n_elements},), got {ph.shape}")
+
+        if discretization == "offgrid":
+            return self._offgrid(grid, apex_vox, f0, amplitude, ph, bli_tolerance, upsampling)
 
         dx_mm = grid.dx * 1e3
         pos_mm = self.positions * 1e3
@@ -157,9 +185,113 @@ class TransducerArray:
             phases=ph[elem_of_voxel],
             amplitude=amplitude,
             f0=f0,
+            label=f"array(n={self.n_elements}, r_elem={self.elem_radius * 1e3:.2f}mm) binary",
+        )
+        source.check_inside(grid)
+        return ArraySource(source=source, element_of_voxel=elem_of_voxel)
+
+    def _offgrid(
+        self,
+        grid: Grid,
+        apex_vox: tuple[int, int, int],
+        f0: float,
+        amplitude: float,
+        ph: np.ndarray,
+        tolerance: float,
+        upsampling: int,
+    ) -> ArraySource:
+        """Elements at their own positions, summed as phasors.
+
+        Three things the binary port gets wrong, and this does not.
+
+        *Position.* ``voxelize`` rounds each element centre to a voxel, so
+        every element's path to the focus is off by up to half a voxel. That
+        is a phase error, it is different for every element, and it does not
+        average out — it defocuses. Measured on the production 128-element
+        spiral at dx = 0.5 mm and 1 MHz: 0.61 rad rms, which costs 17.6 % of
+        the coherent focal sum, matching ``exp(-sigma^2/2)`` to three
+        decimals. Here the quadrature points are placed in metres and the
+        interpolant carries the sub-voxel offset.
+
+        *Area.* A binary disc's voxel count is not ``pi r^2 / dx^2``: the
+        notebook's in-plane test sheared onto the element plane inflates a
+        tilted element by ``1/cos(tilt)`` (8 % on average at production tilts)
+        while voxel quantization of a small disc takes some back. The net
+        landed at +4.4 % on the production array and -2.5 % on a smaller one —
+        wrong by a few percent, with a sign that depends on the grid. Each
+        element now carries ``pi r^2`` exactly.
+
+        *Overlap.* Where two elements claimed a voxel the binary path kept the
+        first one's phase and dropped the other's drive (1.7 % of the pairs on
+        the production array, up to 5.8 % of a single element). Contributions
+        are summed here as complex phasors, which is what superposing two
+        drives at one point means: ``sum_i w_i sin(wt - phi_i)`` is exactly
+        ``|S| sin(wt - Phi)`` for ``S = sum_i w_i exp(-i phi_i)``.
+        """
+        from caustica.geometry.offgrid import band_limited_weights, disc_points  # noqa: PLC0415
+
+        dx = grid.dx
+        r_vox = self.elem_radius / dx
+        if r_vox < 0.5:
+            # The binary path refused this as "elements lost all voxels to
+            # deduplication". There is no deduplication here — overlapping
+            # elements superpose, which is what two real elements would do —
+            # so the refusal is stated as what it always meant: the grid
+            # cannot tell these elements apart.
+            raise ValueError(
+                f"element radius is {self.elem_radius * 1e3:g} mm = {r_vox:.2f} voxels at "
+                f"dx={dx * 1e3:g} mm. Below half a voxel an element has no shape the grid can "
+                f"carry and neighbouring elements merge into one patch. Refine dx (need "
+                f"dx <= {2 * self.elem_radius * 1e3:g} mm) or use larger elements."
+            )
+        n_q = max(int(np.ceil(np.pi * r_vox**2 * upsampling)), 16)
+        area_grid = np.pi * r_vox**2  # element area in grid squares
+        apex = np.asarray(apex_vox, dtype=np.float64)
+
+        acc: dict[tuple[int, int, int], complex] = {}
+        best: dict[tuple[int, int, int], tuple[float, int]] = {}
+        dropped = 0.0
+        for i in range(self.n_elements):
+            pts = disc_points(self.positions[i], self.normals[i], self.elem_radius, n_q)
+            dep = band_limited_weights(
+                grid.shape, pts / dx + apex, area_grid / n_q, tolerance=tolerance
+            )
+            dropped += dep.dropped
+            rot = complex(np.cos(-ph[i]), np.sin(-ph[i]))
+            for key, w in zip(map(tuple, dep.indices.tolist()), dep.weights, strict=True):
+                acc[key] = acc.get(key, 0j) + w * rot
+                mag = abs(float(w))
+                if key not in best or mag > best[key][0]:
+                    best[key] = (mag, i)
+
+        if not acc:
+            raise ValueError(
+                f"the array deposited nothing inside grid {grid.shape}; check apex_vox"
+            )
+        keys = sorted(acc)
+        idx = np.asarray(keys, dtype=np.int64)
+        s = np.asarray([acc[k] for k in keys], dtype=np.complex128)
+        total = float(np.abs(s).sum()) or 1.0
+        if dropped / (self.n_elements * area_grid) > 1e-6:
+            warnings.warn(
+                f"{100 * dropped / (self.n_elements * area_grid):.2f}% of this array's drive "
+                f"falls outside grid {grid.shape}: the band-limited elements reach a couple of "
+                f"voxels beyond their discs. Enlarge the grid or move the apex inward.",
+                CausticaWarning,
+                stacklevel=3,
+            )
+        elem_of_voxel = np.asarray([best[k][1] for k in keys], dtype=np.int32)
+        source = CWSource(
+            indices=idx,
+            # sum_i w_i sin(wt - phi_i) == |S| sin(wt - Phi), Phi = -arg(S)
+            phases=np.angle(np.conj(s)).astype(np.float32),
+            weights=np.abs(s).astype(np.float32),
+            amplitude=amplitude,
+            f0=f0,
             label=f"array(n={self.n_elements}, r_elem={self.elem_radius * 1e3:.2f}mm)",
         )
         source.check_inside(grid)
+        log.debug("off-grid array: %d points, |drive| total %.1f grid squares", len(idx), total)
         return ArraySource(source=source, element_of_voxel=elem_of_voxel)
 
 

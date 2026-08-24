@@ -297,6 +297,16 @@ class _ElementArrayConfig(ArrayKindConfig):
     record are identical, so they live here once.
     """
 
+    discretization: Literal["offgrid", "binary"] = Field(
+        "offgrid",
+        description=(
+            "How elements become grid quantities. 'offgrid' (default) places each "
+            "element at its own position and deposits its area through a band-limited "
+            "interpolant; 'binary' is the pre-2026-08-24 voxelizer, kept for "
+            "reproducing older results, and rounds element centres onto the lattice"
+        ),
+    )
+
     def build(self) -> TransducerArray:
         """The transducer this recipe describes (always re-derived, never baked)."""
         raise NotImplementedError(f"{type(self).__name__} must implement build()")
@@ -345,11 +355,17 @@ class _ElementArrayConfig(ArrayKindConfig):
             phases = None
             extra["phases"] = "zeros"
         asrc = arr.voxelize(
-            grid, apex_vox, f0=drive.f0_hz, amplitude=drive.amplitude_pa, phases=phases
+            grid,
+            apex_vox,
+            f0=drive.f0_hz,
+            amplitude=drive.amplitude_pa,
+            phases=phases,
+            discretization=self.discretization,
         )
         extra.update(self.derived(arr))
         extra["source_voxels"] = int(asrc.source.n_points)
         extra["elements_represented"] = asrc.n_elements_represented
+        extra["discretization"] = self.discretization
         return asrc.source, extra
 
 

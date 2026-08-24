@@ -193,6 +193,38 @@ def band_limited_weights(
     return Deposit(indices.astype(np.int64), acc[hits], requested, float(acc[hits].sum()), dropped)
 
 
+#: Golden angle, the increment that makes a Fibonacci lattice equal-area.
+_GOLDEN_ANGLE = np.pi * (3.0 - np.sqrt(5.0))
+
+
+def disc_points(center: np.ndarray, normal: np.ndarray, radius: float, n: int) -> np.ndarray:
+    """``n`` equal-area points on a flat disc, in the plane normal to ``normal``.
+
+    ``r_k = radius * sqrt((k + 1/2) / n)`` puts equal area between successive
+    radii, and the golden-angle azimuth keeps the lattice from lining up into
+    spokes. The point of using it for a transducer element is that the points
+    land where the element actually is, in metres, rather than on the voxel
+    lattice — which is what an element's own position error costs at the
+    focus.
+    """
+    if n < 1:
+        raise ValueError(f"n must be >= 1, got {n}")
+    nv = np.asarray(normal, dtype=np.float64)
+    nv = nv / np.linalg.norm(nv)
+    # Any vector not parallel to the normal seeds the tangent frame; the disc
+    # is rotationally symmetric so which one is arbitrary.
+    seed = np.array([1.0, 0.0, 0.0]) if abs(nv[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
+    u = np.cross(nv, seed)
+    u /= np.linalg.norm(u)
+    v = np.cross(nv, u)
+    k = np.arange(n, dtype=np.float64)
+    r = radius * np.sqrt((k + 0.5) / n)
+    theta = k * _GOLDEN_ANGLE
+    return np.asarray(center, dtype=np.float64) + r[:, None] * (
+        np.cos(theta)[:, None] * u + np.sin(theta)[:, None] * v
+    )
+
+
 def spherical_cap_deposit(
     shape: tuple[int, ...],
     dx: float,
