@@ -1160,9 +1160,12 @@ bu harness'in İÇİNE doğar.
         0 voksel) — `benchmarks/reports/compare/20260823-065728/`; linear-vs-westervelt(β=0)
         r=1.0 relL2=0 birebir (M5 garantisi). `@pytest.mark.kwave` ile CI'da atlanabilir
         (Nyquist düzeltmesinden SONRA yeniden koşuldu, 2026-08-24:
-        `benchmarks/reports/compare/20260824-093305/`, üç motor PASS. Aynı gün
+        `benchmarks/reports/compare/20260824-093305/`, üç motor PASS. Kaynak
+        ayrıklaştırması düzeltildikten sonra bir kez daha:
+        `benchmarks/reports/compare/20260824-133829/`, yine üç motor PASS.
         `benchmarks/reports/resolution/` dx=0.2/0.1/0.05 mm merdiveninde iki kodun odak
-        tepesini %9.1'den %0.1'e yakınsattı — 15 nokta/dalgaboyunda)
+        tepesi %8.7'den %0.2'ye yakınsıyor ve 15 nokta/dalgaboyunda ikisi de O'Neil'in
+        mutlak tahmininde: 0.999x bizim, 0.997x k-Wave)
 
 ### M18 — Termal modül: Pennes + CEM43 `[x]` (2026-08-23 — iki fazda KAPANDI)
 Ablasyon planlamanın çıktısı basınç değil DOZ. ITRUSST güvenlik konsensüsü (Brain Stim 2025)
@@ -1186,9 +1189,9 @@ eşikleri rapora girer: ≤2 CEM43 beyin / ≤16 kemik / ≤21 deri; ΔT≤2°C.
       HeatingSource → 20 s açık + 40 s kapalı (doz taşınır) → 37→53.06→40.29 °C, doz 80.5→88.3
       CEM43 tekdüze; `ThermalResult.chain` faz-üstü maks + doz-gerileyen faz reddi.
       Kanıt: `benchmarks/reports/thermal/20260823-120953/` (Brain EXCEEDED / Skin PASS);
-      Nyquist düzeltmesinden sonra yeniden üretildi (2026-08-24,
-      `benchmarks/reports/thermal/20260824-093230/`): tepe |p| 1.946→1.938 MPa, Q_max
-      1.873e7→1.858e7 W/m³, karar değişmedi
+      iki kez yeniden üretildi (2026-08-24). Nyquist düzeltmesinden sonra
+      (`.../20260824-093230/`) tepe |p| 1.946→1.938 MPa; bant-sınırlı kase kaynağından
+      sonra (`.../20260824-134131/`) 1.981 MPa. Karar hiçbirinde değişmedi.
 - Başarı kriterleri:
   - Analitik nokta-kaynak/Gaussian difüzyon rel err < %2; perfüzyon kararlı-durum < %2
   - Uçtan uca sonication → T(r,t) → CEM43; **bağımsız-gerçekleştirme çaprazı < %5**
