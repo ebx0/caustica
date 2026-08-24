@@ -5,7 +5,7 @@
     "python": "3.12.10",
     "numpy": "2.2.6",
     "platform": "Windows-11-10.0.26200-SP0",
-    "generated": "2026-08-24T13:44:24+00:00",
+    "generated": "2026-08-24T20:08:32+00:00",
     "gpu": {
       "name": "NVIDIA GeForce RTX 5050 Laptop GPU",
       "cupy": "14.2.0",
@@ -22,14 +22,18 @@
     ],
     "kwave_ladder": [
       0.2,
-      0.1,
-      0.05
+      0.1
     ],
     "attribution_sizes": [
       128,
       192,
       243,
       256
+    ],
+    "array_ladder": [
+      0.4,
+      0.2,
+      0.1
     ],
     "outdir": "benchmarks\\reports\\resolution"
   },
@@ -738,6 +742,96 @@
       },
       "status": "OK",
       "elapsed_s": 30.12
+    },
+    {
+      "id": "R5",
+      "title": "spiral array vs the Rayleigh integral, over a refinement ladder",
+      "data": {
+        "array": {
+          "n_elements": 32,
+          "roc_mm": 25.0,
+          "d_outer_mm": 20.0,
+          "elem_radius_mm": 1.3369048268771249,
+          "f0_mhz": 1.0
+        },
+        "rows": [
+          {
+            "dx_mm": 0.4,
+            "points_per_wavelength": 3.75,
+            "element_radius_vox": 3.342262067192812,
+            "grid": [
+              73,
+              73,
+              123
+            ],
+            "megavoxels": 0.655467,
+            "rayleigh_mpa": 0.5435935969601988,
+            "binary": {
+              "source_points": 1113,
+              "peak_mpa": 0.46791958808898926,
+              "over_rayleigh": 0.8607893771498203,
+              "elapsed_s": 0.6
+            },
+            "offgrid": {
+              "source_points": 9826,
+              "peak_mpa": 0.6208614110946655,
+              "over_rayleigh": 1.1421426613041188,
+              "elapsed_s": 0.4
+            }
+          },
+          {
+            "dx_mm": 0.2,
+            "points_per_wavelength": 7.5,
+            "element_radius_vox": 6.684524134385624,
+            "grid": [
+              135,
+              135,
+              235
+            ],
+            "megavoxels": 4.282875,
+            "rayleigh_mpa": 0.5435935969601988,
+            "binary": {
+              "source_points": 4236,
+              "peak_mpa": 0.5062052607536316,
+              "over_rayleigh": 0.9312200379671942,
+              "elapsed_s": 3.3
+            },
+            "offgrid": {
+              "source_points": 33573,
+              "peak_mpa": 0.5534411668777466,
+              "over_rayleigh": 1.018115722103552,
+              "elapsed_s": 3.4
+            }
+          },
+          {
+            "dx_mm": 0.1,
+            "points_per_wavelength": 15.0,
+            "element_radius_vox": 13.369048268771248,
+            "grid": [
+              259,
+              259,
+              459
+            ],
+            "megavoxels": 30.790179,
+            "rayleigh_mpa": 0.5435935969601988,
+            "binary": {
+              "source_points": 17463,
+              "peak_mpa": 0.5171549320220947,
+              "over_rayleigh": 0.9513631307321403,
+              "elapsed_s": 71.3
+            },
+            "offgrid": {
+              "source_points": 121888,
+              "peak_mpa": 0.5443543791770935,
+              "over_rayleigh": 1.001399534586234,
+              "elapsed_s": 71.0
+            }
+          }
+        ],
+        "verdict": "from 3.8 to 15.0 points per wavelength the binary voxelizer goes 0.861 -> 0.931 -> 0.951x the Rayleigh integral, still 4.9 % short at the finest rung and closing slowly; the off-grid elements go 1.142 -> 1.018 -> 1.001x"
+      },
+      "status": "OK",
+      "elapsed_s": 153.54
     }
   ]
 }

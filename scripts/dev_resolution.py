@@ -518,6 +518,111 @@ def _r4(ctx):
     }
 
 
+
+# --------------------------------------------------------------------------
+# R5 — the element array, against the Rayleigh integral
+# --------------------------------------------------------------------------
+
+
+@experiment("R5", "spiral array vs the Rayleigh integral, over a refinement ladder", gpu=True)
+def _r5(ctx):
+    """A bowl has a closed form; an arbitrary element layout has an integral.
+
+    The Rayleigh integral over the true element discs is the reference here,
+    and it is a strong one: it knows where every element actually is, in
+    metres, which is precisely what the binary voxelizer throws away by
+    rounding each element centre onto the lattice. That rounding is worth up
+    to half a voxel of path length per element, differently for each, and it
+    defocuses rather than averaging out — 0.61 rad rms on the production
+    spiral at dx = 0.5 mm and 1 MHz, which ``exp(-sigma^2/2)`` says costs
+    17.6 % of the coherent focal sum.
+
+    Two other errors ride along in the binary path and pull the other way: the
+    sheared in-plane disc test inflates a tilted element by 1/cos(tilt), and
+    voxel quantization of a small disc takes some back. Their sum is not
+    stable in dx, which is why the interesting question is not the size of the
+    error at one spacing but whether it converges.
+    """
+    from caustica.analytic import rayleigh_pressure
+    from caustica.arrays import archimedean_spiral
+    from caustica.core.grid import Grid
+    from caustica.core.pml import PMLSpec
+    from caustica.geometry.offgrid import disc_points
+    from caustica.materials import water
+    from caustica.medium import Medium
+    from caustica.solvers import CWRunSpec, get
+
+    roc, d_outer, f0, drive = 25.0 * MM, 20.0 * MM, 1.0e6, 1.0e5
+    arr = archimedean_spiral(
+        n_elements=32, d_outer=d_outer, d_inner=6.0 * MM, roc=roc, active_fraction=0.6
+    )
+    pos, nrm, r = np.asarray(arr.positions), np.asarray(arr.normals), arr.elem_radius
+    n_q = 400
+    quad = np.concatenate([disc_points(pos[i], nrm[i], r, n_q) for i in range(arr.n_elements)])
+    areas = np.full(len(quad), np.pi * r**2 / n_q)
+    k = 2.0 * np.pi * f0 / C0
+    spec = CWRunSpec(min_settle_periods=8, max_settle_periods=40, n_record_periods=2)
+
+    rows = []
+    for dx_mm in ctx["array_ladder"]:
+        dx = dx_mm * MM
+        pml_vox = int(np.ceil(2.5 * MM / dx))
+        n_xy = 2 * (int(np.ceil(d_outer / 2 / dx)) + pml_vox + 4) + 1
+        apex_z = pml_vox + 4
+        n_z = apex_z + int(np.ceil(1.6 * roc / dx)) + pml_vox + 4
+        shape = (n_xy, n_xy, n_z)
+        grid = Grid(shape=shape, dx=dx, pml=PMLSpec(thickness=2.5 * MM))
+        medium = Medium.homogeneous(shape, water(c=C0, rho=RHO0))
+        apex = (n_xy // 2, n_xy // 2, apex_z)
+        focus = (apex[0], apex[1], apex[2] + int(round(roc / dx)))
+        z = (np.arange(n_z) - apex_z) * dx
+        sel = (z > 0.4 * roc) & (z < (n_z - grid.pml_vox - 2 - apex_z) * dx)
+        field = np.column_stack([np.zeros(int(sel.sum())), np.zeros(int(sel.sum())), z[sel]])
+        ray = np.abs(rayleigh_pressure(quad, areas, drive / (RHO0 * C0), field, k, RHO0, C0))
+        entry: dict[str, Any] = {
+            "dx_mm": dx_mm,
+            "points_per_wavelength": C0 / f0 / dx,
+            "element_radius_vox": r / dx,
+            "grid": list(map(int, shape)),
+            "megavoxels": grid.n_voxels / 1e6,
+            "rayleigh_mpa": float(ray.max() / 1e6),
+        }
+        for mode in ("binary", "offgrid"):
+            src = arr.voxelize(grid, apex, f0=f0, amplitude=drive, discretization=mode)
+            t0 = time.perf_counter()
+            res = get("linear")().run(
+                grid, medium, src.source, spec, backend=ctx["backend"], reference_point=focus
+            )
+            prof = np.abs(np.asarray(res.phasor))[apex[0], apex[1], :][sel]
+            entry[mode] = {
+                "source_points": int(src.source.n_points),
+                "peak_mpa": float(prof.max() / 1e6),
+                "over_rayleigh": float(prof.max() / ray.max()),
+                "elapsed_s": round(time.perf_counter() - t0, 1),
+            }
+        rows.append(entry)
+
+    b = [r["binary"]["over_rayleigh"] for r in rows]
+    o = [r["offgrid"]["over_rayleigh"] for r in rows]
+    ppw = [r["points_per_wavelength"] for r in rows]
+    return {
+        "array": {
+            "n_elements": arr.n_elements,
+            "roc_mm": roc / MM,
+            "d_outer_mm": d_outer / MM,
+            "elem_radius_mm": r / MM,
+            "f0_mhz": f0 / 1e6,
+        },
+        "rows": rows,
+        "verdict": (
+            f"from {ppw[0]:.1f} to {ppw[-1]:.1f} points per wavelength the binary voxelizer "
+            f"goes " + " -> ".join(f"{v:.3f}" for v in b) + "x the Rayleigh integral, still "
+            f"{abs(1 - b[-1]) * 100:.1f} % short at the finest rung and closing slowly; the "
+            f"off-grid elements go " + " -> ".join(f"{v:.3f}" for v in o) + "x"
+        ),
+    }
+
+
 # --------------------------------------------------------------------------
 # driver
 # --------------------------------------------------------------------------
@@ -652,6 +757,7 @@ def main(argv=None) -> int:
     ap.add_argument("--ladder", default="0.2,0.1,0.05", help="dx values in mm for R1")
     ap.add_argument("--kwave-ladder", default="0.2,0.1", help="dx values in mm for R2")
     ap.add_argument("--attribution-sizes", default="128,192,243,256")
+    ap.add_argument("--array-ladder", default="0.4,0.2,0.1", help="dx values in mm for R5")
     args = ap.parse_args(argv)
 
     from caustica.core.backend import cupy_available
@@ -665,6 +771,7 @@ def main(argv=None) -> int:
         "ladder": [float(s) for s in args.ladder.split(",") if s.strip()],
         "kwave_ladder": [float(s) for s in args.kwave_ladder.split(",") if s.strip()],
         "attribution_sizes": [int(s) for s in args.attribution_sizes.split(",") if s.strip()],
+        "array_ladder": [float(s) for s in args.array_ladder.split(",") if s.strip()],
         "outdir": outdir,
     }
 
