@@ -1,8 +1,8 @@
 {
   "format": "caustica-compare/1",
-  "generated": "2026-08-24T09:41:21+00:00",
+  "generated": "2026-08-24T13:35:59+00:00",
   "caustica": "0.1.0.dev0",
-  "git_commit": "55e4ee8a8666ade2e5d46aca6451a811525e1584",
+  "git_commit": "1df65325381ca15312c014d4384efe4205382d1d",
   "host": "LOQ",
   "backend": "cupy",
   "backend_requested": "cupy",
@@ -114,20 +114,20 @@
         "message": "",
         "expected_peak_pa": 479992.6459457306,
         "finite": true,
-        "peak_pa": 697159.25,
-        "peak_over_expected": 1.452437356881553,
-        "elapsed_s": 0.21004829998128116,
+        "peak_pa": 575176.4375,
+        "peak_over_expected": 1.1983026039216258,
+        "elapsed_s": 0.23871429986320436,
         "steps_total": 120
       },
       "run": {
-        "elapsed_s": 0.17927530012093484,
+        "elapsed_s": 0.20046509988605976,
         "steps_total": 120,
         "spp": 12,
         "dt_s": 1.6666666666666665e-07,
         "converged_period": 8,
         "settle_capped": false,
         "engine_backend": "cupy",
-        "peak_pa": 697159.25,
+        "peak_pa": 575176.4375,
         "interior_shape": [
           24,
           24,
@@ -136,8 +136,8 @@
       },
       "metrics": {
         "peak": {
-          "p_pa": 697159.2,
-          "p_mpa": 0.6972,
+          "p_pa": 575176.4,
+          "p_mpa": 0.5752,
           "voxel_grid": [
             20,
             20,
@@ -148,9 +148,9 @@
             "y": 0.0,
             "z": 7.0
           },
-          "gain_vs_source": 6.97,
-          "isppa_w_cm2": 16.2,
-          "p_max_time_domain_pa": 695853.7
+          "gain_vs_source": 5.75,
+          "isppa_w_cm2": 11.0,
+          "p_max_time_domain_pa": 571216.6
         },
         "target": {
           "voxel_grid": [
@@ -158,8 +158,8 @@
             20,
             26
           ],
-          "p_pa": 585048.4,
-          "hit_ratio": 0.8392,
+          "p_pa": 478028.2,
+          "hit_ratio": 0.8311,
           "displacement_mm": {
             "x": 0.0,
             "y": 0.0,
@@ -169,24 +169,24 @@
         },
         "focal_spot": {
           "axial_6db": {
-            "left_mm": 4.19,
-            "right_mm": 14.158,
-            "width_mm": 9.968,
+            "left_mm": 4.092,
+            "right_mm": 14.203,
+            "width_mm": 10.111,
             "truncated": false
           },
           "lateral_x_6db": {
-            "left_mm": -1.281,
-            "right_mm": 1.286,
-            "width_mm": 2.567,
+            "left_mm": -1.321,
+            "right_mm": 1.32,
+            "width_mm": 2.641,
             "truncated": false
           },
           "lateral_y_6db": {
-            "left_mm": -1.288,
-            "right_mm": 1.295,
-            "width_mm": 2.583,
+            "left_mm": -1.322,
+            "right_mm": 1.318,
+            "width_mm": 2.641,
             "truncated": false
           },
-          "volume_above_6db_mm3": 39.625
+          "volume_above_6db_mm3": 41.5
         },
         "run": {
           "solver": "linear",
@@ -226,20 +226,20 @@
         "message": "",
         "expected_peak_pa": 479992.6459457306,
         "finite": true,
-        "peak_pa": 697159.25,
-        "peak_over_expected": 1.452437356881553,
-        "elapsed_s": 0.19471510010771453,
+        "peak_pa": 575176.4375,
+        "peak_over_expected": 1.1983026039216258,
+        "elapsed_s": 0.18323559989221394,
         "steps_total": 120
       },
       "run": {
-        "elapsed_s": 0.22897689999081194,
+        "elapsed_s": 0.18274060008116066,
         "steps_total": 120,
         "spp": 12,
         "dt_s": 1.6666666666666665e-07,
         "converged_period": 8,
         "settle_capped": false,
         "engine_backend": "cupy",
-        "peak_pa": 697159.25,
+        "peak_pa": 575176.4375,
         "interior_shape": [
           24,
           24,
@@ -248,8 +248,8 @@
       },
       "metrics": {
         "peak": {
-          "p_pa": 697159.2,
-          "p_mpa": 0.6972,
+          "p_pa": 575176.4,
+          "p_mpa": 0.5752,
           "voxel_grid": [
             20,
             20,
@@ -260,9 +260,9 @@
             "y": 0.0,
             "z": 7.0
           },
-          "gain_vs_source": 6.97,
-          "isppa_w_cm2": 16.2,
-          "p_max_time_domain_pa": 695853.7
+          "gain_vs_source": 5.75,
+          "isppa_w_cm2": 11.0,
+          "p_max_time_domain_pa": 571216.6
         },
         "target": {
           "voxel_grid": [
@@ -270,8 +270,8 @@
             20,
             26
           ],
-          "p_pa": 585048.4,
-          "hit_ratio": 0.8392,
+          "p_pa": 478028.2,
+          "hit_ratio": 0.8311,
           "displacement_mm": {
             "x": 0.0,
             "y": 0.0,
@@ -281,24 +281,24 @@
         },
         "focal_spot": {
           "axial_6db": {
-            "left_mm": 4.19,
-            "right_mm": 14.158,
-            "width_mm": 9.968,
+            "left_mm": 4.092,
+            "right_mm": 14.203,
+            "width_mm": 10.111,
             "truncated": false
           },
           "lateral_x_6db": {
-            "left_mm": -1.281,
-            "right_mm": 1.286,
-            "width_mm": 2.567,
+            "left_mm": -1.321,
+            "right_mm": 1.32,
+            "width_mm": 2.641,
             "truncated": false
           },
           "lateral_y_6db": {
-            "left_mm": -1.288,
-            "right_mm": 1.295,
-            "width_mm": 2.583,
+            "left_mm": -1.322,
+            "right_mm": 1.318,
+            "width_mm": 2.641,
             "truncated": false
           },
-          "volume_above_6db_mm3": 39.625
+          "volume_above_6db_mm3": 41.5
         },
         "run": {
           "solver": "westervelt",
@@ -336,20 +336,20 @@
         "message": "",
         "expected_peak_pa": 479992.6459457306,
         "finite": true,
-        "peak_pa": 660654.0625,
-        "peak_over_expected": 1.3763837177094906,
-        "elapsed_s": 1.5150681999512017,
+        "peak_pa": 544362.5,
+        "peak_over_expected": 1.1341059172426304,
+        "elapsed_s": 1.4749343998264521,
         "steps_total": 220
       },
       "run": {
-        "elapsed_s": 1.1186555998865515,
+        "elapsed_s": 1.378012000117451,
         "steps_total": 220,
         "spp": 20,
         "dt_s": 1e-07,
         "converged_period": 9,
         "settle_capped": false,
         "engine_backend": "kwave-omp",
-        "peak_pa": 660654.0625,
+        "peak_pa": 544362.5,
         "interior_shape": [
           24,
           24,
@@ -358,8 +358,8 @@
       },
       "metrics": {
         "peak": {
-          "p_pa": 660654.1,
-          "p_mpa": 0.6607,
+          "p_pa": 544362.5,
+          "p_mpa": 0.5444,
           "voxel_grid": [
             20,
             20,
@@ -370,9 +370,9 @@
             "y": 0.0,
             "z": 7.0
           },
-          "gain_vs_source": 6.61,
-          "isppa_w_cm2": 14.5,
-          "p_max_time_domain_pa": 654470.6
+          "gain_vs_source": 5.44,
+          "isppa_w_cm2": 9.9,
+          "p_max_time_domain_pa": 542532.5
         },
         "target": {
           "voxel_grid": [
@@ -380,8 +380,8 @@
             20,
             26
           ],
-          "p_pa": 581868.9,
-          "hit_ratio": 0.8807,
+          "p_pa": 477028.0,
+          "hit_ratio": 0.8763,
           "displacement_mm": {
             "x": 0.0,
             "y": 0.0,
@@ -391,24 +391,24 @@
         },
         "focal_spot": {
           "axial_6db": {
-            "left_mm": 4.189,
-            "right_mm": 14.134,
-            "width_mm": 9.946,
+            "left_mm": 4.082,
+            "right_mm": 14.224,
+            "width_mm": 10.142,
             "truncated": false
           },
           "lateral_x_6db": {
-            "left_mm": -1.281,
-            "right_mm": 1.287,
-            "width_mm": 2.568,
+            "left_mm": -1.323,
+            "right_mm": 1.323,
+            "width_mm": 2.645,
             "truncated": false
           },
           "lateral_y_6db": {
-            "left_mm": -1.288,
-            "right_mm": 1.297,
-            "width_mm": 2.585,
+            "left_mm": -1.324,
+            "right_mm": 1.322,
+            "width_mm": 2.645,
             "truncated": false
           },
-          "volume_above_6db_mm3": 41.125
+          "volume_above_6db_mm3": 43.625
         },
         "run": {
           "solver": "kwave",
@@ -433,11 +433,11 @@
       "compared": "westervelt",
       "status": "ok",
       "n_voxels": 18432,
-      "ref_peak_pa": 697159.25,
-      "cmp_peak_pa": 697159.25,
+      "ref_peak_pa": 575176.4375,
+      "cmp_peak_pa": 575176.4375,
       "peak_ratio": 1.0,
       "rel_l2": 0.0,
-      "pearson_r": 0.9999999999999999,
+      "pearson_r": 1.0,
       "peak_idx_ref": [
         12,
         12,
@@ -457,11 +457,11 @@
       "compared": "kwave",
       "status": "ok",
       "n_voxels": 18432,
-      "ref_peak_pa": 697159.25,
-      "cmp_peak_pa": 660654.0625,
-      "peak_ratio": 0.9476372328130194,
-      "rel_l2": 0.03855525611345041,
-      "pearson_r": 0.9987917130545931,
+      "ref_peak_pa": 575176.4375,
+      "cmp_peak_pa": 544362.5,
+      "peak_ratio": 0.9464269822422967,
+      "rel_l2": 0.038811902712291665,
+      "pearson_r": 0.9988711431561321,
       "peak_idx_ref": [
         12,
         12,
@@ -496,8 +496,8 @@
         {
           "name": "t0.linear.peak",
           "verdict": "PASS",
-          "detail": "1.45244 x analytic (band 0.2..5 x analytic)",
-          "value": 1.452437356881553,
+          "detail": "1.1983 x analytic (band 0.2..5 x analytic)",
+          "value": 1.1983026039216258,
           "low": 0.2,
           "high": 5.0,
           "unit": " x analytic",
@@ -514,8 +514,8 @@
         {
           "name": "t0.westervelt.peak",
           "verdict": "PASS",
-          "detail": "1.45244 x analytic (band 0.2..5 x analytic)",
-          "value": 1.452437356881553,
+          "detail": "1.1983 x analytic (band 0.2..5 x analytic)",
+          "value": 1.1983026039216258,
           "low": 0.2,
           "high": 5.0,
           "unit": " x analytic",
@@ -532,8 +532,8 @@
         {
           "name": "t0.kwave.peak",
           "verdict": "PASS",
-          "detail": "1.37638 x analytic (band 0.2..5 x analytic)",
-          "value": 1.3763837177094906,
+          "detail": "1.13411 x analytic (band 0.2..5 x analytic)",
+          "value": 1.1341059172426304,
           "low": 0.2,
           "high": 5.0,
           "unit": " x analytic",
@@ -552,7 +552,7 @@
           "name": "linear-vs-westervelt.corr",
           "verdict": "PASS",
           "detail": "1 (floor 0.99)",
-          "value": 0.9999999999999999,
+          "value": 1.0,
           "floor": 0.99,
           "unit": "",
           "source": "tests/test_kwave_adapter.py::test_kwave_vs_linear_2d_water"
@@ -560,8 +560,8 @@
         {
           "name": "linear-vs-kwave.corr",
           "verdict": "PASS",
-          "detail": "0.998792 (floor 0.99)",
-          "value": 0.9987917130545931,
+          "detail": "0.998871 (floor 0.99)",
+          "value": 0.9988711431561321,
           "floor": 0.99,
           "unit": "",
           "source": "tests/test_kwave_adapter.py::test_kwave_vs_linear_2d_water"
@@ -597,6 +597,6 @@
     }
   ],
   "verdict": "PASS",
-  "elapsed_s": 3.506280899979174,
+  "elapsed_s": 3.8397056001704186,
   "notes": []
 }

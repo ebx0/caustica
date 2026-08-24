@@ -5,7 +5,7 @@
     "python": "3.12.10",
     "numpy": "2.2.6",
     "platform": "Windows-11-10.0.26200-SP0",
-    "generated": "2026-08-24T09:34:15+00:00"
+    "generated": "2026-08-24T13:29:01+00:00"
   },
   "checks": [
     {
@@ -185,11 +185,11 @@
         "verdict": "every voxel lands within 0.72 voxel of the sphere that was ordered (0.338 voxels rms at worst), which is 0.68 rad of wavefront error at 1 MHz at dx=0.5 mm and 0.071 rad at dx=0.05 mm; a free sphere fit to the same voxels reads the curvature 19 % short at the coarsest dx and 0.3 % at the finest, because a cap this shallow does not determine its own radius from a voxel shell"
       },
       "status": "OK",
-      "elapsed_s": 0.63
+      "elapsed_s": 0.62
     },
     {
       "id": "G2",
-      "title": "focused bowl: holes in the digitized shell at the shipped sampling",
+      "title": "focused bowl: holes in the legacy binary shell",
       "data": {
         "rows": [
           {
@@ -233,7 +233,7 @@
         "verdict": "the shipped dx/2 sampling misses up to 12.15 % of the voxels a 16x-finer sampling of the same cap reaches \u2014 those voxels are undriven holes in the shell"
       },
       "status": "OK",
-      "elapsed_s": 11.33
+      "elapsed_s": 11.24
     },
     {
       "id": "G3",
@@ -597,7 +597,7 @@
         "verdict": "centre sampling already agrees with majority occupancy in 9 of 12 cases (worst disagreement 0.442 % of the object, on the ellipsoid where curvature is highest relative to dx), so the volume error of up to 3.5 % on curved primitives is the price of binary voxels, not a rasterizer defect \u2014 the flat-faced box is exact to 1e-16. Supersampling has correspondingly little to correct: it moved the volume in 1 of 12 cases and the classification in 1 of 9 curved ones"
       },
       "status": "OK",
-      "elapsed_s": 23.55
+      "elapsed_s": 23.24
     },
     {
       "id": "G4",
@@ -656,7 +656,7 @@
         "verdict": "all 6 set identities hold voxel-for-voxel, no tolerance"
       },
       "status": "OK",
-      "elapsed_s": 0.07
+      "elapsed_s": 0.06
     },
     {
       "id": "G5",
@@ -736,7 +736,7 @@
         "verdict": "a translated shape lands within 0.00 voxel of its target and keeps its volume to 0.00 %; rotating a ball moves its volume by 0.00 % (rasterization only \u2014 the exact volume is unchanged)"
       },
       "status": "OK",
-      "elapsed_s": 0.1
+      "elapsed_s": 0.08
     },
     {
       "id": "G6",
@@ -919,7 +919,7 @@
         "verdict": "both requests come back with exactly the elements asked for, all on the shell to 2.8e-17 m, inside the outer diameter and outside the central hole; the active fraction lands at 0.652, 0.629 against the 0.600 target"
       },
       "status": "OK",
-      "elapsed_s": 0.29
+      "elapsed_s": 0.2
     },
     {
       "id": "G8",
@@ -935,12 +935,12 @@
             ],
             "dx_mm": 0.5,
             "pml_vox": 6,
-            "n_source_voxels": 405,
-            "source_voxels_inside_the_pml": 0,
-            "source_voxels_inside_the_pml_pct": 0.0,
-            "clearance_to_the_domain_edge_vox": 7,
-            "clearance_beyond_the_pml_vox": 1,
-            "fits_clear_of_the_pml": true
+            "n_source_voxels": 2859,
+            "source_voxels_inside_the_pml": 81,
+            "source_voxels_inside_the_pml_pct": 2.8331584470094437,
+            "clearance_to_the_domain_edge_vox": 5,
+            "clearance_beyond_the_pml_vox": -1,
+            "fits_clear_of_the_pml": false
           },
           {
             "job": "harness:compare-mini",
@@ -951,12 +951,12 @@
             ],
             "dx_mm": 0.5,
             "pml_vox": 10,
-            "n_source_voxels": 637,
-            "source_voxels_inside_the_pml": 0,
-            "source_voxels_inside_the_pml_pct": 0.0,
-            "clearance_to_the_domain_edge_vox": 11,
-            "clearance_beyond_the_pml_vox": 1,
-            "fits_clear_of_the_pml": true
+            "n_source_voxels": 4262,
+            "source_voxels_inside_the_pml": 81,
+            "source_voxels_inside_the_pml_pct": 1.9005161895823557,
+            "clearance_to_the_domain_edge_vox": 9,
+            "clearance_beyond_the_pml_vox": -1,
+            "fits_clear_of_the_pml": false
           },
           {
             "job": "harness:t0-sanity",
@@ -967,12 +967,12 @@
             ],
             "dx_mm": 0.5,
             "pml_vox": 6,
-            "n_source_voxels": 677,
-            "source_voxels_inside_the_pml": 0,
-            "source_voxels_inside_the_pml_pct": 0.0,
-            "clearance_to_the_domain_edge_vox": 7,
-            "clearance_beyond_the_pml_vox": 1,
-            "fits_clear_of_the_pml": true
+            "n_source_voxels": 4612,
+            "source_voxels_inside_the_pml": 102,
+            "source_voxels_inside_the_pml_pct": 2.2116218560277536,
+            "clearance_to_the_domain_edge_vox": 5,
+            "clearance_beyond_the_pml_vox": -1,
+            "fits_clear_of_the_pml": false
           },
           {
             "job": "control:bowl deliberately overlapping the PML",
@@ -983,21 +983,25 @@
             ],
             "dx_mm": 0.5,
             "pml_vox": 6,
-            "n_source_voxels": 1170,
-            "source_voxels_inside_the_pml": 280,
-            "source_voxels_inside_the_pml_pct": 23.931623931623932,
-            "clearance_to_the_domain_edge_vox": 2,
-            "clearance_beyond_the_pml_vox": -4,
+            "n_source_voxels": 7334,
+            "source_voxels_inside_the_pml": 3129,
+            "source_voxels_inside_the_pml_pct": 42.66430324515953,
+            "clearance_to_the_domain_edge_vox": 0,
+            "clearance_beyond_the_pml_vox": -6,
             "fits_clear_of_the_pml": false
           }
         ],
         "n_jobs_audited": 4,
-        "offenders": [],
+        "offenders": [
+          "example:water_bowl_mini",
+          "harness:compare-mini",
+          "harness:t0-sanity"
+        ],
         "control_was_caught": true,
-        "verdict": "3 shipped jobs audited; none puts a source voxel in the PML; the tightest is example:water_bowl_mini with 1 voxels of clearance beyond the sponge; the deliberately-broken control was caught, with 24 % of its bowl in the sponge"
+        "verdict": "3 shipped jobs audited; 3 put source voxels in the PML: ['example:water_bowl_mini', 'harness:compare-mini', 'harness:t0-sanity']; the tightest is example:water_bowl_mini with -1 voxels of clearance beyond the sponge; the deliberately-broken control was caught, with 43 % of its bowl in the sponge"
       },
       "status": "OK",
-      "elapsed_s": 0.07
+      "elapsed_s": 0.37
     },
     {
       "id": "G9",
@@ -1011,22 +1015,22 @@
               80,
               44
             ],
-            "n_source_voxels": 637,
-            "surface_rms_error_vox": 0.34414414681148675,
-            "surface_max_error_vox": 0.6881608655772038,
-            "aperture_radius": {
-              "expected": 6.0,
-              "produced": 6.264982043070835,
-              "abs_error": 0.2649820430708347,
-              "rel_error": 0.04416367384513912,
+            "discretization": "offgrid",
+            "n_source_points": 4262,
+            "drive_radius": {
+              "expected": 10.0,
+              "produced": 10.002440151074794,
+              "abs_error": 0.0024401510747935617,
+              "rel_error": 0.00024401510747935619,
               "unit": "mm"
             },
-            "apex_z": {
-              "expected": 6.0,
-              "produced": 6.0,
-              "abs_error": 0.0,
-              "rel_error": 0.0,
-              "unit": "mm"
+            "drive_offaxis_vox": 0.0015000561642701737,
+            "drive_total": {
+              "expected": 502.6548245743668,
+              "produced": 502.6548248537633,
+              "abs_error": 2.7939648816754925e-07,
+              "rel_error": 5.558416521797715e-10,
+              "unit": "grid squares"
             },
             "focus_vox_reported": [
               40,
@@ -1046,22 +1050,22 @@
               160,
               88
             ],
-            "n_source_voxels": 2503,
-            "surface_rms_error_vox": 0.3497930569468727,
-            "surface_max_error_vox": 0.7185461430046641,
-            "aperture_radius": {
-              "expected": 6.0,
-              "produced": 6.103277807866852,
-              "abs_error": 0.10327780786685192,
-              "rel_error": 0.017212967977808653,
+            "discretization": "offgrid",
+            "n_source_points": 14858,
+            "drive_radius": {
+              "expected": 10.0,
+              "produced": 10.000709449505022,
+              "abs_error": 0.0007094495050221639,
+              "rel_error": 7.094495050221638e-05,
               "unit": "mm"
             },
-            "apex_z": {
-              "expected": 6.0,
-              "produced": 6.0,
-              "abs_error": 0.0,
-              "rel_error": 0.0,
-              "unit": "mm"
+            "drive_offaxis_vox": 0.0005308701787618157,
+            "drive_total": {
+              "expected": 2010.6192982974671,
+              "produced": 2010.6192995719975,
+              "abs_error": 1.2745304047712125e-06,
+              "rel_error": 6.338994188757897e-10,
+              "unit": "grid squares"
             },
             "focus_vox_reported": [
               80,
@@ -1081,22 +1085,22 @@
               240,
               140
             ],
-            "n_source_voxels": 2401,
-            "surface_rms_error_vox": 0.33628236719911897,
-            "surface_max_error_vox": 0.7042008431047512,
-            "aperture_radius": {
-              "expected": 2.5,
-              "produced": 2.5612496949731396,
-              "abs_error": 0.06124969497313959,
-              "rel_error": 0.024499877989255837,
+            "discretization": "offgrid",
+            "n_source_points": 14254,
+            "drive_radius": {
+              "expected": 6.0,
+              "produced": 6.001669629651313,
+              "abs_error": 0.0016696296513130093,
+              "rel_error": 0.0002782716085521682,
               "unit": "mm"
             },
-            "apex_z": {
-              "expected": 2.0,
-              "produced": 2.0,
-              "abs_error": 0.0,
-              "rel_error": 0.0,
-              "unit": "mm"
+            "drive_offaxis_vox": 0.0002890474089036224,
+            "drive_total": {
+              "expected": 2057.0292021671885,
+              "produced": 2057.029203446735,
+              "abs_error": 1.279546722798841e-06,
+              "rel_error": 6.220362459856045e-10,
+              "unit": "grid squares"
             },
             "focus_vox_reported": [
               120,
@@ -1111,14 +1115,14 @@
           }
         ],
         "focus_vox_matches_the_job_file": true,
-        "verdict": "the focus the builder reports is exactly the one the job file implies at every dx; the shell it built sits within 0.72 voxel of the ordered sphere and its apex within 0.0000 mm of the ordered depth"
+        "verdict": "the focus the builder reports is exactly the one the job file implies at every dx; the drive's centre of mass sits 0.002 voxel off the axis, its mean radius is within 0.03 % of the ordered curvature, and its total is the cap's own area to 0.000 %"
       },
       "status": "OK",
-      "elapsed_s": 0.02
+      "elapsed_s": 0.99
     },
     {
       "id": "G10",
-      "title": "how many voxels carry the drive, and what that does to the focal pressure",
+      "title": "binary shell against band-limited weights, on absolute amplitude",
       "data": {
         "dx_mm": 0.25,
         "drive_pa": 100000.0,
@@ -1126,9 +1130,9 @@
           {
             "geometry": "f/1.2",
             "f_number": 1.2,
-            "sampling": "dx/2 (shipped)",
-            "n_source_voxels": 1558,
-            "voxels_per_cap_area": 1.1834421200414937,
+            "discretization": "binary",
+            "n_source_points": 1558,
+            "drive_per_cap_area": 1.1834421200414937,
             "on_axis_focal_pressure": {
               "expected": 544999.2216342456,
               "produced": 625598.3125,
@@ -1139,72 +1143,32 @@
             "peak_mpa": 0.6255983125,
             "oneill_mpa": 0.5449992216342456,
             "peak_z_mm": 8.75,
-            "oneill_peak_z_mm": 8.75,
-            "global_peak_mpa": 0.6255983114242554
+            "oneill_peak_z_mm": 8.75
           },
           {
             "geometry": "f/1.2",
             "f_number": 1.2,
-            "sampling": "dx/4",
-            "n_source_voxels": 1667,
-            "voxels_per_cap_area": 1.2662374930097369,
+            "discretization": "offgrid",
+            "n_source_points": 9504,
+            "drive_per_cap_area": 0.9999998828477751,
             "on_axis_focal_pressure": {
               "expected": 544999.2216342456,
-              "produced": 662187.75,
-              "abs_error": 117188.5283657544,
-              "rel_error": 0.21502512978706748,
+              "produced": 566801.5625,
+              "abs_error": 21802.340865754406,
+              "rel_error": 0.04000435230049957,
               "unit": "Pa vs O'Neil"
             },
-            "peak_mpa": 0.66218775,
+            "peak_mpa": 0.5668015625,
             "oneill_mpa": 0.5449992216342456,
             "peak_z_mm": 8.75,
-            "oneill_peak_z_mm": 8.75,
-            "global_peak_mpa": 0.6621877551078796
-          },
-          {
-            "geometry": "f/1.2",
-            "f_number": 1.2,
-            "sampling": "dx/8",
-            "n_source_voxels": 1731,
-            "voxels_per_cap_area": 1.3148512899819165,
-            "on_axis_focal_pressure": {
-              "expected": 544999.2216342456,
-              "produced": 677165.125,
-              "abs_error": 132165.9033657544,
-              "rel_error": 0.2425065910542754,
-              "unit": "Pa vs O'Neil"
-            },
-            "peak_mpa": 0.677165125,
-            "oneill_mpa": 0.5449992216342456,
-            "peak_z_mm": 8.75,
-            "oneill_peak_z_mm": 8.75,
-            "global_peak_mpa": 0.677165150642395
-          },
-          {
-            "geometry": "f/1.2",
-            "f_number": 1.2,
-            "sampling": "dx/16",
-            "n_source_voxels": 1752,
-            "voxels_per_cap_area": 1.3308026921134128,
-            "on_axis_focal_pressure": {
-              "expected": 544999.2216342456,
-              "produced": 682504.625,
-              "abs_error": 137505.4033657544,
-              "rel_error": 0.25230385275308825,
-              "unit": "Pa vs O'Neil"
-            },
-            "peak_mpa": 0.682504625,
-            "oneill_mpa": 0.5449992216342456,
-            "peak_z_mm": 8.75,
-            "oneill_peak_z_mm": 8.75,
-            "global_peak_mpa": 0.6825046539306641
+            "oneill_peak_z_mm": 8.75
           },
           {
             "geometry": "f/2.0",
             "f_number": 2.0,
-            "sampling": "dx/2 (shipped)",
-            "n_source_voxels": 2090,
-            "voxels_per_cap_area": 1.136640890771173,
+            "discretization": "binary",
+            "n_source_points": 2090,
+            "drive_per_cap_area": 1.136640890771173,
             "on_axis_focal_pressure": {
               "expected": 432727.9611435544,
               "produced": 490550.78125,
@@ -1215,87 +1179,47 @@
             "peak_mpa": 0.49055078125,
             "oneill_mpa": 0.43272796114355444,
             "peak_z_mm": 14.0,
-            "oneill_peak_z_mm": 14.5,
-            "global_peak_mpa": 0.49055078625679016
+            "oneill_peak_z_mm": 14.5
           },
           {
             "geometry": "f/2.0",
             "f_number": 2.0,
-            "sampling": "dx/4",
-            "n_source_voxels": 2195,
-            "voxels_per_cap_area": 1.1937448589678108,
+            "discretization": "offgrid",
+            "n_source_points": 12477,
+            "drive_per_cap_area": 0.9999999828500912,
             "on_axis_focal_pressure": {
               "expected": 432727.9611435544,
-              "produced": 508967.5625,
-              "abs_error": 76239.60135644558,
-              "rel_error": 0.17618367242775337,
+              "produced": 452077.625,
+              "abs_error": 19349.66385644558,
+              "rel_error": 0.04471553861532527,
               "unit": "Pa vs O'Neil"
             },
-            "peak_mpa": 0.5089675625,
+            "peak_mpa": 0.452077625,
             "oneill_mpa": 0.43272796114355444,
             "peak_z_mm": 14.0,
-            "oneill_peak_z_mm": 14.5,
-            "global_peak_mpa": 0.5089675784111023
-          },
-          {
-            "geometry": "f/2.0",
-            "f_number": 2.0,
-            "sampling": "dx/8",
-            "n_source_voxels": 2237,
-            "voxels_per_cap_area": 1.216586446246466,
-            "on_axis_focal_pressure": {
-              "expected": 432727.9611435544,
-              "produced": 516464.40625,
-              "abs_error": 83736.44510644558,
-              "rel_error": 0.19350828378447818,
-              "unit": "Pa vs O'Neil"
-            },
-            "peak_mpa": 0.51646440625,
-            "oneill_mpa": 0.43272796114355444,
-            "peak_z_mm": 14.75,
-            "oneill_peak_z_mm": 14.5,
-            "global_peak_mpa": 0.5164644122123718
-          },
-          {
-            "geometry": "f/2.0",
-            "f_number": 2.0,
-            "sampling": "dx/16",
-            "n_source_voxels": 2274,
-            "voxels_per_cap_area": 1.236708796944329,
-            "on_axis_focal_pressure": {
-              "expected": 432727.9611435544,
-              "produced": 522545.0625,
-              "abs_error": 89817.10135644558,
-              "rel_error": 0.2075601981417822,
-              "unit": "Pa vs O'Neil"
-            },
-            "peak_mpa": 0.5225450625,
-            "oneill_mpa": 0.43272796114355444,
-            "peak_z_mm": 14.75,
-            "oneill_peak_z_mm": 14.5,
-            "global_peak_mpa": 0.5225450396537781
+            "oneill_peak_z_mm": 14.5
           }
         ],
         "f/1.2": {
-          "extra_voxels_from_refining_the_sampling": 0.12451861360718874,
-          "peak_moved_by": 0.08337864743407417,
-          "voxels_per_cap_area_shipped": 1.1834421200414937,
-          "voxels_per_cap_area_converged": 1.3308026921134128,
-          "over_oneill_shipped": 1.1478884513340557,
-          "over_oneill_converged": 1.252303852753088
+          "binary_over_oneill": 1.1478884513340557,
+          "offgrid_over_oneill": 1.0400043523004996,
+          "binary_drive_per_area": 1.1834421200414937,
+          "offgrid_drive_per_area": 0.9999998828477751,
+          "points_binary": 1558,
+          "points_offgrid": 9504
         },
         "f/2.0": {
-          "extra_voxels_from_refining_the_sampling": 0.0880382775119617,
-          "peak_moved_by": 0.06122779363167359,
-          "voxels_per_cap_area_shipped": 1.136640890771173,
-          "voxels_per_cap_area_converged": 1.236708796944329,
-          "over_oneill_shipped": 1.1336239515321342,
-          "over_oneill_converged": 1.207560198141782
+          "binary_over_oneill": 1.1336239515321342,
+          "offgrid_over_oneill": 1.0447155386153253,
+          "binary_drive_per_area": 1.136640890771173,
+          "offgrid_drive_per_area": 0.9999999828500912,
+          "points_binary": 2090,
+          "points_offgrid": 12477
         },
-        "verdict": "f/1.2: refining dx/2 to dx/16 adds 12 % more driven voxels and moves the focus by 8.3 %; the shell carries 1.18 voxels per dx^2 of cap area at the shipped sampling and 1.33 at dx/16, against 1.00 for a flat source; the on-axis focus sits 1.15x and 1.25x O'Neil's absolute prediction | f/2.0: refining dx/2 to dx/16 adds 9 % more driven voxels and moves the focus by 6.1 %; the shell carries 1.14 voxels per dx^2 of cap area at the shipped sampling and 1.24 at dx/16, against 1.00 for a flat source; the on-axis focus sits 1.13x and 1.21x O'Neil's absolute prediction"
+        "verdict": "f/1.2: the binary shell carries 1.183 of the cap's area and lands 1.148x O'Neil; the band-limited weights carry 1.000 and land 1.040x, over 9504 points instead of 1558 | f/2.0: the binary shell carries 1.137 of the cap's area and lands 1.134x O'Neil; the band-limited weights carry 1.000 and land 1.045x, over 12477 points instead of 2090"
       },
       "status": "OK",
-      "elapsed_s": 133.6
+      "elapsed_s": 63.55
     }
   ]
 }

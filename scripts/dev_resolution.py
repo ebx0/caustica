@@ -84,7 +84,15 @@ def legacy_operator():
         ops.spectral_derivative_factors = original
 
 
-def water_scene(dx: float, aperture: float, roc: float, f0: float, drive: float, pml_mm: float):
+def water_scene(
+    dx: float,
+    aperture: float,
+    roc: float,
+    f0: float,
+    drive: float,
+    pml_mm: float,
+    discretization: str = "offgrid",
+):
     """A focused bowl in water, sized from the transducer outwards.
 
     The grid is derived from the geometry rather than the other way round —
@@ -110,7 +118,7 @@ def water_scene(dx: float, aperture: float, roc: float, f0: float, drive: float,
     grid = Grid(shape=(n_xy, n_xy, n_z), dx=dx, pml=PMLSpec(thickness=pml))
     medium = Medium.homogeneous(grid.shape, water(c=C0, rho=RHO0))
     apex = (n_xy // 2, n_xy // 2, apex_z)
-    src = bowl_cw_source(grid, f0, drive, aperture, roc, apex)
+    src = bowl_cw_source(grid, f0, drive, aperture, roc, apex, discretization=discretization)
     focus = (apex[0], apex[1], apex[2] + int(round(roc / dx)))
     return grid, medium, src, apex, focus
 
@@ -157,15 +165,16 @@ def _mm(value: float | None) -> float | None:
 def _r1(ctx):
     """What converges, what does not, and what the difference means.
 
-    Three numbers per rung. The *shape* correlation and the -6 dB width are
-    what the shipped analytic gate grades, and they should tighten as dx falls.
-    The *absolute* level is the one nothing in the library checks, and the
-    geometry campaign found it sitting 13-25 % high with the excess tracking
-    the shell's voxel count rather than its area. If that reading is right,
-    the absolute ratio will NOT converge to one as dx falls, because the
-    staircase factor is a property of digitizing a tilted surface and does
-    not care how fine the grid is. That is the discriminating prediction,
-    and this is the run that tests it.
+    The *shape* correlation and the -6 dB width are what the shipped analytic
+    gate grades, and both tighten as dx falls whichever source is used. The
+    *absolute* level is the one nothing in the library checked, and it is
+    where the two discretizations part company.
+
+    The prediction that motivated the repair: a binary shell's excess over
+    O'Neil is a staircase factor, a property of digitizing a tilted surface,
+    so it will NOT fall as dx shrinks; the band-limited source carries the
+    cap's own area, so its error is an ordinary discretization error and
+    will. Both legs run at every rung so the two behaviours sit in one table.
     """
     from caustica.solvers import CWRunSpec, get
 
@@ -173,8 +182,11 @@ def _r1(ctx):
     backend = ctx["backend"]
     rows = []
     for dx_mm in ctx["ladder"]:
+      for mode in ("binary", "offgrid"):
         dx = dx_mm * MM
-        grid, medium, src, apex, focus = water_scene(dx, aperture, roc, f0, drive, pml_mm=1.0)
+        grid, medium, src, apex, focus = water_scene(
+            dx, aperture, roc, f0, drive, pml_mm=1.0, discretization=mode
+        )
         cos_tmax = np.sqrt(1.0 - (aperture / roc) ** 2)
         cap_area = 2.0 * np.pi * roc**2 * (1.0 - cos_tmax)
         spec = CWRunSpec(min_settle_periods=8, max_settle_periods=40, n_record_periods=2)
@@ -190,11 +202,12 @@ def _r1(ctx):
         rows.append(
             {
                 "dx_mm": dx_mm,
+                "discretization": mode,
                 "points_per_wavelength": C0 / f0 / dx,
                 "grid": list(map(int, grid.shape)),
                 "megavoxels": grid.n_voxels / 1e6,
-                "n_source_voxels": int(src.n_points),
-                "voxels_per_cap_area": src.n_points * dx**2 / cap_area,
+                "n_source_points": int(src.n_points),
+                "drive_per_cap_area": float(src.drive_weights.sum()) * dx**2 / cap_area,
                 "shape_correlation": float(
                     np.corrcoef(sim / sim.max(), oneill / oneill.max())[0, 1]
                 ),
@@ -220,26 +233,24 @@ def _r1(ctx):
     # rung under that resolves nothing and belongs in the table as an anchor,
     # not in the trend it would otherwise dominate.
     resolved = [r for r in rows if r["points_per_wavelength"] >= 3.0]
-    coarse = [r for r in rows if r["points_per_wavelength"] < 3.0]
-    corr = [r["shape_correlation"] for r in resolved]
-    ratio = [r["absolute_mpa"]["ratio"] for r in resolved]
-    vpa = [r["voxels_per_cap_area"] for r in resolved]
 
-    def width_err(r):
-        w = r["width_mm"]
-        if w["simulated"] is None or w["oneill"] is None:
-            return None
-        return abs(w["simulated"] - w["oneill"])
+    def leg(mode):
+        return [r for r in resolved if r["discretization"] == mode]
 
-    errs = [e for e in (width_err(r) for r in resolved) if e is not None]
-    anchor = (
-        f" (the under-resolved {coarse[0]['dx_mm']} mm rung, at "
-        f"{coarse[0]['points_per_wavelength']:.1f} points per wavelength, correlates "
-        f"{coarse[0]['shape_correlation']:+.2f} and reads "
-        f"{coarse[0]['absolute_mpa']['ratio']:.2f}x — that is what under-resolution looks like)"
-        if coarse
-        else ""
-    )
+    summary = {}
+    for mode in ("binary", "offgrid"):
+        got = leg(mode)
+        if not got:
+            continue
+        summary[mode] = {
+            "shape_correlation": [got[0]["shape_correlation"], got[-1]["shape_correlation"]],
+            "absolute_ratio": [r["absolute_mpa"]["ratio"] for r in got],
+            "drive_per_cap_area": [r["drive_per_cap_area"] for r in got],
+            "source_points": [r["n_source_points"] for r in got],
+        }
+    b = summary.get("binary", {}).get("absolute_ratio", [])
+    o = summary.get("offgrid", {}).get("absolute_ratio", [])
+    ppw = [r["points_per_wavelength"] for r in leg("offgrid")]
     return {
         "geometry": {
             "aperture_mm": aperture / MM,
@@ -250,19 +261,16 @@ def _r1(ctx):
         },
         "backend": backend,
         "rows": rows,
-        "resolved_rungs": [r["dx_mm"] for r in resolved],
-        "shape_correlation_span": [min(corr), max(corr)] if corr else None,
-        "absolute_ratio_span": [min(ratio), max(ratio)] if ratio else None,
-        "voxels_per_cap_area_span": [min(vpa), max(vpa)] if vpa else None,
+        "resolved_rungs": sorted({r["dx_mm"] for r in resolved}),
+        "by_discretization": summary,
         "verdict": (
-            f"from {resolved[0]['points_per_wavelength']:.1f} to "
-            f"{resolved[-1]['points_per_wavelength']:.1f} points per wavelength the shape "
-            f"correlation with O'Neil goes {corr[0]:.4f} -> {corr[-1]:.4f} (plateauing, not "
-            f"still climbing) and the -6 dB width error stays {min(errs):.3f}-{max(errs):.3f} mm, "
-            f"while the ABSOLUTE level sits flat at {min(ratio):.2f}-{max(ratio):.2f}x with the "
-            f"shell carrying {min(vpa):.2f}-{max(vpa):.2f} voxels per dx^2 of cap area. The level "
-            f"does not converge, which is the prediction: a staircase factor is not a "
-            f"discretization error" + anchor
+            f"from {ppw[0]:.1f} to {ppw[-1]:.1f} points per wavelength the binary shell's "
+            f"absolute level goes "
+            + " -> ".join(f"{v:.3f}" for v in b)
+            + "x O'Neil, flat: a staircase factor is not a discretization error. The "
+            "band-limited source goes "
+            + " -> ".join(f"{v:.3f}" for v in o)
+            + "x, which is what an ordinary discretization error looks like"
         ),
     }
 
@@ -277,14 +285,17 @@ def _r2(ctx):
     """An independent propagator, deliberately not an independent source.
 
     k-Wave stores pressure and velocity on a staggered grid and uses its own
-    absorption model; neither choice is ours, so agreement between the two
-    is informative about the propagation. What it is NOT independent of is
-    the source: the adapter hands k-Wave our own voxel indices as its
-    ``p_mask``, unsmoothed, so both codes drive exactly the same digitized
-    shell. That makes this experiment a control for the geometry finding
-    rather than a witness against it — if two different propagators fed one
-    digitized cap land on the same excess over O'Neil, the excess is in the
-    cap.
+    absorption model; neither choice is ours, so agreement between the two is
+    informative about the propagation. What it is NOT independent of is the
+    source: the adapter hands k-Wave our own grid points and weights, so both
+    codes drive exactly the same discretized cap.
+
+    That is what made this experiment the control for the geometry finding.
+    With the binary shell both codes sat about 1.16x O'Neil at fifteen points
+    per wavelength — two propagators sharing nothing but a digitized cap,
+    landing on the same excess, which put the excess in the cap. With the
+    band-limited source they should both land on the closed form instead, and
+    the same shared-source logic says so for the same reason.
 
     The rungs are capped by wall clock, not by principle: k-Wave runs on the
     CPU here, and the six-megavoxel rung takes six minutes.
@@ -350,11 +361,11 @@ def _r2(ctx):
             f"across {len(got)} rungs the two codes' focal peaks converge onto each other, "
             f"{max(peaks) * 100:.1f} % apart at the coarsest and {peaks[-1] * 100:.1f} % at "
             f"{finest['points_per_wavelength']:.0f} points per wavelength, with normalized "
-            f"profiles {min(shapes) * 100:.1f}-{max(shapes) * 100:.1f} % rms apart — and BOTH sit "
-            f"{finest['linear']['over_oneill']:.2f}x and "
-            f"{finest['kwave']['over_oneill']:.2f}x above O'Neil there. Two propagators that "
-            f"share nothing but the digitized cap land on the same excess, which puts it in the "
-            f"source"
+            f"profiles {min(shapes) * 100:.1f}-{max(shapes) * 100:.1f} % rms apart. Against "
+            f"O'Neil's absolute prediction they sit {finest['linear']['over_oneill']:.3f}x "
+            f"(ours) and {finest['kwave']['over_oneill']:.3f}x (k-Wave) at the finest rung — "
+            f"two propagators driven from one shared source discretization, agreeing with each "
+            f"other and with the closed form"
         ),
     }
 
@@ -468,7 +479,12 @@ def _r4(ctx):
         grid = Grid(shape=shape, dx=dx, pml=PMLSpec(thickness=3.0e-3))
         medium = Medium.homogeneous(shape, water(c=C0, rho=RHO0, beta=3.5))
         apex = (n // 2, n // 2, grid.pml_vox + 4)
-        src = bowl_cw_source(grid, f0, drive, aperture, roc, apex)
+        # The legacy shell on purpose: this experiment varies the derivative
+        # operator and nothing else, so the source has to be the one the
+        # 2026-08-24 divergence was seen with.
+        src = bowl_cw_source(
+            grid, f0, drive, aperture, roc, apex, discretization="binary"
+        )
         near = (apex[0], apex[1], min(n - 1, apex[2] + 2))
         spec = CWRunSpec(min_settle_periods=1, max_settle_periods=1, n_record_periods=1)
         for label, cm in (("legacy", legacy_operator()), ("fixed", contextlib.nullcontext())):

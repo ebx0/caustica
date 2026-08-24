@@ -5,7 +5,7 @@
     "python": "3.12.10",
     "numpy": "2.2.6",
     "platform": "Windows-11-10.0.26200-SP0",
-    "generated": "2026-08-24T09:41:49+00:00",
+    "generated": "2026-08-24T13:44:24+00:00",
     "gpu": {
       "name": "NVIDIA GeForce RTX 5050 Laptop GPU",
       "cupy": "14.2.0",
@@ -16,7 +16,6 @@
   "settings": {
     "backend": "cupy",
     "ladder": [
-      0.4,
       0.2,
       0.1,
       0.05
@@ -27,13 +26,9 @@
       0.05
     ],
     "attribution_sizes": [
-      96,
       128,
-      144,
-      160,
       192,
       243,
-      255,
       256
     ],
     "outdir": "benchmarks\\reports\\resolution"
@@ -54,6 +49,7 @@
         "rows": [
           {
             "dx_mm": 0.4,
+            "discretization": "binary",
             "points_per_wavelength": 1.875,
             "grid": [
               29,
@@ -61,8 +57,8 @@
               44
             ],
             "megavoxels": 0.037004,
-            "n_source_voxels": 154,
-            "voxels_per_cap_area": 1.1978439573945021,
+            "n_source_points": 154,
+            "drive_per_cap_area": 1.1978439573945021,
             "shape_correlation": -0.18437880209720542,
             "width_mm": {
               "simulated": null,
@@ -78,10 +74,40 @@
               "ratio": 0.6510439126222077
             },
             "converged_period": 17,
-            "elapsed_s": 0.5
+            "elapsed_s": 0.31
+          },
+          {
+            "dx_mm": 0.4,
+            "discretization": "offgrid",
+            "points_per_wavelength": 1.875,
+            "grid": [
+              29,
+              29,
+              44
+            ],
+            "megavoxels": 0.037004,
+            "n_source_points": 1310,
+            "drive_per_cap_area": 1.0000000460410632,
+            "shape_correlation": -0.10288710475837726,
+            "width_mm": {
+              "simulated": null,
+              "oneill": 6.310346887898885
+            },
+            "peak_z_mm": {
+              "simulated": 2.8,
+              "oneill": 4.4
+            },
+            "absolute_mpa": {
+              "simulated": 0.4521518349647522,
+              "oneill": 0.5448589363523372,
+              "ratio": 0.8298512029132117
+            },
+            "converged_period": 18,
+            "elapsed_s": 0.08
           },
           {
             "dx_mm": 0.2,
+            "discretization": "binary",
             "points_per_wavelength": 3.75,
             "grid": [
               45,
@@ -89,8 +115,8 @@
               78
             ],
             "megavoxels": 0.15795,
-            "n_source_voxels": 637,
-            "voxels_per_cap_area": 1.2386795468511327,
+            "n_source_points": 637,
+            "drive_per_cap_area": 1.2386795468511327,
             "shape_correlation": 0.9796529794947045,
             "width_mm": {
               "simulated": 5.930000607301939,
@@ -106,10 +132,40 @@
               "ratio": 1.1621766116918784
             },
             "converged_period": 17,
-            "elapsed_s": 0.18
+            "elapsed_s": 0.17
+          },
+          {
+            "dx_mm": 0.2,
+            "discretization": "offgrid",
+            "points_per_wavelength": 3.75,
+            "grid": [
+              45,
+              45,
+              78
+            ],
+            "megavoxels": 0.15795,
+            "n_source_points": 4296,
+            "drive_per_cap_area": 1.0000000460410632,
+            "shape_correlation": 0.9956586526825397,
+            "width_mm": {
+              "simulated": 6.424916471451511,
+              "oneill": 6.31211490882628
+            },
+            "peak_z_mm": {
+              "simulated": 4.2,
+              "oneill": 4.4
+            },
+            "absolute_mpa": {
+              "simulated": 0.6191256642341614,
+              "oneill": 0.5448589363523372,
+              "ratio": 1.1363045481916034
+            },
+            "converged_period": 17,
+            "elapsed_s": 0.17
           },
           {
             "dx_mm": 0.1,
+            "discretization": "binary",
             "points_per_wavelength": 7.5,
             "grid": [
               79,
@@ -117,8 +173,8 @@
               148
             ],
             "megavoxels": 0.923668,
-            "n_source_voxels": 2401,
-            "voxels_per_cap_area": 1.167217265302029,
+            "n_source_points": 2401,
+            "drive_per_cap_area": 1.167217265302029,
             "shape_correlation": 0.9983907349190052,
             "width_mm": {
               "simulated": 6.216550217518413,
@@ -134,10 +190,40 @@
               "ratio": 1.1462595139737588
             },
             "converged_period": 17,
-            "elapsed_s": 0.53
+            "elapsed_s": 0.57
+          },
+          {
+            "dx_mm": 0.1,
+            "discretization": "offgrid",
+            "points_per_wavelength": 7.5,
+            "grid": [
+              79,
+              79,
+              148
+            ],
+            "megavoxels": 0.923668,
+            "n_source_points": 14254,
+            "drive_per_cap_area": 1.0000000460410632,
+            "shape_correlation": 0.9986025306308146,
+            "width_mm": {
+              "simulated": 6.128507663475916,
+              "oneill": 6.311533896221861
+            },
+            "peak_z_mm": {
+              "simulated": 4.3,
+              "oneill": 4.3
+            },
+            "absolute_mpa": {
+              "simulated": 0.5574060082435608,
+              "oneill": 0.5449535466314134,
+              "ratio": 1.0228504859644652
+            },
+            "converged_period": 17,
+            "elapsed_s": 0.57
           },
           {
             "dx_mm": 0.05,
+            "discretization": "binary",
             "points_per_wavelength": 15.0,
             "grid": [
               149,
@@ -145,8 +231,8 @@
               288
             ],
             "megavoxels": 6.393888,
-            "n_source_voxels": 9686,
-            "voxels_per_cap_area": 1.1771830936813257,
+            "n_source_points": 9686,
+            "drive_per_cap_area": 1.1771830936813257,
             "shape_correlation": 0.9977454449658301,
             "width_mm": {
               "simulated": 6.586706976330114,
@@ -162,30 +248,91 @@
               "ratio": 1.165142955295569
             },
             "converged_period": 17,
-            "elapsed_s": 6.66
+            "elapsed_s": 7.82
+          },
+          {
+            "dx_mm": 0.05,
+            "discretization": "offgrid",
+            "points_per_wavelength": 15.0,
+            "grid": [
+              149,
+              149,
+              288
+            ],
+            "megavoxels": 6.393888,
+            "n_source_points": 54105,
+            "drive_per_cap_area": 1.0000000460410632,
+            "shape_correlation": 0.9981597284567071,
+            "width_mm": {
+              "simulated": 6.587813551108587,
+              "oneill": 6.31051053501995
+            },
+            "peak_z_mm": {
+              "simulated": 4.3500000000000005,
+              "oneill": 4.3500000000000005
+            },
+            "absolute_mpa": {
+              "simulated": 0.5443751811981201,
+              "oneill": 0.545063480934746,
+              "ratio": 0.9987372233532036
+            },
+            "converged_period": 17,
+            "elapsed_s": 7.69
           }
         ],
         "resolved_rungs": [
-          0.2,
+          0.05,
           0.1,
-          0.05
+          0.2
         ],
-        "shape_correlation_span": [
-          0.9796529794947045,
-          0.9983907349190052
-        ],
-        "absolute_ratio_span": [
-          1.1462595139737588,
-          1.165142955295569
-        ],
-        "voxels_per_cap_area_span": [
-          1.167217265302029,
-          1.2386795468511327
-        ],
-        "verdict": "from 3.8 to 15.0 points per wavelength the shape correlation with O'Neil goes 0.9797 -> 0.9977 (plateauing, not still climbing) and the -6 dB width error stays 0.095-0.382 mm, while the ABSOLUTE level sits flat at 1.15-1.17x with the shell carrying 1.17-1.24 voxels per dx^2 of cap area. The level does not converge, which is the prediction: a staircase factor is not a discretization error (the under-resolved 0.4 mm rung, at 1.9 points per wavelength, correlates -0.18 and reads 0.65x \u2014 that is what under-resolution looks like)"
+        "by_discretization": {
+          "binary": {
+            "shape_correlation": [
+              0.9796529794947045,
+              0.9977454449658301
+            ],
+            "absolute_ratio": [
+              1.1621766116918784,
+              1.1462595139737588,
+              1.165142955295569
+            ],
+            "drive_per_cap_area": [
+              1.2386795468511327,
+              1.167217265302029,
+              1.1771830936813257
+            ],
+            "source_points": [
+              637,
+              2401,
+              9686
+            ]
+          },
+          "offgrid": {
+            "shape_correlation": [
+              0.9956586526825397,
+              0.9981597284567071
+            ],
+            "absolute_ratio": [
+              1.1363045481916034,
+              1.0228504859644652,
+              0.9987372233532036
+            ],
+            "drive_per_cap_area": [
+              1.0000000460410632,
+              1.0000000460410632,
+              1.0000000460410632
+            ],
+            "source_points": [
+              4296,
+              14254,
+              54105
+            ]
+          }
+        },
+        "verdict": "from 3.8 to 15.0 points per wavelength the binary shell's absolute level goes 1.162 -> 1.146 -> 1.165x O'Neil, flat: a staircase factor is not a discretization error. The band-limited source goes 1.136 -> 1.023 -> 0.999x, which is what an ordinary discretization error looks like"
       },
       "status": "OK",
-      "elapsed_s": 8.27
+      "elapsed_s": 19.17
     },
     {
       "id": "R2",
@@ -202,23 +349,23 @@
             "megavoxels": 0.15795,
             "points_per_wavelength": 3.75,
             "linear": {
-              "peak_mpa": 0.6332223415374756,
+              "peak_mpa": 0.6191256642341614,
               "peak_z_mm": 4.2,
-              "width_mm": 5.930000607301939,
-              "over_oneill": 1.1621766116918784,
-              "elapsed_s": 0.3
+              "width_mm": 6.424916471451511,
+              "over_oneill": 1.1363045481916034,
+              "elapsed_s": 0.6
             },
             "kwave": {
-              "peak_mpa": 0.5803428292274475,
+              "peak_mpa": 0.5694711804389954,
               "peak_z_mm": 4.4,
-              "width_mm": 5.863554850831696,
-              "over_oneill": 1.0651248860580622,
-              "elapsed_s": 3.4
+              "width_mm": 6.441948813320825,
+              "over_oneill": 1.045171785769789,
+              "elapsed_s": 4.8
             },
             "agreement": {
-              "peak_rel_difference": 0.09111769497394562,
-              "profile_correlation": 0.9985683290210029,
-              "profile_rms_rel_difference": 0.014545989222824574
+              "peak_rel_difference": 0.0871940478682518,
+              "profile_correlation": 0.9992640732602247,
+              "profile_rms_rel_difference": 0.010002962313592434
             },
             "oneill_mpa": 0.5448589363523372
           },
@@ -232,23 +379,23 @@
             "megavoxels": 0.923668,
             "points_per_wavelength": 7.5,
             "linear": {
-              "peak_mpa": 0.6246581673622131,
+              "peak_mpa": 0.5574060082435608,
               "peak_z_mm": 4.3,
-              "width_mm": 6.216550217518413,
-              "over_oneill": 1.1462595139737588,
-              "elapsed_s": 0.6
+              "width_mm": 6.128507663475916,
+              "over_oneill": 1.0228504859644652,
+              "elapsed_s": 0.7
             },
             "kwave": {
-              "peak_mpa": 0.6063598394393921,
+              "peak_mpa": 0.5399323105812073,
               "peak_z_mm": 4.4,
-              "width_mm": 6.429074413714693,
-              "over_oneill": 1.1126816519466007,
-              "elapsed_s": 25.3
+              "width_mm": 6.345719127573382,
+              "over_oneill": 0.9907859409990967,
+              "elapsed_s": 32.2
             },
             "agreement": {
-              "peak_rel_difference": 0.030177420005202293,
-              "profile_correlation": 0.9996125205305201,
-              "profile_rms_rel_difference": 0.008958512917160988
+              "peak_rel_difference": 0.03236273676156998,
+              "profile_correlation": 0.9996112422946166,
+              "profile_rms_rel_difference": 0.009910463355481625
             },
             "oneill_mpa": 0.5449535466314134
           },
@@ -262,37 +409,37 @@
             "megavoxels": 6.393888,
             "points_per_wavelength": 15.0,
             "linear": {
-              "peak_mpa": 0.6350768804550171,
-              "peak_z_mm": 4.45,
-              "width_mm": 6.586706976330114,
-              "over_oneill": 1.165142955295569,
-              "elapsed_s": 6.8
+              "peak_mpa": 0.5443751811981201,
+              "peak_z_mm": 4.3500000000000005,
+              "width_mm": 6.587813551108587,
+              "over_oneill": 0.9987372233532036,
+              "elapsed_s": 7.9
             },
             "kwave": {
-              "peak_mpa": 0.6346879601478577,
+              "peak_mpa": 0.5434284210205078,
               "peak_z_mm": 4.3500000000000005,
-              "width_mm": 6.278829079000704,
-              "over_oneill": 1.164429391621604,
-              "elapsed_s": 345.9
+              "width_mm": 6.290441106471792,
+              "over_oneill": 0.9970002697081412,
+              "elapsed_s": 377.0
             },
             "agreement": {
-              "peak_rel_difference": 0.0006128011737018824,
-              "profile_correlation": 0.9994018709133785,
-              "profile_rms_rel_difference": 0.012466869316995144
+              "peak_rel_difference": 0.0017421797383576632,
+              "profile_correlation": 0.9994555834360486,
+              "profile_rms_rel_difference": 0.01146971806883812
             },
             "oneill_mpa": 0.545063480934746
           }
         ],
         "shared_source_discretization": true,
         "peak_difference_span": [
-          0.0006128011737018824,
-          0.09111769497394562
+          0.0017421797383576632,
+          0.0871940478682518
         ],
         "agreement_improves_with_dx": true,
-        "verdict": "across 3 rungs the two codes' focal peaks converge onto each other, 9.1 % apart at the coarsest and 0.1 % at 15 points per wavelength, with normalized profiles 0.9-1.5 % rms apart \u2014 and BOTH sit 1.17x and 1.16x above O'Neil there. Two propagators that share nothing but the digitized cap land on the same excess, which puts it in the source"
+        "verdict": "across 3 rungs the two codes' focal peaks converge onto each other, 8.7 % apart at the coarsest and 0.2 % at 15 points per wavelength, with normalized profiles 1.0-1.1 % rms apart. Against O'Neil's absolute prediction they sit 0.999x (ours) and 0.997x (k-Wave) at the finest rung \u2014 two propagators driven from one shared source discretization, agreeing with each other and with the closed form"
       },
       "status": "OK",
-      "elapsed_s": 382.48
+      "elapsed_s": 424.85
     },
     {
       "id": "R3",
@@ -321,7 +468,7 @@
                   {
                     "name": "t0.linear.peak",
                     "verdict": "PASS",
-                    "detail": "1.45244 x analytic (band 0.2..5 x analytic)"
+                    "detail": "1.1983 x analytic (band 0.2..5 x analytic)"
                   },
                   {
                     "name": "t0.westervelt.finite",
@@ -331,7 +478,7 @@
                   {
                     "name": "t0.westervelt.peak",
                     "verdict": "PASS",
-                    "detail": "1.45244 x analytic (band 0.2..5 x analytic)"
+                    "detail": "1.1983 x analytic (band 0.2..5 x analytic)"
                   },
                   {
                     "name": "t0.kwave.finite",
@@ -341,7 +488,7 @@
                   {
                     "name": "t0.kwave.peak",
                     "verdict": "PASS",
-                    "detail": "1.37638 x analytic (band 0.2..5 x analytic)"
+                    "detail": "1.13411 x analytic (band 0.2..5 x analytic)"
                   }
                 ]
               },
@@ -357,7 +504,7 @@
                   {
                     "name": "linear-vs-kwave.corr",
                     "verdict": "PASS",
-                    "detail": "0.999143 (floor 0.99)"
+                    "detail": "0.999307 (floor 0.99)"
                   }
                 ]
               },
@@ -378,7 +525,7 @@
                 ]
               }
             ],
-            "elapsed_s": 4.4
+            "elapsed_s": 5.6
           },
           {
             "job": "t0-sanity",
@@ -402,7 +549,7 @@
                   {
                     "name": "t0.linear.peak",
                     "verdict": "PASS",
-                    "detail": "1.45244 x analytic (band 0.2..5 x analytic)"
+                    "detail": "1.1983 x analytic (band 0.2..5 x analytic)"
                   },
                   {
                     "name": "t0.westervelt.finite",
@@ -412,7 +559,7 @@
                   {
                     "name": "t0.westervelt.peak",
                     "verdict": "PASS",
-                    "detail": "1.45244 x analytic (band 0.2..5 x analytic)"
+                    "detail": "1.1983 x analytic (band 0.2..5 x analytic)"
                   },
                   {
                     "name": "t0.kwave.finite",
@@ -422,7 +569,7 @@
                   {
                     "name": "t0.kwave.peak",
                     "verdict": "PASS",
-                    "detail": "1.37638 x analytic (band 0.2..5 x analytic)"
+                    "detail": "1.13411 x analytic (band 0.2..5 x analytic)"
                   }
                 ]
               },
@@ -438,7 +585,7 @@
                   {
                     "name": "linear-vs-kwave.corr",
                     "verdict": "PASS",
-                    "detail": "0.998792 (floor 0.99)"
+                    "detail": "0.998871 (floor 0.99)"
                   }
                 ]
               },
@@ -459,13 +606,13 @@
                 ]
               }
             ],
-            "elapsed_s": 3.5
+            "elapsed_s": 3.8
           }
         ],
         "verdict": "2/2 jobs pass the shipped cross-check: compare-mini PASS; t0-sanity PASS"
       },
       "status": "OK",
-      "elapsed_s": 8.0
+      "elapsed_s": 9.5
     },
     {
       "id": "R4",
@@ -590,7 +737,7 @@
         "verdict": "with today's engine \u2014 explicit axes= and all \u2014 the pre-fix derivative factory still diverges at [128, 255, 256] and the shipped one at []: the repair is the Nyquist zeroing"
       },
       "status": "OK",
-      "elapsed_s": 24.3
+      "elapsed_s": 30.12
     }
   ]
 }

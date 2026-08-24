@@ -186,7 +186,7 @@ def _g1(ctx):
 # --------------------------------------------------------------------------
 
 
-@check("G2", "focused bowl: holes in the digitized shell at the shipped sampling")
+@check("G2", "focused bowl: holes in the legacy binary shell")
 def _g2(ctx):
     """A source shell with holes is a source that leaks.
 
@@ -818,31 +818,37 @@ def _g9(ctx):
         )
         built = build_job(job, base_dir=Path("."), with_medium=False)
         dx = built.grid.dx
-        idx = np.asarray(built.source.indices)
-        p = idx.astype(float) * dx
+        idx = np.asarray(built.source.indices).astype(float)
+        w = built.source.drive_weights.astype(np.float64)
         # the sphere the JOB FILE ordered, in the grid's own coordinates
-        apex_vox_expected = np.array([size[0] / 2, size[1] / 2, apex_mm]) * MM / dx
-        focus = (np.round(apex_vox_expected) + np.array([0.0, 0.0, roc_mm * MM / dx])) * dx
-        err = np.linalg.norm(p - focus, axis=1) - roc_mm * MM
+        apex_vox_expected = np.round(np.array([size[0] / 2, size[1] / 2, apex_mm]) * MM / dx)
+        focus_vox = apex_vox_expected + np.array([0.0, 0.0, round(roc_mm * MM / dx)])
+        # The default source is a weighted cloud, not a shell, so its geometry
+        # is in its moments: where the drive's centre of mass sits, and how far
+        # from the focus that mass is on average.
+        com = (idx * w[:, None]).sum(axis=0) / w.sum()
+        radius = np.linalg.norm((idx - focus_vox) * dx, axis=1)
+        cap_area = 2.0 * np.pi * (roc_mm * MM) ** 2 * (
+            1.0 - np.sqrt(1.0 - (d_outer_mm / 2 / (roc_mm * MM) / 1e3) ** 2)
+        )
         rows.append(
             {
                 "dx_mm": dx_mm,
                 "grid": list(map(int, built.grid.shape)),
-                "n_source_voxels": int(len(p)),
-                "surface_rms_error_vox": float(np.sqrt(np.mean(err**2))) / dx,
-                "surface_max_error_vox": float(np.abs(err).max()) / dx,
-                "aperture_radius": deviation(
-                    float(np.linalg.norm(p[:, :2] - focus[:2], axis=1).max()) / MM,
-                    d_outer_mm / 2,
-                    "mm",
+                "discretization": built.source.label.endswith("binary") and "binary" or "offgrid",
+                "n_source_points": int(len(idx)),
+                "drive_radius": deviation(
+                    float((radius * w).sum() / w.sum()) / MM, roc_mm, "mm"
                 ),
-                "apex_z": deviation(float(idx[:, 2].min()) * dx / MM, apex_mm, "mm"),
+                "drive_offaxis_vox": float(np.hypot(*(com[:2] - apex_vox_expected[:2]))),
+                "drive_total": deviation(float(w.sum()), cap_area / dx**2, "grid squares"),
                 "focus_vox_reported": list(map(int, built.focus_vox)),
-                "focus_vox_expected": [int(round(c / dx)) for c in focus],
+                "focus_vox_expected": [int(v) for v in focus_vox],
             }
         )
-    worst_apex = max(r["apex_z"]["abs_error"] for r in rows)
-    worst_surface = max(r["surface_max_error_vox"] for r in rows)
+    worst_radius = max(r["drive_radius"]["rel_error"] for r in rows)
+    worst_offaxis = max(r["drive_offaxis_vox"] for r in rows)
+    worst_area = max(r["drive_total"]["rel_error"] for r in rows)
     agree = all(r["focus_vox_reported"] == r["focus_vox_expected"] for r in rows)
     return {
         "rows": rows,
@@ -853,40 +859,39 @@ def _g9(ctx):
             else "the builder's reported focus does NOT match the job file"
         )
         + (
-            f"; the shell it built sits within {worst_surface:.2f} voxel of the ordered sphere "
-            f"and its apex within {worst_apex:.4f} mm of the ordered depth"
+            f"; the drive's centre of mass sits {worst_offaxis:.3f} voxel off the axis, its "
+            f"mean radius is within {worst_radius * 100:.2f} % of the ordered curvature, and "
+            f"its total is the cap's own area to {worst_area * 100:.3f} %"
         ),
     }
 
 
 # --------------------------------------------------------------------------
-# G10 — do the holes change the answer?
+# G10 — the two discretizations against the closed form
 # --------------------------------------------------------------------------
 
 
-@check("G10", "how many voxels carry the drive, and what that does to the focal pressure")
+@check("G10", "binary shell against band-limited weights, on absolute amplitude")
 def _g10(ctx):
-    """G2 counts holes. This asks what they cost, and finds something worse.
+    """The measurement the repair was built from, and the one that grades it.
 
     The engine drives each source voxel with the same normalized amplitude,
-    so the power a bowl radiates is proportional to how many voxels its
-    shell happens to contain. On a *plane* source that is exactly the
-    aperture area divided by dx^2, which is what the normalization was
-    calibrated against. On a curved shell it is not: a tilted surface
-    crosses more voxels per unit area than a flat one, and how many depends
-    on how densely the cap was sampled before rounding.
+    which is exact for a *flat* source — one voxel per dx^2 of aperture — and
+    is not for a curved one. A digitized cap crosses more voxels per unit
+    area than a flat surface does, so a binary bowl radiates in proportion to
+    its voxel count rather than to its area.
 
-    So refining the cap sampling does two things at once — it closes the
-    holes G2 counted, and it raises the voxel count above the cap's own
-    area. Both show up as focal pressure. The measurement below separates
-    them by reporting the voxels-per-area ratio next to the pressure, and
-    grades both against O'Neil's closed form ``|p| = rho c u0 k h``, which
-    is the absolute prediction the analytic gate deliberately does not use
-    (it compares normalized shape only, so nothing in the suite would ever
-    notice a drive that is uniformly too strong).
+    ``discretization="offgrid"`` (the default since 2026-08-24) stops
+    describing the cap as voxels and describes it as a measure: the
+    closed-form area, divided over quadrature points, deposited through a
+    band-limited interpolant. The weights then sum to the area in grid
+    squares whatever the orientation.
 
-    Two f-numbers, because the closed form is a paraxial statement and its
-    own accuracy has to be visible in the answer.
+    Both are graded against O'Neil's exact on-axis solution — the absolute
+    prediction the analytic gate deliberately does not use, since it compares
+    normalized shape only and would never notice a drive that is uniformly
+    too strong. Two f-numbers, so the closed form's own paraxial error is
+    visible in the answer rather than hidden in it.
     """
     from caustica.analytic import axial_pressure
     from caustica.core.grid import Grid
@@ -903,7 +908,6 @@ def _g10(ctx):
         ("f/1.2", 5.0 * MM, 12.0 * MM, (96, 96, 112)),
         ("f/2.0", 6.0 * MM, 24.0 * MM, (80, 80, 152)),
     )
-    samplings = (("dx/2 (shipped)", 2), ("dx/4", 4), ("dx/8", 8), ("dx/16", 16))
 
     rows = []
     for gname, aperture, roc, shape in geometries:
@@ -911,64 +915,54 @@ def _g10(ctx):
         medium = Medium.homogeneous(grid.shape, water())
         apex = (shape[0] // 2, shape[1] // 2, 12)
         focus_vox = (apex[0], apex[1], apex[2] + int(round(roc / dx)))
-        cos_tmax = np.sqrt(1.0 - (aperture / roc) ** 2)
-        cap_area = 2.0 * np.pi * roc**2 * (1.0 - cos_tmax)
-        # O'Neil's exact on-axis solution, driven by the velocity a pressure
-        # source of this amplitude implies for a locally plane wave. Windowed
-        # exactly as the analytic gate windows it: past half the focal length,
-        # clear of the source, and two voxels clear of the sponge.
+        cap_area = 2.0 * np.pi * roc**2 * (1.0 - np.sqrt(1.0 - (aperture / roc) ** 2))
         z = (np.arange(shape[2]) - apex[2]) * dx
         z_pml = (shape[2] - grid.pml_vox - 2 - apex[2]) * dx
         sel = (z > 0.5 * roc) & (z < z_pml)
         oneill = np.abs(axial_pressure(z[sel], aperture, roc, f0, c0, rho0, drive / (rho0 * c0)))
         expected = float(oneill.max())
-        for sname, denom in samplings:
-            src = bowl_cw_source(grid, f0, drive, aperture, roc, apex, spacing=dx / denom)
+        for mode in ("binary", "offgrid"):
+            src = bowl_cw_source(grid, f0, drive, aperture, roc, apex, discretization=mode)
             res = get("linear")().run(
                 grid, medium, src, spec, backend="numpy", reference_point=focus_vox
             )
-            amp = np.abs(np.asarray(res.phasor))
-            axis = amp[apex[0], apex[1], :]
+            axis = np.abs(np.asarray(res.phasor))[apex[0], apex[1], :]
             produced = float(axis[sel].max())
+            drive_total = float(src.drive_weights.sum())
             rows.append(
                 {
                     "geometry": gname,
                     "f_number": roc / (2 * aperture),
-                    "sampling": sname,
-                    "n_source_voxels": int(src.n_points),
-                    "voxels_per_cap_area": src.n_points * dx**2 / cap_area,
+                    "discretization": mode,
+                    "n_source_points": int(src.n_points),
+                    "drive_per_cap_area": drive_total * dx**2 / cap_area,
                     "on_axis_focal_pressure": deviation(produced, expected, "Pa vs O'Neil"),
                     "peak_mpa": produced / 1e6,
                     "oneill_mpa": expected / 1e6,
                     "peak_z_mm": float(z[sel][int(axis[sel].argmax())] / MM),
                     "oneill_peak_z_mm": float(z[sel][int(oneill.argmax())] / MM),
-                    "global_peak_mpa": float(amp.max() / 1e6),
                 }
             )
 
     out: dict[str, Any] = {"dx_mm": 0.25, "drive_pa": drive, "rows": rows}
     summary = []
     for gname, *_ in geometries:
-        got = [r for r in rows if r["geometry"] == gname]
-        shipped, finest = got[0], got[-1]
+        binary, offgrid = (r for r in rows if r["geometry"] == gname)
         out[gname] = {
-            "extra_voxels_from_refining_the_sampling": finest["n_source_voxels"]
-            / shipped["n_source_voxels"]
-            - 1.0,
-            "peak_moved_by": rel(shipped["peak_mpa"], finest["peak_mpa"]),
-            "voxels_per_cap_area_shipped": shipped["voxels_per_cap_area"],
-            "voxels_per_cap_area_converged": finest["voxels_per_cap_area"],
-            "over_oneill_shipped": shipped["peak_mpa"] / shipped["oneill_mpa"],
-            "over_oneill_converged": finest["peak_mpa"] / finest["oneill_mpa"],
+            "binary_over_oneill": binary["peak_mpa"] / binary["oneill_mpa"],
+            "offgrid_over_oneill": offgrid["peak_mpa"] / offgrid["oneill_mpa"],
+            "binary_drive_per_area": binary["drive_per_cap_area"],
+            "offgrid_drive_per_area": offgrid["drive_per_cap_area"],
+            "points_binary": binary["n_source_points"],
+            "points_offgrid": offgrid["n_source_points"],
         }
         summary.append(
-            f"{gname}: refining dx/2 to dx/16 adds "
-            f"{out[gname]['extra_voxels_from_refining_the_sampling'] * 100:.0f} % more driven "
-            f"voxels and moves the focus by {out[gname]['peak_moved_by'] * 100:.1f} %; the shell "
-            f"carries {shipped['voxels_per_cap_area']:.2f} voxels per dx^2 of cap area at the "
-            f"shipped sampling and {finest['voxels_per_cap_area']:.2f} at dx/16, against 1.00 for "
-            f"a flat source; the on-axis focus sits {out[gname]['over_oneill_shipped']:.2f}x and "
-            f"{out[gname]['over_oneill_converged']:.2f}x O'Neil's absolute prediction"
+            f"{gname}: the binary shell carries "
+            f"{binary['drive_per_cap_area']:.3f} of the cap's area and lands "
+            f"{out[gname]['binary_over_oneill']:.3f}x O'Neil; the band-limited weights carry "
+            f"{offgrid['drive_per_cap_area']:.3f} and land "
+            f"{out[gname]['offgrid_over_oneill']:.3f}x, over "
+            f"{offgrid['n_source_points']} points instead of {binary['n_source_points']}"
         )
     out["verdict"] = " | ".join(summary)
     return out

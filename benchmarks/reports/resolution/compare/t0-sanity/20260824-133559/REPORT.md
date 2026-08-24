@@ -1,6 +1,6 @@
 # caustica multi-engine comparison
 
-**Overall verdict: PASS** (`caustica-compare/1`, generated 2026-08-24T09:41:21+00:00)
+**Overall verdict: PASS** (`caustica-compare/1`, generated 2026-08-24T13:35:59+00:00)
 
 The SAME built job -- one grid, one medium, one source -- run on each registered solver below, in memory, on one backend. The first solver is the reference; every other is compared against it. Comparison is NORMALIZED (each field divided by its own interior peak): absolute amplitude is a per-engine source convention, field SHAPE is the cross-check. Gated tolerances name the test they are inherited from; ungated columns are reported because no test in this repository establishes a cross-engine limit for them.
 
@@ -11,10 +11,10 @@ The SAME built job -- one grid, one medium, one source -- run on each registered
 | reference solver | `linear` |
 | backend | cupy (requested `cupy`) |
 | host | LOQ |
-| caustica | 0.1.0.dev0 @ 55e4ee8a8666ade2e5d46aca6451a811525e1584 |
+| caustica | 0.1.0.dev0 @ 1df65325381ca15312c014d4384efe4205382d1d |
 | python / numpy | 3.12.10 / 2.2.6 |
 | platform | Windows-11-10.0.26200-SP0 |
-| suite runtime | 3.506 s |
+| suite runtime | 3.84 s |
 
 ## solvers
 
@@ -22,9 +22,9 @@ The SAME built job -- one grid, one medium, one source -- run on each registered
 
 | solver | status | T0 s | run s | steps | interior peak (MPa) | detail |
 |---|---|---|---|---|---|---|
-| `linear` | ok | 0.21 | 0.1793 | 120 | 0.6972 | -- |
-| `westervelt` | ok | 0.1947 | 0.229 | 120 | 0.6972 | -- |
-| `kwave` | ok | 1.515 | 1.119 | 220 | 0.6607 | -- |
+| `linear` | ok | 0.2387 | 0.2005 | 120 | 0.5752 | -- |
+| `westervelt` | ok | 0.1832 | 0.1827 | 120 | 0.5752 | -- |
+| `kwave` | ok | 1.475 | 1.378 | 220 | 0.5444 | -- |
 
 ## pairs (normalized |phasor|)
 
@@ -33,7 +33,7 @@ The SAME built job -- one grid, one medium, one source -- run on each registered
 | pair | rel L2 (norm) | Pearson r | peak shift (vox) | peak ratio cmp/ref | voxels |
 |---|---|---|---|---|---|
 | linear vs westervelt | 0 | 1 | 0 | 1 | 18432 |
-| linear vs kwave | 0.03856 | 0.9988 | 0 | 0.9476 | 18432 |
+| linear vs kwave | 0.03881 | 0.9989 | 0 | 0.9464 | 18432 |
 
 ## focal metrics
 
@@ -41,9 +41,9 @@ The SAME built job -- one grid, one medium, one source -- run on each registered
 
 | solver | peak (MPa) | peak voxel | z from apex (mm) | axial -6 dB (mm) | lat-x -6 dB (mm) | lat-y -6 dB (mm) | vol >-6 dB (mm3) | ISPPA (W/cm2) |
 |---|---|---|---|---|---|---|---|---|
-| `linear` | 0.6972 | [20, 20, 22] | 7 | 9.968 | 2.567 | 2.583 | 39.62 | 16.2 |
-| `westervelt` | 0.6972 | [20, 20, 22] | 7 | 9.968 | 2.567 | 2.583 | 39.62 | 16.2 |
-| `kwave` | 0.6607 | [20, 20, 22] | 7 | 9.946 | 2.568 | 2.585 | 41.12 | 14.5 |
+| `linear` | 0.5752 | [20, 20, 22] | 7 | 10.11 | 2.641 | 2.641 | 41.5 | 11 |
+| `westervelt` | 0.5752 | [20, 20, 22] | 7 | 10.11 | 2.641 | 2.641 | 41.5 | 11 |
+| `kwave` | 0.5444 | [20, 20, 22] | 7 | 10.14 | 2.645 | 2.645 | 43.62 | 9.9 |
 
 ## gates
 
@@ -54,11 +54,11 @@ every solver with a working environment produces a finite field on the trivial T
 | check | verdict | measured vs limit | source of the tolerance |
 |---|---|---|---|
 | t0.linear.finite | PASS | phasor and p_max are finite everywhere | tests/test_divergence_guard.py::test_a_diverging_run_raises_instead_of_returning_nan |
-| t0.linear.peak | PASS | 1.45244 x analytic (band 0.2..5 x analytic) | tests/test_linear_oneill_3d.py::test_axial_profile_matches_oneill (via caustica.analytic.oneill.focal_gain) |
+| t0.linear.peak | PASS | 1.1983 x analytic (band 0.2..5 x analytic) | tests/test_linear_oneill_3d.py::test_axial_profile_matches_oneill (via caustica.analytic.oneill.focal_gain) |
 | t0.westervelt.finite | PASS | phasor and p_max are finite everywhere | tests/test_divergence_guard.py::test_a_diverging_run_raises_instead_of_returning_nan |
-| t0.westervelt.peak | PASS | 1.45244 x analytic (band 0.2..5 x analytic) | tests/test_linear_oneill_3d.py::test_axial_profile_matches_oneill (via caustica.analytic.oneill.focal_gain) |
+| t0.westervelt.peak | PASS | 1.1983 x analytic (band 0.2..5 x analytic) | tests/test_linear_oneill_3d.py::test_axial_profile_matches_oneill (via caustica.analytic.oneill.focal_gain) |
 | t0.kwave.finite | PASS | phasor and p_max are finite everywhere | tests/test_divergence_guard.py::test_a_diverging_run_raises_instead_of_returning_nan |
-| t0.kwave.peak | PASS | 1.37638 x analytic (band 0.2..5 x analytic) | tests/test_linear_oneill_3d.py::test_axial_profile_matches_oneill (via caustica.analytic.oneill.focal_gain) |
+| t0.kwave.peak | PASS | 1.13411 x analytic (band 0.2..5 x analytic) | tests/test_linear_oneill_3d.py::test_axial_profile_matches_oneill (via caustica.analytic.oneill.focal_gain) |
 
 ### M11.cross -- PASS
 
@@ -67,7 +67,7 @@ normalized |phasor| correlation r >= 0.99 between the reference solver 'linear' 
 | check | verdict | measured vs limit | source of the tolerance |
 |---|---|---|---|
 | linear-vs-westervelt.corr | PASS | 1 (floor 0.99) | tests/test_kwave_adapter.py::test_kwave_vs_linear_2d_water |
-| linear-vs-kwave.corr | PASS | 0.998792 (floor 0.99) | tests/test_kwave_adapter.py::test_kwave_vs_linear_2d_water |
+| linear-vs-kwave.corr | PASS | 0.998871 (floor 0.99) | tests/test_kwave_adapter.py::test_kwave_vs_linear_2d_water |
 
 ### M11.focus -- PASS
 
