@@ -14,7 +14,7 @@ from caustica import Grid, Medium, PMLSpec
 from caustica.materials import water
 from caustica.solvers import CWRunSpec
 from caustica.solvers.kwave_adapter import alpha_np_m_to_kwave, beta_to_bona
-from caustica.sources import CWSource
+from caustica.sources import CWSource, bowl_cw_source
 
 F0 = 0.5e6
 C0 = 1500.0
@@ -82,3 +82,32 @@ def test_kwave_vs_linear_2d_water():
     assert r > 0.99, f"linear-vs-kwave field correlation r={r:.5f} < 0.99"
 
     assert res_kw.meta["backend"] == "kwave-omp"
+
+
+@pytest.mark.kwave
+def test_the_sensor_records_the_region_and_not_the_whole_grid():
+    """k-Wave dumps every recorded step to disk; the region decides how much.
+
+    The binary cannot accumulate a DFT, so a run writes ``n_sensor_points x
+    record_steps`` floats to HDF5 and the adapter transforms afterwards. At
+    the ITRUSST benchmark size that was a 731 MB input file and a 1.6 GB
+    output file per run (measured 2026-08-25), and recording the whole grid
+    when the caller asked for a slab paid all of it for nothing. The field
+    over the region has to come back unchanged either way.
+    """
+    grid = Grid(shape=(40, 40, 56), dx=0.5e-3, pml=PMLSpec(thickness=3e-3))
+    medium = Medium.homogeneous(grid.shape, water())
+    src = bowl_cw_source(
+        grid, f0=1e6, amplitude=1e5, aperture_radius=4e-3, roc=10e-3, apex_vox=(20, 20, 8)
+    )
+    spec = CWRunSpec(min_settle_periods=2, max_settle_periods=6, n_record_periods=2)
+    region = (slice(10, 30), slice(10, 30), slice(20, 44))
+
+    whole = solvers.get("kwave")().run(grid, medium, src, spec)
+    part = solvers.get("kwave")().run(grid, medium, src, spec, record_region=region)
+
+    assert whole.phasor.shape == grid.shape
+    assert part.phasor.shape == tuple(sl.stop - sl.start for sl in region)
+    np.testing.assert_allclose(
+        np.abs(part.phasor), np.abs(whole.phasor[region]), rtol=1e-5, atol=1.0
+    )

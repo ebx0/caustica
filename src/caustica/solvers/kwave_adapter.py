@@ -208,8 +208,25 @@ class KWaveSolver(SolverBase):
         ksource.p_mask = src_mask
         ksource.p = signals
 
+        # The sensor mask is the RECORD REGION, not the whole grid. k-Wave's
+        # binary cannot accumulate a DFT, so it dumps every recorded step to
+        # HDF5 and the adapter transforms afterwards: at the ITRUSST benchmark
+        # size that is a 731 MB input file and a 1.6 GB output file per run,
+        # and recording the full grid when the caller asked for a slab pays
+        # all of it for nothing. Measured 2026-08-25, and the reason a dataset
+        # of many runs wants a region.
+        from caustica.solvers.kspace.engine import normalize_record_region  # noqa: PLC0415
+
+        rec = (
+            normalize_record_region(record_region, grid.shape)
+            if record_region is not None
+            else tuple(slice(0, n) for n in grid.shape)
+        )
+        rec_shape = tuple(sl.stop - sl.start for sl in rec)
         sensor = kSensor()
-        sensor.mask = np.ones(grid.shape, dtype=bool)
+        mask = np.zeros(grid.shape, dtype=bool)
+        mask[rec] = True
+        sensor.mask = mask
         sensor.record = ["p"]
         sensor.record_start_index = nt - rec_steps + 1  # 1-based, inclusive
 
@@ -275,7 +292,7 @@ class KWaveSolver(SolverBase):
             )
 
         p_rec = np.asarray(sensor_data["p"])
-        n_points = int(np.prod(grid.shape))
+        n_points = int(np.prod(rec_shape))
         if rec_steps == n_points:  # square: orientation is ambiguous
             warnings.warn(
                 "k-Wave sensor data is square (rec_steps == n_points); assuming "
@@ -294,28 +311,24 @@ class KWaveSolver(SolverBase):
         t0 = (sensor.record_start_index - 1) * dt
         pmax_pts = np.abs(p_rec).max(axis=1)
 
-        full_order = np.flatnonzero(np.ones(grid.shape, dtype=bool).flatten(order="F"))
-        full_coords = np.unravel_index(full_order, grid.shape, order="F")
-        from caustica.solvers.kspace.engine import normalize_record_region
-
-        rec = (
-            normalize_record_region(record_region, grid.shape)
-            if record_region is not None
-            else tuple(slice(0, n) for n in grid.shape)
-        )
+        # k-Wave hands back its mask points in Fortran order, so the inverse
+        # map is built from the mask in that same order rather than assumed.
+        rec_order = np.flatnonzero(mask.flatten(order="F"))
+        rec_coords = np.unravel_index(rec_order, grid.shape, order="F")
+        rec_coords = tuple(c - sl.start for c, sl in zip(rec_coords, rec, strict=True))
 
         phasors: dict[int, np.ndarray] = {}
         for h in harmonics:
             pts = single_bin_phasor(p_rec, dt=dt, f0=h * source.f0, t0=t0, axis=1)
-            vol = np.zeros(grid.shape, dtype=np.complex64)
-            vol[full_coords] = pts.astype(np.complex64)
-            phasors[h] = vol[rec]
-        pmax = np.zeros(grid.shape, dtype=np.float32)
-        pmax[full_coords] = pmax_pts.astype(np.float32)
+            vol = np.zeros(rec_shape, dtype=np.complex64)
+            vol[rec_coords] = pts.astype(np.complex64)
+            phasors[h] = vol
+        pmax = np.zeros(rec_shape, dtype=np.float32)
+        pmax[rec_coords] = pmax_pts.astype(np.float32)
 
         return SolverResult(
             phasor=phasors[1],
-            p_max=pmax[rec],
+            p_max=pmax,
             region=rec,
             dt=dt,
             spp=spp,
