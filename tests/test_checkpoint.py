@@ -213,7 +213,7 @@ def test_a_checkpoint_from_older_numerics_is_refused(tmp_path):
     meta = json.loads(str(stored["meta_json"]))
     # Pinned on purpose: bumping the scheme is a deliberate act (it says the
     # trajectory changed), so it has to come here and say so too.
-    assert meta["fingerprint"]["scheme"] == "cw-kspace-pstd/3", meta["fingerprint"]["scheme"]
+    assert meta["fingerprint"]["scheme"] == "cw-kspace-pstd/4", meta["fingerprint"]["scheme"]
     meta["fingerprint"]["scheme"] = "cw-kspace-pstd/1"
     stored["meta_json"] = np.asarray(json.dumps(meta))
     with open(ck_path, "wb") as fh:

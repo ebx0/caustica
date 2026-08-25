@@ -65,8 +65,15 @@ log = logging.getLogger("caustica")
 #: trajectory this engine follows, so a checkpoint from an older one is
 #: refused rather than spliced and a stored result says which generation it
 #: came from. /2 zeroed the Nyquist wavenumber (2026-08-24); /3 gave sources
-#: per-voxel drive weights (2026-08-24).
-NUMERICS_SCHEME = "cw-kspace-pstd/3"
+#: per-voxel drive weights (2026-08-24); /4 made settling wait for the
+#: requested harmonics and not only for the peak (2026-08-25), which moves
+#: every harmonic a run records.
+NUMERICS_SCHEME = "cw-kspace-pstd/4"
+
+#: How many voxels the harmonic convergence probe may carry. Big enough that
+#: the subsample still resolves where a harmonic peaks, small enough that two
+#: complex64 buffers of it are megabytes rather than hundreds of them.
+HARMONIC_PROBE_MAX_POINTS = 1 << 21
 
 
 def normalize_record_region(region: tuple[slice, ...], shape: tuple[int, ...]) -> tuple[slice, ...]:
@@ -309,6 +316,33 @@ def run_cw_kspace_pstd(
         margin = 0
     conv = interior_slices(grid.shape, margin)
 
+    # ---- harmonic convergence probe ----
+    # The peak test below grades the TOTAL field, which the fundamental
+    # dominates. A residual transient worth 1 % of the peak is worth tens of
+    # percent of a second harmonic that is itself a few percent of the peak,
+    # so a run can pass the peak test while its harmonic is still mostly
+    # transient. Measured on a focused bowl at 1 MHz, 12 points per
+    # wavelength, in a medium with beta = 0 where the true 2f0 is zero: the
+    # peak test alone declared convergence at period 27 and the 2f0 channel
+    # read 2.1 % of the fundamental; settling until the harmonic itself
+    # stopped moving reached period 47 and 0.0007 %.
+    #
+    # Graded on a strided subsample of the same region. The question is
+    # whether the harmonic stopped CHANGING, which a subsample answers, and a
+    # full complex buffer per harmonic costs 200 MB per harmonic at the sizes
+    # this runs at. The peak test on the full field is kept alongside it, so
+    # convergence needs both.
+    probe_harmonics = tuple(h for h in harmonics if h != 1) if len(harmonics) > 1 else ()
+    probe: tuple[slice, ...] | None = None
+    if probe_harmonics:
+        conv_points = 1
+        for s, n_axis in zip(conv, grid.shape, strict=True):
+            conv_points *= len(range(*s.indices(n_axis)))
+        stride = 1
+        while conv_points // stride**grid.ndim > HARMONIC_PROBE_MAX_POINTS:
+            stride += 1
+        probe = tuple(slice(s.start, s.stop, stride) for s in conv)
+
     # ---- record region resolved EARLY: it is part of the run fingerprint ----
     rec = (
         normalize_record_region(record_region, grid.shape) if record_region is not None else active
@@ -499,11 +533,24 @@ def run_cw_kspace_pstd(
     if converged_period is None:
         converged_period = eff_max
     period_idx = periods_done  # 0 fresh; the resumed period count otherwise
+    prev_harmonic: dict[int, float] = {}
     while stage == "settle" and not converged and period_idx < eff_max:
         period_idx += 1
         period_peak = xp.zeros((), dtype=xp.float32)
+        acc = (
+            {h: xp.zeros(p[probe].shape, dtype=xp.complex64) for h in probe_harmonics}
+            if probe is not None
+            else {}
+        )
         for _ in range(spp):
             step(n)
+            if acc:
+                # Same kernel and the same convention as the record window
+                # below, so what settles here is what gets written there.
+                sub = p[probe]
+                t_now = n * dt
+                for h in probe_harmonics:
+                    acc[h] += sub * xp.exp(xp.complex64(+1j * h * omega * t_now))
             n += 1
             xp.maximum(period_peak, xp.abs(p[conv]).max(), out=period_peak)
         peak = float(period_peak)
@@ -515,12 +562,26 @@ def run_cw_kspace_pstd(
         last_peak, last_delta = peak, rel
         if period_idx >= tof_periods:
             history.append((period_idx, peak, float("nan") if rel is None else rel))
+        # Every requested harmonic has to have stopped moving too, by the same
+        # relative tolerance. Its own amplitude is the denominator: measuring a
+        # second harmonic against the peak of the field would be measuring it
+        # against the fundamental, which is the mistake this exists to fix.
+        harmonic_now = {h: float(xp.abs(acc[h]).max()) * 2.0 / spp for h in probe_harmonics}
+        harmonic_rel = {
+            h: abs(a - prev_harmonic[h]) / max(prev_harmonic[h], 1e-12)
+            for h, a in harmonic_now.items()
+            if h in prev_harmonic and a > 0.0
+        }
+        harmonics_settled = len(harmonic_rel) == len(probe_harmonics) and all(
+            r < spec.convergence_tol for r in harmonic_rel.values()
+        )
         if period_idx >= eff_min and rel is not None:
-            if peak > 0.0 and rel < spec.convergence_tol:
+            if peak > 0.0 and rel < spec.convergence_tol and harmonics_settled:
                 converged_period = period_idx
                 converged = True
         if not converged:
             prev_peak = peak
+        prev_harmonic = harmonic_now
         _period_boundary()
 
     # ---- honor an explicit t_end floor (production contract hook) ----
