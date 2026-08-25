@@ -111,3 +111,52 @@ def test_the_sensor_records_the_region_and_not_the_whole_grid():
     np.testing.assert_allclose(
         np.abs(part.phasor), np.abs(whole.phasor[region]), rtol=1e-5, atol=1.0
     )
+
+
+class _Captured(Exception):
+    """Raised once the medium has been built, to stop before the solver runs."""
+
+
+@pytest.mark.kwave
+def test_the_adapter_asks_kwave_for_the_absorption_law_the_engine_implements():
+    """``alpha_power = 0`` is a decision, and an expensive one to reverse quietly.
+
+    This library absorbs at a rate that does not depend on frequency, so the
+    adapter tells k-Wave to do the same. That makes the cross-check a
+    comparison of two implementations of one model rather than of two models,
+    which is the only thing a cross-check can honestly be.
+
+    It also means neither code is right about tissue, which absorbs roughly
+    as ``f^1.1``: both under-absorb 2f0 together, by a factor near ``2^1.1``,
+    and no amount of agreement between them will say so. Raising the exponent
+    HERE alone would not fix that -- it would only hide it, by making the two
+    codes disagree at the harmonic for a reason that looks like a numerics
+    error. `scripts/dev_nonlinear.py` N5 measures the gap; closing it means
+    changing the engine, and this test is what makes that a deliberate act.
+    """
+    km = pytest.importorskip("kwave.kmedium")
+    seen: dict = {}
+    original = km.kWaveMedium
+
+    class Capture(original):
+        def __init__(self, *args, **kwargs):
+            seen.update(kwargs)
+            raise _Captured
+
+    dx = C0 / (F0 * 6.0)
+    grid = Grid(shape=(48, 48), dx=dx, pml=PMLSpec(thickness=6 * dx))
+    med = Medium.homogeneous(grid.shape, water(c=C0, alpha_np_m=5.0, beta=3.5))
+    src = _disc_source((24, 8), 3, ndim=2)
+
+    km.kWaveMedium = Capture
+    try:
+        with pytest.raises(_Captured):
+            solvers.get("kwave")().run(grid, med, src, CWRunSpec(min_settle_periods=2))
+    finally:
+        km.kWaveMedium = original
+
+    assert seen["alpha_power"] == 0.0
+    # The coefficient is then a plain dB/cm at every frequency, which is what
+    # alpha_power = 0 makes it mean.
+    np.testing.assert_allclose(seen["alpha_coeff"], alpha_np_m_to_kwave(5.0), rtol=1e-9)
+    np.testing.assert_allclose(seen["sound_speed"], C0)
