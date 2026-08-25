@@ -173,6 +173,94 @@ def plane_cw_source(
     )
 
 
+def disc_cw_source(
+    grid: Grid,
+    f0: float,
+    amplitude: float,
+    radius: float,
+    center_vox: tuple[int, ...],
+    *,
+    normal: tuple[float, float, float] = (0.0, 0.0, 1.0),
+    discretization: str = "offgrid",
+    bli_tolerance: float = 0.2,
+    upsampling: int = 10,
+) -> CWSource:
+    """Flat circular piston: the other source condition the benchmarks use.
+
+    A disc lying in a grid plane has no staircase to speak of — its area is
+    ``pi r^2`` and a voxel mask gets that right to the boundary layer. What a
+    mask still cannot do is put the disc at a position between voxels, or
+    give it exactly its own area rather than a lattice count, so this goes
+    through the same band-limited deposition as everything else.
+
+    ``normal`` lets the piston be tilted; the default faces +z, which is the
+    beam-axis convention shared with :func:`bowl_cw_source`.
+    """
+    if grid.ndim != 3:
+        raise ValueError("disc_cw_source requires a 3-D grid")
+    if len(center_vox) != 3:
+        raise ValueError(f"center_vox must have 3 entries, got {center_vox}")
+    if radius <= 0:
+        raise ValueError(f"radius must be > 0, got {radius}")
+    if discretization not in ("offgrid", "binary"):
+        raise ValueError(f"discretization must be 'offgrid' or 'binary', got {discretization!r}")
+    label = f"disc(r={radius * 1e3:.1f}mm)"
+
+    if discretization == "binary":
+        r_vox = int(np.ceil(radius / grid.dx))
+        span = np.arange(-r_vox, r_vox + 1)
+        ox, oy = np.meshgrid(span, span, indexing="ij")
+        keep = (ox * grid.dx) ** 2 + (oy * grid.dx) ** 2 <= radius**2
+        idx = np.stack(
+            [
+                ox[keep] + center_vox[0],
+                oy[keep] + center_vox[1],
+                np.full(int(keep.sum()), center_vox[2]),
+            ],
+            axis=1,
+        ).astype(np.int64)
+        src = CWSource(
+            indices=idx,
+            phases=np.zeros(len(idx), np.float32),
+            amplitude=amplitude,
+            f0=f0,
+            label=label + " binary",
+            discretization="binary",
+        )
+        src.check_inside(grid)
+        return src
+
+    from caustica.geometry.offgrid import band_limited_weights, disc_points  # noqa: PLC0415
+
+    area_grid = np.pi * (radius / grid.dx) ** 2
+    n_q = max(int(np.ceil(area_grid * upsampling)), 16)
+    pts = disc_points(np.zeros(3), np.asarray(normal, float), radius, n_q)
+    dep = band_limited_weights(
+        grid.shape,
+        pts / grid.dx + np.asarray(center_vox, dtype=np.float64),
+        area_grid / n_q,
+        tolerance=bli_tolerance,
+    )
+    if not len(dep.indices):
+        raise ValueError(f"the disc deposited nothing inside grid {grid.shape}")
+    if dep.dropped_fraction > 1e-6:
+        warnings.warn(
+            f"{dep.dropped_fraction * 100:.2f}% of this disc's drive falls outside "
+            f"grid {grid.shape}. Enlarge the grid or move the centre inward.",
+            CausticaWarning,
+            stacklevel=2,
+        )
+    return CWSource(
+        indices=dep.indices,
+        phases=np.zeros(len(dep.indices), np.float32),
+        amplitude=amplitude,
+        f0=f0,
+        weights=dep.weights.astype(np.float32),
+        label=label,
+        discretization="offgrid",
+    )
+
+
 def bowl_cw_source(
     grid: Grid,
     f0: float,
