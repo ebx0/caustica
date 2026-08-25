@@ -1300,6 +1300,40 @@ uyumluluk derdi yok ama bir MPa'nın hangi nesilden olduğu dosyadan okunabilmel
 - [ ] `result.h5` kökünde numerik nesil + kaynak ayrıklaştırması (`offgrid`/`binary`) damgası
 - Başarı kriteri: eski nesilden bir dosya okunduğunda okuyucu bunu SÖYLER
 
+### M33 — Heterojen ortam doğrulaması `[x]` (2026-08-25, kullanıcı talebi — dataset ortamı)
+Kütüphanenin notlandırıldığı her şey tek tip ortamdaydı: O'Neil, Rayleigh, Fubini, ITRUSST
+su benchmark'ları. Üreteceği dataset değil — meme fantomu katman ve kapanımdır (yağ 1.35,
+deri 1.77, kas 1.66 MRayl'a karşı suyun 1.50'si). Ayakta duran hiçbir kapı bunu kapsamıyordu;
+kayıttaki tek heterojen çapraz-kontrol 2026-08-10 tarihli bir şekil ve bu haftanın iki numerik
+neslinden de eski.
+- [x] `caustica.analytic.layered`: tabakalı akışkan için TAM transfer matrisi (`Layer`,
+      `stack_matrix`, `stack_coefficients`, `half_wave_thickness`, `quarter_wave_impedance`).
+      Soğurma karmaşık dalga sayısıyla giriyor
+- [x] `scripts/dev_hetero.py` — bir karşılaştırma tesadüf olur, o yüzden beş ayrı soru
+      (`benchmarks/reports/hetero/`):
+      | | soru | ölçülen |
+      | H1 | tek arayüz, kapalı forma karşı | dört empedans basamağında (1.35 → 3.00 MRayl) |R| %1.39, |T| %0.08 içinde |
+      | H2 | levha kalınlık taraması, yarım-dalga rezonansı | eğri genlikte 0.0003'e kadar izleniyor; yarım dalgada levha saydam (|T| 0.9999 / tam 1.0000), çeyrekte en çok yansıtıyor (0.1063 / 0.1039) |
+      | H3 | deri/yağ/kas yığını, gerçek soğurmayla | bir, iki ve üç katmanda geçen genlik %0.22, yansıyan %3.15 içinde |
+      | H4 | katmanlı ortamda odaklı çanak, k-Wave'e karşı MUTLAK genlikte | suda %4.76, deri+yağ ardında %2.36; eksenel profiller dokuda 0.98467 korele |
+      | H5 | heterojen cevap dx küçülünce yakınsıyor mu | 8 → 48 nokta/dalgaboyu: geçirme hatası %0.087 → %0.002 (×0.029), yansıma %6.714 → %0.141 |
+      H1–H3 ve H5 1-B'de koşuyor; bu kısıtlama değil amaç — transfer matrisi tam olarak o
+      geometriyi tarif ediyor, dolayısıyla karşılaştırma katmanlı fizikle ilgili ve başka
+      hiçbir şeyle değil. Her heterojen koşu aynı geometrinin homojen koşusuna bölünüyor,
+      böylece kaynak kalibrasyonu sadeleşiyor
+- [x] Yol boyunca üç kusur çıktı, üçü de referansın kendisinde, çözücüde değil: (1) "yarı
+      uzay" arkasında su olan 40 mm'lik bir levhaydı, ikinci yansıma okuma penceresine
+      dönüyordu (%91 hata); (2) homojen referans koşusu daha kısa bir ızgara alıyordu, geçen
+      pencere boşa düşüyordu; (3) `layered.py`'nin dalga sayısının imajiner işareti tersti ve
+      empedansı eşleşmiş bir yutucu `|T| = e^{+αd}` döndürüyordu. Üçüncüsünü ayıran ölçüm:
+      motorun kendi sönümü ölçüldü ve tam olarak α çıktı (oran 0.9998–1.0004), yani yanlış
+      olan yeni referanstı — H3 %24.27'den **%0.22**'ye indi
+- [x] `tests/test_analytic_layered.py` (15 test). İşaret hatasının nöbetçisi
+      `test_a_matched_absorber_only_attenuates`: eşleşmiş yutucu hiç yansıtmaz ve tam
+      `exp(-αd)` geçirir, α ve d üzerinde parametrik
+- Başarı kriterleri: dört bağımsız doğrulama (kapalı form, tam transfer matrisi, k-Wave,
+      inceltme) ve hepsi aynı yöne işaret ediyor; suite 850 geçiyor
+
 ### M15 — Eksenel simetri (AS) çözücüsü `[ ]` (KZK'nın önüne geçti — kullanıcı 2026-08-22)
 - [ ] VERIFY: güncel CuPy'de DCT/DST; yoksa ayna-genişletme DTT katmanı; WSWA/WSWS
 - Başarı kriterleri (değişmedi): AS vs 3D full-wave eksenel r > 0.995, odak < %3;
