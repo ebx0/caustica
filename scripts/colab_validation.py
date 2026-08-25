@@ -197,7 +197,7 @@ def stages(args: argparse.Namespace, out: Path) -> list[tuple[str, str, list[str
                 "--ppw",
                 "16" if full else "8",
                 "--ladder",
-                "6,8,10,12,14,16,20" if full else "6,8",
+                "6,8,10,12,14,16,20,24" if full else "6,8",
                 "--drives",
                 "25e3,50e3,100e3,200e3,400e3,800e3" if full else "50e3,200e3",
             ],
