@@ -67,6 +67,29 @@ if str(REPO / "src") not in sys.path:
 # --------------------------------------------------------------------------
 
 
+def vram_targets(args: argparse.Namespace) -> str:
+    """The VRAM ladder, from the device rather than from a guess.
+
+    A rung is a target for the FIELD; record buffers land on top of it, so a
+    target set at the free VRAM is refused before it solves. Asking for
+    80 GiB on a 95 GiB card needed 94.49 and was refused, which the suite
+    scores as a failed rung rather than as the refusal gate it has its own
+    deliberately-oversized rung for. Half the free memory leaves room for
+    both.
+    """
+    if args.vram_targets:
+        return args.vram_targets
+    try:
+        import cupy
+
+        free_gib = cupy.cuda.runtime.memGetInfo()[0] / 2**30
+    except Exception:
+        return "2,8,14"
+    top = max(4, int(free_gib * 0.5))
+    rungs = [r for r in (2, 4, 8, 16, 32, 48, 64, 96) if r < top] + [top]
+    return ",".join(str(r) for r in rungs[-4:])
+
+
 def stages(args: argparse.Namespace, out: Path) -> list[tuple[str, str, list[str], int]]:
     """``(id, what it answers, argv, timeout_s)``, cheapest first.
 
@@ -101,7 +124,7 @@ def stages(args: argparse.Namespace, out: Path) -> list[tuple[str, str, list[str
         (
             "gpu-gates",
             "how far up a VRAM ladder does this card go, and do numpy and cupy agree?",
-            val("gpu-gates") + ["--out", str(rep / "gpu_gates"), "--targets", args.vram_targets],
+            val("gpu-gates") + ["--out", str(rep / "gpu_gates"), "--targets", vram_targets(args)],
             21600,
         ),
         (
@@ -308,7 +331,22 @@ def run_stage(sid: str, question: str, argv: list[str], timeout: int, log_dir: P
     """
     log_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_dir / f"{sid}.log"
-    env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8", PYTHONUTF8="1")
+    # The repo root goes on PYTHONPATH explicitly. pyproject already carries
+    # ``pythonpath = ["."]`` for pytest, but that resolves against a rootdir
+    # pytest works out for itself, and on a machine where it worked out
+    # differently the suite failed to collect three modules that import
+    # ``tests.test_runner``. An environment variable does not depend on
+    # anyone's rootdir detection.
+    env = dict(
+        os.environ,
+        PYTHONUNBUFFERED="1",
+        PYTHONIOENCODING="utf-8",
+        PYTHONUTF8="1",
+        PYTHONPATH=os.pathsep.join(
+            [str(REPO), str(REPO / "src")]
+            + ([os.environ["PYTHONPATH"]] if os.environ.get("PYTHONPATH") else [])
+        ),
+    )
     t0 = time.perf_counter()
     print(f"\n{'=' * 78}\n[{sid}] {question}\n{' '.join(argv)}\n{'=' * 78}", flush=True)
     try:
@@ -442,7 +480,9 @@ def main(argv=None) -> int:
     ap.add_argument("--f0", type=float, default=1.0e6)
     ap.add_argument("--amplitude", type=float, default=1.0e5)
     ap.add_argument("--itrusst-dx", default="0.25", help="mm; the paper's own is 0.5")
-    ap.add_argument("--vram-targets", default="4,16,32,64", help="GiB ladder for gpu-gates")
+    ap.add_argument(
+        "--vram-targets", default="", help="GiB ladder for gpu-gates (default: from the device)"
+    )
     ap.add_argument("--no-zip", action="store_true")
     args = ap.parse_args(argv)
 
