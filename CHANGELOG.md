@@ -40,6 +40,33 @@ evidence — lives in [`MILESTONES.md`](https://github.com/ebx0/caustica/blob/ma
   `caustica.Study` for sweeps that reuse the single run path.
 - **Reproducibility.** Every wheel and sdist carries the commit it was built
   from, and every report carries the environment that produced it.
+- **The first two ITRUSST benchmarks run as gates.** `caustica.validation
+  itrusst` runs PH1 BM1 and BM2 (water, lossless and 1 dB/cm at 500 kHz)
+  against both source conditions (focused bowl, plane piston) and grades the
+  field over the paper's own 241 x 141 comparison domain against the Rayleigh
+  integral — exact for a baffled source in a homogeneous medium, and the same
+  kind of reference the intercomparison used. Measured: L-infinity 3.41, 3.82,
+  3.79 and 5.03 %, peaks 1.031–1.038 times the reference on its own voxel. The
+  limits are the spread the paper itself reported across eleven models (under
+  10 % for the bowl, under 15 % for the piston), not a tolerance invented here.
+- **The Rayleigh integral takes a complex wavenumber**, so absorption is
+  integrated along every source-to-field path instead of being applied to a
+  lossless answer afterwards. The difference has no fixed sign: a flat
+  piston's paths are never shorter than the axial distance, a concave cap's
+  can be.
+- **`disc_cw_source`**: the flat circular piston, the one shape the library
+  had no constructor for.
+- **`result.h5` carries its numerics generation** — `numerics_scheme` and
+  `source_discretization` at the root, so a pressure in pascals says which
+  side of the 2026-08-24 source changes it came from.
+- **An absolute-amplitude gate** (`M30.absolute` in the analytic suite). Every
+  other check in that suite grades a normalized quantity, which is how two
+  independent 13–18 % absolute errors survived months of green gates. Its
+  tolerance came from measurement: the error follows `3.7 * ppw^-2.5`, so a
+  single number at one spacing cannot separate a coarse grid from a wrong
+  source. The gate is three layers — the source's own measure against the
+  cap's area, the level at a fine rung, and how much a 2x refinement moved the
+  error. Restoring the old binary shell fails all three.
 
 ### Fixed
 
@@ -82,6 +109,10 @@ evidence — lives in [`MILESTONES.md`](https://github.com/ebx0/caustica/blob/ma
   rung's pool cannot be counted as this one's peak.
 - **Calibration** sizes its probes as a fraction of free VRAM and interpolates
   its measurements instead of forcing one power law per card.
+- **The k-Wave adapter records the region it was asked for.** Its binary
+  cannot accumulate a DFT, so it dumps every recorded step to HDF5; the sensor
+  mask was the whole grid regardless of `record_region`. On the ITRUSST
+  geometry that was 731 MB in and 1.6 GB out per run.
 
 ### Changed
 

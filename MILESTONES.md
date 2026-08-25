@@ -1264,12 +1264,27 @@ hata (kase merdiveni, dizi ızgara yuvarlaması) bu körlükte aylarca yaşadı.
       içinde `AMPLITUDE_BAND` olarak zaten vardı; kase kapısı bunun eğri-yüzey karşılığı
 - Not: bu kapı ITRUSST'ın ön provasıdır; M21'in ilk iki benchmark'ı buraya çekilebilir (A kararı)
 
-### M31 — k-Wave üretim yolu `[ ]` (YENİ — kullanıcı 2026-08-25, sabit kısıt 2)
+### M31 — k-Wave üretim yolu `[~]` (YENİ — kullanıcı 2026-08-25, sabit kısıt 2)
 Kullanıcı dataset'ini büyük olasılıkla `kwave` çözücüsüyle üretecek. Adaptör bugüne kadar
-çapraz-kontrol olarak tasarlandı; birinci sınıf üretim yolu olarak denetlenecek.
-- [ ] Denetim: GPU ikilisi, yönlendirme (DAS + eleman-başı), harmonik kaydı, ağırlıklı kaynak,
-      checkpoint/resume, CFL politikası (adaptörde 0.3 sabit), bellek tavanı, hata mesajları
-- [ ] Native çözücüyle kayıt kontratı BİREBİR aynı olmalı (aynı `result.h5`, aynı harmonikler)
+çapraz-kontrol olarak tasarlandı; birinci sınıf üretim yolu olarak denetleniyor.
+- [x] **GPU ikilisi Blackwell'de ÇALIŞIYOR** (2026-08-25). `kspaceFirstOrder-cuda.exe` v1.3.0
+      kurulu geliyor ve sm_120'de koşuyor. İki uyarı: (1) sürücü önbelleği soğukken ilk çağrı
+      ~2.5 dakika JIT/PTX derlemesi ödüyor, sonrası önbellekli — taze bir Colab VM'i bunu bir
+      kez öder, 24 saatlik koşuda önemsiz; (2) ısındıktan sonra hızlanma OMP'ye göre
+      1.38× / 2.00× / 2.27× (0.4 / 3.2 / 12.8 Mvoksel) — mütevazı, çünkü ikili CUDA 11 çağından
+      (`cufft64_10.dll`). Sonuçlar OMP ile 1e-6 bağıl farkla aynı
+- [x] **Darboğaz kaydın kendisiydi, çözücü değil.** k-Wave ikilisi DFT biriktiremiyor, kayıt
+      penceresindeki HER adımı HDF5'e döküyor. Sensör maskesi `record_region`'dan bağımsız
+      olarak bütün ızgaraydı: ITRUSST geometrisinde koşum başına 731 MB girdi + 1.6 GB çıktı.
+      Maske artık istenen bölge (`7d43920`)
+- [x] **Doğruluk karşılaştırması (ITRUSST BM1-SC1, kâğıdın kendi çözünürlüğü 6 nokta/dalgaboyu):**
+      k-Wave L∞ %1.79, oran 0.9987 — native L∞ %3.41, oran 1.0338. Yani KABA ızgarada k-Wave
+      belirgin biçimde daha doğru (kaydırmalı ızgara + kendi k-uzay düzeltmesi). Ama native
+      8 nokta/dalgaboyunda L∞ %1.15 / oran 1.0115'e iniyor ve bunu 63 s'de yapıyor; k-Wave'in
+      6 ppw'deki 187 s'ine (CUDA) ve 668 s'ine (OMP) karşı. **Sonuç: native'i bir basamak ince
+      koşmak, k-Wave'i kaba koşmaktan hem daha doğru hem ~3 kat hızlı**
+- [ ] Kalan denetim: yönlendirme (DAS + eleman-başı) k-Wave yolunda, checkpoint/resume yok,
+      CFL adaptörde 0.3 sabit, bellek tavanı, `result.h5` şema eşitliği
 - Başarı kriteri: aynı iş her iki çözücüde koşar, aynı şemayı yazar, M30 kapısını ikisi de geçer
 
 ### M32 — Numerik nesil damgası `[ ]` (YENİ — kullanıcı 2026-08-25, sabit kısıt 6)
