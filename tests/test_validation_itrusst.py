@@ -83,10 +83,12 @@ def test_the_gate_reads_the_spread_the_paper_reported():
     assert "15 %" in gates["M21.PH1-SC2"].criterion
 
 
-def measured(l_inf: float, peak_err_mm: float = 0.0) -> dict:
+def measured(l_inf: float, peak_err_mm: float = 0.0, dx_mm: float = 0.5) -> dict:
     return {
         "l_inf_pct": l_inf,
+        "dx_mm": dx_mm,
         "peak_axial_mm": {"simulated": 62.0 + peak_err_mm, "reference": 62.0},
+        "axial_maxima": {"reference_mm": [62.0], "worst_offset_mm": peak_err_mm},
     }
 
 
@@ -101,12 +103,52 @@ def test_a_run_inside_the_reported_spread_passes():
     assert all(g.verdict == "PASS" for g in it.evaluate(cases))
 
 
+def test_the_position_tolerance_follows_the_spacing_the_run_used():
+    """Two voxels means two of the run's own voxels, not two of the default's."""
+    cases = {k: measured(3.5) for k in ("BM1-SC1", "BM2-SC1", "BM1-SC2", "BM2-SC2")}
+    cases["BM1-SC2"] = measured(3.5, peak_err_mm=0.75, dx_mm=0.25)
+    gates = {g.id: g for g in it.evaluate(cases)}
+
+    assert gates["M21.PH1-SC2"].verdict == "FAIL", (
+        "0.75 mm is three voxels at dx = 0.25 mm; grading it against the module "
+        "default would call it one and a half and let it through"
+    )
+
+
+def test_the_lossless_pistons_axial_maxima_are_a_near_tie():
+    """Why the gate grades the set of maxima and not the argmax.
+
+    A baffled disc has three on-axis maxima inside the paper's domain, and in
+    lossless water an ideal one puts all three at exactly 2 rho c u0. The
+    Rayleigh integral over the paper's own geometry separates them by 0.19 %,
+    so any model inside the 15 % the paper allows can return a different one
+    as its global maximum -- 29.5 mm from the reference's -- while being a
+    perfectly good model. Absorption breaks the tie, which is why the same
+    check on BM2 means something.
+    """
+    ax = np.arange(241) * 0.5e-3
+    pts = np.column_stack([np.zeros_like(ax), np.zeros_like(ax), ax])
+    lossless = np.abs(it.reference_field(it.SC2, it.BM1, pts))
+    lossy = np.abs(it.reference_field(it.SC2, it.BM2, pts))
+
+    lobes = it._axial_maxima(lossless)
+    assert len(lobes) == 3, f"the paper's domain holds three axial maxima, found {len(lobes)}"
+    tallest, runner_up = np.sort(lossless[lobes])[::-1][:2]
+    assert (tallest - runner_up) / tallest < 0.01, "the tie this check exists for is gone"
+    assert abs(ax[lobes[-1]] - ax[lobes[0]]) * 1e3 > 29.0
+
+    lossy_lobes = it._axial_maxima(lossy)
+    tallest, runner_up = np.sort(lossy[lossy_lobes])[::-1][:2]
+    assert (tallest - runner_up) / tallest > 0.04, "absorption should separate the lobes"
+    assert lossy.argmax() == lossy_lobes[0], "with absorption the near lobe is the tallest"
+
+
 @pytest.mark.parametrize(
     "case,field,value",
     [
         ("BM1-SC1", "l_inf", 12.0),  # over the bowl's 10 %
         ("BM2-SC2", "l_inf", 18.0),  # over the piston's 15 %
-        ("BM1-SC2", "peak", 1.5),  # three voxels off
+        ("BM1-SC2", "peak", 1.5),  # three voxels off at the default spacing
     ],
 )
 def test_a_run_outside_it_fails_the_right_gate(case, field, value):

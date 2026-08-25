@@ -1397,7 +1397,27 @@ notlandırılabiliyor, ve mutlak genlik körlüğünün (M30) ayakta duran biçi
         görünüyor, değil; (2) karşılaştırma kaynak düzlemini İÇERİRSE piston L∞'u %32
         çıkıyor, tamamı disk yüzeyindeki tek voksel sırasından, çünkü Rayleigh integrali
         yüzeyin üstünde geçerli değil. Kâğıdın "from the transducer exit plane onward"
-        ifadesi tam da bunu diyor; bir voksel ötesinden %3.82
+        ifadesi tam da bunu diyor; bir voksel ötesinden %3.82; (3) 0.25 mm'de
+        koşunca BM1-SC2 kapısı düştü, ve düşmesinin nedeni model değil ölçütün
+        kendisiydi — aşağıda
+      - **Ölçüt kusuru, bulundu ve kapatıldı (2026-08-25).** Kayıpsız pistonun
+        karşılaştırma alanı içindeki üç eksenel maksimumu 119.766 / 119.907 /
+        119.999 kPa: %0.19'luk bir yayılım. argmax bu beraberliği kâğıdın izin
+        verdiği %15'in yüzde biriyle karara bağlıyor, yani izin verilen bir hata
+        tepeyi 29.5 mm ötedeki başka bir loba taşıyor ve kapı bunu "29.5 mm tepe
+        konumu hatası" diye raporluyordu. Kapı artık argmax'ı değil, izin verilen
+        hatanın küresel maksimuma çıkarabileceği HER eksenel maksimumu
+        notlandırıyor; 0.5 mm'de üç lobun üçü de referansın koyduğu yerde, sapma
+        0.00 mm. Soğurma beraberliği bozduğu için (%5.04 ayrım) aynı ölçüt BM2'de
+        bir şey söylüyor. İkinci kusur: tolerans modül varsayılanından geliyordu,
+        yani 0.25 mm'lik bir koşuda "iki voksel" aslında dört voksel demekti; artık
+        koşunun kendi dx'inden geliyor. Ayrıca kaynak alanı elendi: her iki kaynak
+        da kendi tam alanını makine hassasiyetinde taşıyor (oran 1.000000)
+      - **Açık.** Kase mutlak seviyesi dx ile yakınsıyor (0.5 mm'de x1.0338,
+        0.25 mm'de x1.0017); piston yakınsamıyor (yakın lob 0.5 mm'de x1.0269,
+        0.25 mm'de x1.043). Kâğıdın %15'inin çok içinde ama M30'un kendi ölçütüne
+        göre bu bir ayrıklama değil kaynak modeli imzası. Rapor artık lob başına
+        oran yazıyor, yani bir sonraki 0.25 mm koşusu bunu lob-lob ölçecek
 - [ ] BM3–BM9 (kemik katmanları, kafatası): yerinde, v0.1 kapısında
 Landscape (doğrulanmış): ekosistem BEKÇİSİZ ve self-serve — Zenodo 10.5281/zenodo.6020543
 (25.3 GB, CC-BY-4.0) + ucl-bug/transcranial-ultrasound-benchmarks (LGPL; 2022'den beri donmuş).

@@ -166,6 +166,12 @@ def _source(sc: SourceCondition, grid, apex, discretization: str):
     )
 
 
+def _axial_maxima(line: np.ndarray, floor: float = 0.0) -> np.ndarray:
+    """Indices of the interior local maxima of an on-axis line, at or above ``floor``."""
+    i = np.arange(1, len(line) - 1)
+    return i[(line[i] >= line[i - 1]) & (line[i] > line[i + 1]) & (line[i] >= floor)]
+
+
 def reference_field(sc: SourceCondition, bm: Benchmark, field_points: np.ndarray) -> np.ndarray:
     """The Rayleigh integral over the transducer's continuous surface.
 
@@ -259,6 +265,25 @@ def measure(
     scale = float(ref.max())
     ip, ja = np.unravel_index(int(plane.argmax()), plane.shape)
     ir, jr = np.unravel_index(int(ref.argmax()), ref.shape)
+
+    # Where the axial maxima LAND, rather than which one happens to be the
+    # tallest. On the lossless piston the three on-axis maxima of a baffled
+    # disc are 119.766, 119.907 and 119.999 kPa: a 0.19 % spread, so the
+    # argmax is decided at a hundredth of the 15 % the paper allows this
+    # model, and a permitted error moves it 29.5 mm to a different lobe. Every
+    # reference maximum a permitted error could promote to global is graded
+    # instead, each against the nearest maximum the simulation actually has.
+    mid = apex[0] - lat_sl.start
+    ref_axis, sim_axis = ref[mid], plane[mid]
+    limit = REPORTED_SPREAD[sc.id]["all_under_pct"] / 100.0
+    graded_ref = np.where(graded, ref_axis, 0.0)
+    contenders = _axial_maxima(graded_ref, floor=graded_ref.max() * (1.0 - limit))
+    found = _axial_maxima(sim_axis)
+    matched = (
+        [int(found[np.abs(ax[found] - ax[i]).argmin()]) for i in contenders] if len(found) else []
+    )
+    offsets = [float(abs(ax[j] - ax[i])) for i, j in zip(contenders, matched, strict=True)]
+    runners = np.sort(graded_ref[contenders])[::-1]
     return {
         "benchmark": bm.id,
         "source_condition": sc.id,
@@ -279,6 +304,22 @@ def measure(
         "peak_ratio": float(plane.max() / scale),
         "peak_axial_mm": {"simulated": float(ax[ja] * 1e3), "reference": float(ax[jr] * 1e3)},
         "peak_lateral_mm": {"simulated": float(lat[ip] * 1e3), "reference": float(lat[ir] * 1e3)},
+        "axial_maxima": {
+            "reference_mm": [float(ax[i] * 1e3) for i in contenders],
+            "reference_pa": [float(graded_ref[i]) for i in contenders],
+            # Lobe for lobe, so a finer run can be compared against a coarser
+            # one. The peak ratio alone cannot: the argmax can sit on a
+            # different lobe at each spacing, and then the two numbers are not
+            # a convergence sequence.
+            "simulated_pa": [float(sim_axis[j]) for j in matched],
+            "ratio": [
+                float(sim_axis[j] / graded_ref[i]) for i, j in zip(contenders, matched, strict=True)
+            ],
+            "worst_offset_mm": float(max(offsets) * 1e3) if offsets else None,
+            "top_two_separation_pct": (
+                float(100.0 * (runners[0] - runners[1]) / runners[0]) if len(runners) > 1 else None
+            ),
+        },
         "reported_spread_pct": REPORTED_SPREAD[sc.id],
         "steps_total": int(res.steps_total),
         "elapsed_s": round(elapsed, 2),
@@ -296,6 +337,12 @@ def evaluate(cases: dict[str, dict]) -> list[Gate]:
     piston a maximum of 15%. Landing inside those is the claim "this model
     belongs in that table"; landing under 1% would be the claim "with the
     best of them", which is a different and stronger thing to say.
+
+    The position check grades every axial maximum the model's own permitted
+    error could promote to global, not the argmax. The paper states no peak
+    position for a piston, and on the lossless one the argmax is a three-way
+    near-tie, so grading it would grade a coin flip; grading the set is both
+    well posed and strictly more than one position.
     """
     gates = []
     for sc_id in ("SC1", "SC2"):
@@ -312,18 +359,15 @@ def evaluate(cases: dict[str, dict]) -> list[Gate]:
                     " %",
                 ).citing(_PAPER)
             )
+            maxima = {} if data.get("error") else data.get("axial_maxima", {})
             checks.append(
                 Check.at_most(
-                    f"{key}: peak position error",
-                    None
-                    if data.get("error")
-                    else abs(
-                        data.get("peak_axial_mm", {}).get("simulated", float("nan"))
-                        - data.get("peak_axial_mm", {}).get("reference", float("nan"))
-                    ),
-                    2 * DX_MM,
+                    f"{key}: axial maxima land where the reference puts them"
+                    f" ({len(maxima.get('reference_mm') or [])} graded)",
+                    maxima.get("worst_offset_mm"),
+                    2 * (data.get("dx_mm") or DX_MM),
                     " mm",
-                ).citing(_PAPER)
+                )
             )
         gates.append(
             Gate(
@@ -332,8 +376,9 @@ def evaluate(cases: dict[str, dict]) -> list[Gate]:
                     f"ITRUSST PH1 benchmarks 1 and 2 with source condition {sc_id}: the "
                     f"field over the paper's comparison domain agrees with the Rayleigh "
                     f"integral to within the spread the intercomparison itself reported "
-                    f"({limit:g} % L-infinity across all eleven models), and the peak "
-                    f"lands within two voxels"
+                    f"({limit:g} % L-infinity across all eleven models), and every "
+                    f"axial maximum a permitted error could promote to global lands "
+                    f"within two voxels of the reference's own"
                 ),
                 required=4,
                 checks=checks,
@@ -389,6 +434,20 @@ def run(
                 f"{d['peak_pa']['reference'] / 1e3:.1f} kPa (x{d['peak_ratio']:.4f}) at "
                 f"{d['peak_axial_mm']['simulated']:.1f} mm vs "
                 f"{d['peak_axial_mm']['reference']:.1f} mm"
+            )
+            am = d["axial_maxima"]
+            sep = am["top_two_separation_pct"]
+            log(
+                f"  axial maxima: {len(am['reference_mm'])} graded, worst offset "
+                f"{am['worst_offset_mm']:.2f} mm of {2 * d['dx_mm']:.2f} allowed"
+                + (f"; the top two are {sep:.2f} % apart" if sep is not None else "")
+            )
+            log(
+                "  lobe ratios: "
+                + ", ".join(
+                    f"{z:.1f} mm x{r:.4f}"
+                    for z, r in zip(am["reference_mm"], am["ratio"], strict=True)
+                )
             )
             log(f"  {d['steps_total']} steps in {d['elapsed_s']} s on {d['backend']}")
 
