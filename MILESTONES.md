@@ -1277,12 +1277,19 @@ Kullanıcı dataset'ini büyük olasılıkla `kwave` çözücüsüyle üretecek.
       penceresindeki HER adımı HDF5'e döküyor. Sensör maskesi `record_region`'dan bağımsız
       olarak bütün ızgaraydı: ITRUSST geometrisinde koşum başına 731 MB girdi + 1.6 GB çıktı.
       Maske artık istenen bölge (`7d43920`)
-- [x] **Doğruluk karşılaştırması (ITRUSST BM1-SC1, kâğıdın kendi çözünürlüğü 6 nokta/dalgaboyu):**
-      k-Wave L∞ %1.79, oran 0.9987 — native L∞ %3.41, oran 1.0338. Yani KABA ızgarada k-Wave
-      belirgin biçimde daha doğru (kaydırmalı ızgara + kendi k-uzay düzeltmesi). Ama native
-      8 nokta/dalgaboyunda L∞ %1.15 / oran 1.0115'e iniyor ve bunu 63 s'de yapıyor; k-Wave'in
-      6 ppw'deki 187 s'ine (CUDA) ve 668 s'ine (OMP) karşı. **Sonuç: native'i bir basamak ince
-      koşmak, k-Wave'i kaba koşmaktan hem daha doğru hem ~3 kat hızlı**
+- [x] **Doğruluk karşılaştırması (ITRUSST BM1-SC1).** Kâğıdın kendi çözünürlüğünde
+      (6 nokta/dalgaboyu) k-Wave L∞ %1.79 / oran 0.9987, native L∞ %3.41 / oran 1.0338 —
+      yani KABA ızgarada k-Wave belirgin biçimde daha doğru (kaydırmalı ızgara + kendi
+      k-uzay düzeltmesi). Native'in merdiveni:
+      | nokta/λ | ızgara | L∞ | oran | süre |
+      | 6.0 | 9.2 Mvox | %3.41 | 1.0338 | 14 s |
+      | 8.0 | 21.5 Mvox | %1.15 | 1.0115 | 63 s |
+      | 12.0 | 68.9 Mvox | **%0.88** | **1.0017** | 1990 s* |
+      *8 GB'lık RTX 5050'de bellek baskısı altında (68.9 Mvox × 14 dizi × 4 B = 3.9 GB,
+      kart 7.8/8.2 GB doluydu); 96 GB'lık kartta temsili değil, yeniden ölçülmeli.
+      **İki sonuç:** (1) native'i 8 ppw'de koşmak k-Wave'i 6 ppw'de koşmaktan hem daha doğru
+      (%1.15 vs %1.79) hem ~3 kat hızlı (63 s vs 187 s); (2) 12 ppw'de native L∞ %0.88 ile
+      kâğıdın **"yedi model %1'in altında"** grubuna giriyor
 - [ ] Kalan denetim: yönlendirme (DAS + eleman-başı) k-Wave yolunda, checkpoint/resume yok,
       CFL adaptörde 0.3 sabit, bellek tavanı, `result.h5` şema eşitliği
 - Başarı kriteri: aynı iş her iki çözücüde koşar, aynı şemayı yazar, M30 kapısını ikisi de geçer
