@@ -1318,7 +1318,31 @@ Kriterler değişmedi (≥1.5× adım; parite korunur; planner rekalibre; TF32 d
 Backlog başlangıcı: research/gemini3_gpu.md §6. Referans nokta (landscape): k-wave-python
 native CuPy T4'te 256³/1000 adım = 382 s; C++ CUDA 51 s — ölçülüp yanına konulur.
 
-### M21 — ITRUSST PH1: DOKUZUN TÜMÜ, akustik-yalnız `[ ]` → **v0.1 kapısı** (kullanıcı 2026-08-22)
+### M21 — ITRUSST PH1: DOKUZUN TÜMÜ, akustik-yalnız `[~]` → **v0.1 kapısı**
+İlk ikisi öne çekildi (kullanıcı kararı A, 2026-08-25): sudaki benchmark'ların TAM referansı
+var — kaynağın kendi geometrisi üzerinden Rayleigh yüzey integrali, ki homojen ortamda,
+soğurmalı ya da soğurmasız, cevabın kendisidir. Kâğıdın su durumlarındaki referansı da
+FOCUS, yani bir Rayleigh-integrali kodu. Dolayısıyla bu ikisi kafatasını beklemeden
+notlandırılabiliyor, ve mutlak genlik körlüğünün (M30) ayakta duran biçimi oluyorlar.
+- [x] **BM1 + BM2 x SC1 + SC2**, `caustica.validation itrusst`, iki kapı
+      (`M21.PH1-SC1`, `M21.PH1-SC2`). Tanımlar kâğıttan alındı (Aubry vd., JASA 152(2),
+      1003, 2022; arXiv:2202.04552): su 1500 m/s + 1000 kg/m³; BM1 kayıpsız, BM2 "1 dB/cm
+      at 500 kHz" (kütüphanenin frekanstan bağımsız soğurması kâğıdın kabul ettiği iki
+      seçenekten biri, tek frekansta ikisi çakışıyor); sürüş 500 kHz, 0.04 m/s yüzey hızı
+      = 60 kPa; SC1 kase ROC 64 mm / açıklık çapı 64 mm (f/1); SC2 düz piston çap 20 mm;
+      karşılaştırma alanı 120 x 70 mm @ 0.5 mm = 241 x 141, kaynağın arkası ilk eksenel
+      düzlemde. **Ölçülen (2026-08-25, cupy):** L∞ %3.41 / %3.82 / %3.79 / %5.03,
+      L2 %0.42–1.00, tepe oranı 1.031–1.038, tepe konumu birebir ya da bir voksel.
+      Kapı kâğıdın KENDİ bildirdiği yayılıma karşı: kase için "hepsi %10 altı", piston
+      için maksimum %15. İkisi de PASS. Kanıt: `benchmarks/reports/itrusst/`
+      - Ölçüm sırasında iki şey öğrenildi ve koda yazıldı: (1) `reference_point` odağa
+        verilirse motor dalganın yalnız oraya ulaşmasını bekliyor ve 120 mm'lik alanın
+        sonu boş kalıyor (95 mm'den sonra 0.3 kPa, referans 104 kPa) — çözücü hatası gibi
+        görünüyor, değil; (2) karşılaştırma kaynak düzlemini İÇERİRSE piston L∞'u %32
+        çıkıyor, tamamı disk yüzeyindeki tek voksel sırasından, çünkü Rayleigh integrali
+        yüzeyin üstünde geçerli değil. Kâğıdın "from the transducer exit plane onward"
+        ifadesi tam da bunu diyor; bir voksel ötesinden %3.82
+- [ ] BM3–BM9 (kemik katmanları, kafatası): yerinde, v0.1 kapısında
 Landscape (doğrulanmış): ekosistem BEKÇİSİZ ve self-serve — Zenodo 10.5281/zenodo.6020543
 (25.3 GB, CC-BY-4.0) + ucl-bug/transcranial-ultrasound-benchmarks (LGPL; 2022'den beri donmuş).
 Yol: 18 permütasyon (9 BM × bowl/piston, 500 kHz, LİNEER) → sonuçlar onların .mat düzeninde →

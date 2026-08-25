@@ -112,6 +112,38 @@ def build_parser() -> argparse.ArgumentParser:
         "smaller bowl for the same tolerances (about a second), used by the test suite",
     )
 
+    i = sub.add_parser(
+        "itrusst",
+        help="run ITRUSST PH1 benchmarks 1 and 2 (water, lossless and 1 dB/cm at "
+        "500 kHz) with both source conditions (focused bowl, plane piston) against "
+        "the Rayleigh integral, and grade the result against the spread the "
+        "published intercomparison itself reported across eleven models "
+        "(exit: 0 all gates pass, 4 a gate failed or is incomplete)",
+    )
+    i.add_argument(
+        "--out",
+        default=None,
+        help="report root (default: benchmarks/reports/itrusst); one timestamped "
+        "subfolder per run, holding REPORT.md and itrusst.json",
+    )
+    i.add_argument(
+        "--solver",
+        default="linear",
+        help="registered solver name (default: linear; 'kwave' drives the external binary)",
+    )
+    i.add_argument("--backend", default="auto", choices=("auto", "numpy", "cupy"))
+    i.add_argument(
+        "--dx-mm",
+        type=float,
+        default=0.5,
+        help="grid spacing; 0.5 mm is the paper's own, giving 6 points per wavelength",
+    )
+    i.add_argument(
+        "--gpu-binary",
+        action="store_true",
+        help="with --solver kwave, drive the CUDA binary instead of the OMP one",
+    )
+
     c = sub.add_parser(
         "compare",
         help="run the SAME job on N registered solvers and table what they disagree "
@@ -176,6 +208,17 @@ def main(argv: list[str] | None = None) -> int:
         from caustica.validation.analytic_suite import analytic_suite
 
         code, _ = analytic_suite(out=args.out, size=args.size)
+        return code
+    if args.suite == "itrusst":
+        from caustica.validation.itrusst import run as itrusst_run
+
+        code, _ = itrusst_run(
+            out=args.out,
+            solver=args.solver,
+            backend=args.backend,
+            dx_mm=args.dx_mm,
+            use_gpu_binary=args.gpu_binary,
+        )
         return code
     if args.suite == "compare":
         from caustica.validation.compare import compare
