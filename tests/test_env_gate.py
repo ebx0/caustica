@@ -7,10 +7,16 @@ full-size refusal is a manual evidence run recorded in the devlog.
 
 import warnings as _warnings
 
+import pytest
 from tests.test_runner import mini_job
 
 from caustica import CausticaWarning
 from caustica.runner import EXIT_CONFIG, EXIT_OK, RunnerOptions, run_job_file
+
+#: Every gate in this module is about the CPU environment, so the module runs
+#: in one: on a CUDA box ``auto`` picks cupy, the gate never fires and each
+#: assertion below passes vacuously or fails. See ``tests/conftest.py``.
+pytestmark = pytest.mark.usefixtures("no_gpu")
 
 
 def opts(**kw) -> RunnerOptions:
@@ -187,12 +193,8 @@ def test_run_meta_environment_composes_env_report(tmp_path):
 
 
 def test_require_gpu_messages_name_the_right_fix(monkeypatch):
-    from caustica import cupy_available, require_gpu
+    from caustica import require_gpu
 
-    if cupy_available():  # pragma: no cover - dev machines have no GPU
-        import pytest
-
-        pytest.skip("GPU present: refusal messages not reachable")
     # local machine: the fix is an install THE USER runs (never pip from us)
     monkeypatch.delenv("COLAB_RELEASE_TAG", raising=False)
     try:
@@ -214,10 +216,6 @@ def test_require_gpu_messages_name_the_right_fix(monkeypatch):
 def test_auto_fallback_warns_exactly_once_per_process():
     from caustica.core import backend as B
 
-    if B.cupy_available():  # pragma: no cover
-        import pytest
-
-        pytest.skip("GPU present: no fallback to warn about")
     old = B._AUTO_FALLBACK_WARNED
     try:
         B._AUTO_FALLBACK_WARNED = False

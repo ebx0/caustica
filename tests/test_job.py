@@ -206,12 +206,17 @@ def test_spiral_natural_vs_steered_phases(tmp_path):
     job, base = load_job(write_job(tmp_path, d, "nat.json"))
     built = build_job(job, base_dir=base, with_medium=False)
     assert built.derived["phases"] == "zeros"
-    assert float(np.abs(built.source.phases).max()) == 0.0
+    # Natural focus means no per-element steering, which after the phasor sum
+    # shows up as a REAL drive: every voxel is 0 or pi, never in between. (The
+    # pi entries are the interpolant's side-lobes carrying a negative weight.)
+    natural = np.abs(built.source.phases)
+    assert np.all((natural < 1e-4) | (np.abs(natural - np.pi) < 1e-4))
     d["source"]["focus"] = {"mode": "steered", "target_mm": [11.0, 9.0, 15.75]}
     job, base = load_job(write_job(tmp_path, d, "steer.json"))
     built2 = build_job(job, base_dir=base, with_medium=False)
     assert built2.derived["phases"].startswith("das")
-    assert float(np.abs(built2.source.phases).max()) > 0.1
+    steered = np.abs(built2.source.phases)
+    assert np.mean((steered > 1e-3) & (np.abs(steered - np.pi) > 1e-3)) > 0.5
     np.testing.assert_array_equal(built2.source.indices, built.source.indices)
 
 

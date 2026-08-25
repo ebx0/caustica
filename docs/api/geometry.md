@@ -51,3 +51,20 @@ your grid. See [anatomical phantoms](../uwcem.md) for the packaged datasets.
 ::: caustica.geometry.volumes.load_labels_txt
 
 ::: caustica.geometry.volumes.resample_scalar
+
+## Off-grid sources
+
+A binary voxel mask cannot represent the area of an oblique surface: a digitized spherical
+cap crosses about 1.18 voxels per `dx²` of its own area, and since the engine drives every
+source voxel alike, a shell-shaped bowl radiates in proportion to its voxel count instead.
+These functions describe a source as a *measure* rather than a set of voxels — the surface's
+closed-form area, spread over grid weights by a band-limited interpolant — which is what
+makes a curved source's realized amplitude match the one that was asked for.
+
+::: caustica.geometry.offgrid.spherical_cap_deposit
+
+::: caustica.geometry.offgrid.band_limited_weights
+
+::: caustica.geometry.offgrid.Deposit
+
+::: caustica.geometry.offgrid.star_offsets

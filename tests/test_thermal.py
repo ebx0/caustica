@@ -666,17 +666,25 @@ def test_a_solver_that_integrates_unstably_cannot_be_configured():
 # --------------------------------------------------------------------------
 
 
-def test_the_named_cpu_backend_and_auto_agree_bit_for_bit():
-    """The solver never touches numpy for state maths — it uses backend.xp.
-
-    On this machine ``auto`` resolves to numpy, so the two must be identical
-    to the last bit; on a CUDA box the same source runs through cupy.
-    """
+def _dose_setup():
     med = ThermalMedium.homogeneous(
         (8, 8, 8), TISSUE.model_copy(update={"perfusion_rate": 0.001}), 1e-3
     )
     t0 = np.full((8, 8, 8), 37.0, np.float32)
     t0[4, 4, 4] = 60.0
+    return med, t0
+
+
+def test_the_named_cpu_backend_and_auto_agree_bit_for_bit(no_gpu):
+    """The solver never touches numpy for state maths — it uses backend.xp.
+
+    With no CUDA device ``auto`` resolves to numpy, so the two runs are the
+    same arithmetic on the same library and must agree to the last bit. The
+    fixture pins that environment rather than assuming it: on a CUDA box
+    ``auto`` picks cupy and this stops being a statement about dispatch at
+    all (that comparison is the next test, and it is not bit-for-bit).
+    """
+    med, t0 = _dose_setup()
     named = PennesSolver(backend="numpy").solve(t0, 5e4, med, 1.0, 30, dose=True)
     auto = PennesSolver(backend="auto").solve(t0, 5e4, med, 1.0, 30, dose=True)
     assert np.array_equal(named.temperature, auto.temperature)
@@ -684,8 +692,30 @@ def test_the_named_cpu_backend_and_auto_agree_bit_for_bit():
     assert named.meta["backend"] == "numpy"
 
 
-@pytest.mark.skipif(cupy_available(), reason="a real GPU answers, so the refusal cannot fire")
-def test_asking_for_the_gpu_without_one_fails_with_the_standard_message():
+@pytest.mark.gpu
+@pytest.mark.skipif(not cupy_available(), reason="needs a CUDA device to compare against")
+def test_cupy_matches_numpy_exactly_on_state_and_to_the_last_bit_of_pow_on_dose():
+    """Cross-backend agreement, with the one place it is not exact named.
+
+    The temperature field is bit-identical: the update is add/multiply on
+    float32, and IEEE 754 pins those on both libraries. CEM43 is not, and
+    cannot be — it accumulates ``R ** (43 - T)``, and ``pow`` is a
+    transcendental whose last bit is a libm-versus-CUDA implementation
+    choice, not a contract. Measured here (RTX 5050, cupy 14.2): the peak
+    dose agrees to 1092.270142 CEM43 minutes on both, max relative
+    difference 2.7e-14. The bound is set two orders above that so it fails
+    on an arithmetic mistake and not on a library update.
+    """
+    med, t0 = _dose_setup()
+    cpu = PennesSolver(backend="numpy").solve(t0, 5e4, med, 1.0, 30, dose=True)
+    gpu = PennesSolver(backend="cupy").solve(t0, 5e4, med, 1.0, 30, dose=True)
+    g_temp, g_dose = np.asarray(gpu.temperature), np.asarray(gpu.dose_cem43)
+    assert np.array_equal(cpu.temperature, g_temp), "the state update is not backend-pure"
+    scale = float(np.max(np.abs(cpu.dose_cem43))) or 1.0
+    assert float(np.max(np.abs(cpu.dose_cem43 - g_dose))) / scale < 1e-12
+
+
+def test_asking_for_the_gpu_without_one_fails_with_the_standard_message(no_gpu):
     med = ThermalMedium.homogeneous((4, 4), TISSUE, 1e-3)
     with pytest.raises(RuntimeError, match="no usable CUDA GPU"):
         PennesSolver(backend="cupy").solve(np.full((4, 4), 37.0, np.float32), None, med, 1.0, 2)

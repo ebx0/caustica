@@ -92,10 +92,39 @@ def test_rayleigh_input_validation(cap):
         rayleigh_pressure(points, areas, U0, np.zeros((3, 2)), k=K)
     with pytest.raises(ValueError, match="src_areas"):
         rayleigh_pressure(points, areas[:-1], U0, np.zeros((3, 3)), k=K)
-    with pytest.raises(ValueError, match="k must be"):
+    with pytest.raises(ValueError, match="positive real part"):
         rayleigh_pressure(points, areas, U0, np.zeros((3, 3)), k=0.0)
+    # A complex k carries absorption; a NEGATIVE imaginary part would be an
+    # amplifying medium, which is not a thing this integral will pretend to.
+    with pytest.raises(ValueError, match="amplifying"):
+        rayleigh_pressure(points, areas, U0, np.zeros((3, 3)), k=K - 5j)
     with pytest.raises(ValueError, match="coincides"):
         rayleigh_pressure(points, areas, U0, points[:1], k=K)
+
+
+def test_a_complex_wavenumber_attenuates_the_rayleigh_field(cap):
+    """Absorption enters as +i*alpha and decays every source-to-field path.
+
+    Not as ``exp(-alpha z)`` applied afterwards, and the difference has no
+    fixed sign: each path carries its own length, and for a CONCAVE source
+    those can be shorter than the axial distance. Measured on this f/1 cap
+    at 1 dB/cm: 4.6 % below the naive decay at 30 mm, 1.5 % above it at
+    90 mm, crossing near the focus. A flat piston sits on the other side of
+    it throughout, since its paths are never shorter than z.
+    """
+    points, _normals, areas = cap
+    z = np.array([0.03, 0.06, 0.09])
+    field = np.column_stack([np.zeros_like(z), np.zeros_like(z), z])
+    alpha = 11.5129  # 1 dB/cm at 500 kHz, the ITRUSST BM2 value
+
+    lossless = np.abs(rayleigh_pressure(points, areas, U0, field, k=K))
+    lossy = np.abs(rayleigh_pressure(points, areas, U0, field, k=K + 1j * alpha))
+
+    assert np.all(lossy < lossless), "a lossy medium cannot raise the field"
+    ratio = lossy / lossless
+    naive = np.exp(-alpha * z)
+    assert np.all(np.abs(ratio / naive - 1.0) < 0.10), "not the absorption asked for"
+    assert ratio[0] / naive[0] < 1.0 < ratio[-1] / naive[-1], "path lengths cross z"
 
 
 def test_oneill_input_validation():

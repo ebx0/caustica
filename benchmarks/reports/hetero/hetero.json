@@ -1,0 +1,358 @@
+{
+  "format": "caustica-hetero/1",
+  "environment": {
+    "caustica": "0.1.0.dev0",
+    "python": "3.12.10",
+    "numpy": "2.2.6",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "generated": "2026-08-25T10:08:40+00:00",
+    "gpu": "NVIDIA GeForce RTX 5050 Laptop GPU"
+  },
+  "checks": [
+    {
+      "id": "H1",
+      "title": "one interface: reflection and transmission against the closed form",
+      "data": {
+        "points_per_wavelength": 32.0,
+        "rows": [
+          {
+            "second_medium": "fat",
+            "z2_mrayl": 1.3514,
+            "reflection": {
+              "exact": 0.052114750648804095,
+              "measured": 0.051921028371253,
+              "rel_error": 0.0037172254522825584
+            },
+            "transmission": {
+              "exact": 0.9478852493511959,
+              "measured": 0.9478982225473492,
+              "rel_error": 1.3686462746648772e-05
+            },
+            "standing_wave_ratio": 1.1095289104072323
+          },
+          {
+            "second_medium": "skin",
+            "z2_mrayl": 1.7744,
+            "reflection": {
+              "exact": 0.08380161250916199,
+              "measured": 0.08320118961977659,
+              "rel_error": 0.007164813079459037
+            },
+            "transmission": {
+              "exact": 1.083801612509162,
+              "measured": 1.0836691533167049,
+              "rel_error": 0.00012221719448315615
+            },
+            "standing_wave_ratio": 1.1815037032721947
+          },
+          {
+            "second_medium": "muscle",
+            "z2_mrayl": 1.659,
+            "reflection": {
+              "exact": 0.050332383665717,
+              "measured": 0.050151537596215934,
+              "rel_error": 0.003593036060087158
+            },
+            "transmission": {
+              "exact": 1.050332383665717,
+              "measured": 1.0502482317612192,
+              "rel_error": 8.011930871268346e-05
+            },
+            "standing_wave_ratio": 1.105599028858345
+          },
+          {
+            "second_medium": "hard (2x Z)",
+            "z2_mrayl": 3.0,
+            "reflection": {
+              "exact": 0.3333333333333333,
+              "measured": 0.3286969236660105,
+              "rel_error": 0.013909229001968448
+            },
+            "transmission": {
+              "exact": 1.3333333333333333,
+              "measured": 1.332202303738732,
+              "rel_error": 0.0008482721959509054
+            },
+            "standing_wave_ratio": 1.9792802543406662
+          }
+        ],
+        "verdict": "across four impedance steps from 1.35 to 3.00 MRayl the reflection coefficient is within 1.39 % of the closed form and the transmission within 0.08 %"
+      },
+      "status": "OK",
+      "elapsed_s": 10.78
+    },
+    {
+      "id": "H2",
+      "title": "slab thickness sweep: the half-wave resonance, against the transfer matrix",
+      "data": {
+        "points_per_wavelength": 32.0,
+        "layer": "fat in water",
+        "rows": [
+          {
+            "thickness_over_lambda": 0.125,
+            "thickness_mm": 0.18125,
+            "reflection": {
+              "exact": 0.0737011153444067,
+              "measured": 0.07551440207290026,
+              "rel_error": 0.024603246776117912
+            },
+            "transmission": {
+              "exact": 0.9972803746173842,
+              "measured": 0.9970847134897481,
+              "abs_error": 0.0001956611276360265
+            }
+          },
+          {
+            "thickness_over_lambda": 0.25,
+            "thickness_mm": 0.3625,
+            "reflection": {
+              "exact": 0.1039471862245761,
+              "measured": 0.10632886147640881,
+              "rel_error": 0.022912359038628895
+            },
+            "transmission": {
+              "exact": 0.9945828183092614,
+              "measured": 0.9944678908788619,
+              "abs_error": 0.00011492743039953623
+            }
+          },
+          {
+            "thickness_over_lambda": 0.375,
+            "thickness_mm": 0.54375,
+            "reflection": {
+              "exact": 0.07370111534440679,
+              "measured": 0.07050850839004201,
+              "rel_error": 0.043318299043992294
+            },
+            "transmission": {
+              "exact": 0.9972803746173844,
+              "measured": 0.9976166048139474,
+              "abs_error": 0.00033623019656303654
+            }
+          },
+          {
+            "thickness_over_lambda": 0.5,
+            "thickness_mm": 0.725,
+            "reflection": {
+              "exact": 5.921244727085888e-17,
+              "measured": 0.012650370074843171,
+              "rel_error": 213643763396162.34
+            },
+            "transmission": {
+              "exact": 1.0,
+              "measured": 0.9999498117327867,
+              "abs_error": 5.0188267213258086e-05
+            }
+          },
+          {
+            "thickness_over_lambda": 0.625,
+            "thickness_mm": 0.9062499999999999,
+            "reflection": {
+              "exact": 0.0737011153444066,
+              "measured": 0.07054639624768452,
+              "rel_error": 0.04280422463052313
+            },
+            "transmission": {
+              "exact": 0.9972803746173843,
+              "measured": 0.9975889078109081,
+              "abs_error": 0.0003085331935238633
+            }
+          },
+          {
+            "thickness_over_lambda": 0.75,
+            "thickness_mm": 1.0875,
+            "reflection": {
+              "exact": 0.1039471862245761,
+              "measured": 0.10584316663534236,
+              "rel_error": 0.018239843516976273
+            },
+            "transmission": {
+              "exact": 0.9945828183092614,
+              "measured": 0.9944612393121989,
+              "abs_error": 0.0001215789970625547
+            }
+          },
+          {
+            "thickness_over_lambda": 1.0,
+            "thickness_mm": 1.45,
+            "reflection": {
+              "exact": 1.1842489454171776e-16,
+              "measured": 0.004636525585240973,
+              "rel_error": 39151612532004.72
+            },
+            "transmission": {
+              "exact": 1.0,
+              "measured": 0.9999328141093287,
+              "abs_error": 6.718589067133962e-05
+            }
+          }
+        ],
+        "verdict": "the transmission curve is followed to 0.0003 in amplitude across the sweep; at the half-wave thickness the slab is transparent (measured |T| 0.9999, exact 1.0000) and at the quarter it reflects most (|R| 0.1063 vs 0.1039)"
+      },
+      "status": "OK",
+      "elapsed_s": 17.81
+    },
+    {
+      "id": "H3",
+      "title": "skin/fat/muscle stack with absorption, against the transfer matrix",
+      "data": {
+        "points_per_wavelength": 32.0,
+        "rows": [
+          {
+            "stack": "skin 2 mm",
+            "n_layers": 1,
+            "reflection": {
+              "exact": 0.1616538624995293,
+              "measured": 0.16371611980584583,
+              "rel_error": 0.012757241147408676
+            },
+            "transmission": {
+              "exact": 0.9572990492549992,
+              "measured": 0.9569442329752362,
+              "rel_error": 0.0003706430921863967
+            }
+          },
+          {
+            "stack": "skin 2 + fat 10",
+            "n_layers": 2,
+            "reflection": {
+              "exact": 0.20229362409740925,
+              "measured": 0.20866686592584194,
+              "rel_error": 0.03150490707192934
+            },
+            "transmission": {
+              "exact": 0.893893696408132,
+              "measured": 0.8928491855440449,
+              "rel_error": 0.0011684956145055728
+            }
+          },
+          {
+            "stack": "skin 2 + fat 10 + muscle 5",
+            "n_layers": 3,
+            "reflection": {
+              "exact": 0.23887753136165152,
+              "measured": 0.24530266881193216,
+              "rel_error": 0.026897202987891018
+            },
+            "transmission": {
+              "exact": 0.8408478291360358,
+              "measured": 0.8390043891802146,
+              "rel_error": 0.0021923585837349156
+            }
+          }
+        ],
+        "verdict": "through one, two and three absorbing layers the transmitted amplitude is within 0.22 % of the transfer matrix and the reflection within 3.15 %"
+      },
+      "status": "OK",
+      "elapsed_s": 9.76
+    },
+    {
+      "id": "H4",
+      "title": "focused bowl through skin and fat, against k-Wave on absolute amplitude",
+      "data": {
+        "points_per_wavelength": 6.0,
+        "grid": [
+          129,
+          129,
+          198
+        ],
+        "megavoxels": 3.294918,
+        "layers": "6 mm water, 2 mm skin, then fat through the focus",
+        "rows": [
+          {
+            "medium": "water",
+            "solver": "linear",
+            "peak_mpa": 0.9504286875,
+            "peak_z_mm": 23.25,
+            "elapsed_s": 2.1
+          },
+          {
+            "medium": "water",
+            "solver": "kwave",
+            "peak_mpa": 0.9072138125,
+            "peak_z_mm": 23.25,
+            "elapsed_s": 38.6
+          },
+          {
+            "medium": "skin + fat",
+            "solver": "linear",
+            "peak_mpa": 0.781543,
+            "peak_z_mm": 22.75,
+            "elapsed_s": 1.9
+          },
+          {
+            "medium": "skin + fat",
+            "solver": "kwave",
+            "peak_mpa": 0.7635225,
+            "peak_z_mm": 22.0,
+            "elapsed_s": 29.0
+          }
+        ],
+        "agreement": {
+          "water": {
+            "peak_rel_difference": 0.04763471896543683,
+            "profile_rms_rel": 0.05341544336258688,
+            "profile_correlation": 0.9846609686289258
+          },
+          "skin + fat": {
+            "peak_rel_difference": 0.023601793005445158,
+            "profile_rms_rel": 0.048075915199963126,
+            "profile_correlation": 0.9846672278015749
+          }
+        },
+        "verdict": "on absolute focal pressure the two codes differ by 4.76 % in water and 2.36 % through skin and fat, so the layers cost 2.40 points of agreement; axial profiles correlate 0.98467 in tissue"
+      },
+      "status": "OK",
+      "elapsed_s": 72.45
+    },
+    {
+      "id": "H5",
+      "title": "does the layered answer converge as dx shrinks?",
+      "data": {
+        "layer": "quarter-wave fat slab in water",
+        "rows": [
+          {
+            "points_per_wavelength": 8.0,
+            "dx_mm": 0.1875,
+            "reflection_rel_error": 0.06713666002321575,
+            "transmission_rel_error": 0.0008657388145436463
+          },
+          {
+            "points_per_wavelength": 12.0,
+            "dx_mm": 0.125,
+            "reflection_rel_error": 0.002210280688767791,
+            "transmission_rel_error": 0.0008626206827091049
+          },
+          {
+            "points_per_wavelength": 16.0,
+            "dx_mm": 0.09375,
+            "reflection_rel_error": 0.026142388113806193,
+            "transmission_rel_error": 0.0003407147555591435
+          },
+          {
+            "points_per_wavelength": 24.0,
+            "dx_mm": 0.0625,
+            "reflection_rel_error": 0.01934161581345466,
+            "transmission_rel_error": 0.00019828248011045889
+          },
+          {
+            "points_per_wavelength": 32.0,
+            "dx_mm": 0.046875,
+            "reflection_rel_error": 0.022912359038628895,
+            "transmission_rel_error": 0.00011555340418498967
+          },
+          {
+            "points_per_wavelength": 48.0,
+            "dx_mm": 0.03125,
+            "reflection_rel_error": 0.001411155173797976,
+            "transmission_rel_error": 2.4839763774130395e-05
+          }
+        ],
+        "transmission_error_shrink": 0.02869198349068372,
+        "verdict": "from 8.0 to 48.0 points per wavelength the transmission error goes 0.087 % -> 0.002 % (x0.029) and the reflection error 6.714 % -> 0.141 %"
+      },
+      "status": "OK",
+      "elapsed_s": 12.17
+    }
+  ]
+}

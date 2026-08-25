@@ -32,7 +32,7 @@ def rayleigh_pressure(
     src_areas: np.ndarray,
     v_n: np.ndarray | complex,
     field_points: np.ndarray,
-    k: float,
+    k: complex,
     rho: float = 1000.0,
     c: float = 1500.0,
     max_pair: int = 2**25,
@@ -45,7 +45,12 @@ def rayleigh_pressure(
     src_areas: ``(n_src,)`` per-point areas [m^2].
     v_n: scalar or ``(n_src,)`` complex normal velocity [m/s].
     field_points: ``(n_field, 3)`` evaluation positions [m].
-    k: angular wavenumber ``omega / c`` [rad/m].
+    k: angular wavenumber [rad/m]. Real for a lossless medium. A COMPLEX
+        ``omega/c + 1j*alpha`` carries absorption: ``exp(1j k r)`` then
+        contributes the ``exp(-alpha r)`` decay along every source-to-field
+        path, which is the exact lossy Rayleigh integral rather than a
+        decay applied to a lossless answer afterwards. ``alpha`` is in Np/m
+        and must be >= 0 — a negative one would be an amplifying medium.
     rho, c: medium density and sound speed.
     max_pair: chunking threshold on n_src * chunk_size.
     """
@@ -58,8 +63,14 @@ def rayleigh_pressure(
         raise ValueError(f"field_points must be (m, 3), got {fld.shape}")
     if areas.shape != (src.shape[0],):
         raise ValueError(f"src_areas must be ({src.shape[0]},), got {areas.shape}")
-    if k <= 0:
-        raise ValueError(f"k must be > 0, got {k}")
+    k = complex(k)
+    if k.real <= 0:
+        raise ValueError(f"k must have a positive real part, got {k}")
+    if k.imag < 0:
+        raise ValueError(
+            f"k has a negative imaginary part ({k.imag:g}), which is an amplifying "
+            f"medium; absorption enters as +1j*alpha with alpha >= 0"
+        )
 
     v = np.broadcast_to(np.asarray(v_n, dtype=np.complex128), (src.shape[0],))
     # Per-source complex strength folded once (v_j * dS_j).

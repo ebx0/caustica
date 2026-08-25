@@ -115,7 +115,7 @@ def test_out_none_still_applies_the_vram_gate(tmp_path, monkeypatch):
     assert not list(tmp_path.iterdir()), "a refused run wrote something"
 
 
-def test_out_none_still_applies_the_cpu_time_gate(tmp_path, monkeypatch):
+def test_out_none_still_applies_the_cpu_time_gate(tmp_path, monkeypatch, no_gpu):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("CAUSTICA_CPU_LIMIT_MIN", "0")
     with pytest.raises(SimulationError) as exc:
@@ -124,7 +124,7 @@ def test_out_none_still_applies_the_cpu_time_gate(tmp_path, monkeypatch):
     assert "allow-slow-cpu" in str(exc.value)
 
 
-def test_allow_slow_cpu_is_the_documented_escape(tmp_path, monkeypatch):
+def test_allow_slow_cpu_is_the_documented_escape(tmp_path, monkeypatch, no_gpu):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("CAUSTICA_CPU_LIMIT_MIN", "0")
     res = simulate(example_job(), out=None, progress=None, allow_slow_cpu=True)

@@ -1,0 +1,156 @@
+{
+  "format": "caustica-thermal/1",
+  "label": "M18 evidence \u2014 1 MHz bowl into a skin/brain phantom, 30 s on + 60 s off",
+  "generated": "2026-08-24T09:32:30+00:00",
+  "caustica": "0.1.0.dev0",
+  "git_commit": "217d21ea434d45be36c2fce03928a8dabe2f5b95",
+  "host": "LOQ",
+  "environment": {
+    "caustica": "0.1.0.dev0",
+    "python": "3.12.10",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "numpy": "2.2.6",
+    "scipy": "1.15.3",
+    "pydantic": "2.13.4",
+    "h5py": "3.16.0",
+    "resolved_backend": "numpy"
+  },
+  "medical_liability_note": "Research use only. caustica computes a modelled thermal dose from a modelled acoustic field; it is not a clinical decision tool and has no regulatory clearance. No number in this report is a medical claim, a treatment plan, or a safety clearance for an exposure of any living subject. Every value is the output of a numerical model of an idealised medium and is bounded by the tissue properties, the acoustic field and the discretisation it was given; the ITRUSST limits are quoted as published thresholds, and quoting them is not a statement that this simulation is an adequate basis for any decision about a person.",
+  "itrusst_source": "ITRUSST consensus on biophysical safety for transcranial ultrasound stimulation, Brain Stimulation (2025): CEM43 <= 2 (brain), <= 16 (bone), <= 21 (skin); dT <= 2 C as the non-thermal criterion.",
+  "verdict": "EXCEEDED",
+  "verdict_dose": "EXCEEDED",
+  "verdict_delta_t": "EXCEEDED",
+  "verdict_basis": "per-tissue ITRUSST classes, each tissue against its own CEM43 limit",
+  "run": {
+    "scheme": "pennes-fd-explicit/1",
+    "backend": "numpy",
+    "boundary": "insulated",
+    "q": "HeatingSource(f0_only) -> none",
+    "perfusion_active": true,
+    "dt_s": 0.16528831012155296,
+    "n_steps": 544,
+    "substeps": 1,
+    "t_end_s": 89.91684070612482,
+    "dt_stable_s": 0.1836536779128366,
+    "phases": [
+      {
+        "t_end_s": 29.917184132001086,
+        "n_steps": 181,
+        "dt_s": 0.16528831012155296,
+        "q": "HeatingSource(f0_only)"
+      },
+      {
+        "t_end_s": 59.999656574123726,
+        "n_steps": 363,
+        "dt_s": 0.16528831012155296,
+        "q": "none"
+      }
+    ],
+    "shape": [
+      40,
+      40,
+      64
+    ],
+    "dx_m": 0.000385,
+    "n_voxels": 102400,
+    "voxel_volume_mm3": 0.05706662499999998
+  },
+  "temperature": {
+    "baseline_c": 37.0,
+    "peak_c": 54.92573547363281,
+    "peak_delta_t_c": 17.925735473632812,
+    "final_peak_c": 39.31901550292969,
+    "final_mean_c": 37.83034087635577,
+    "peak_is_over_history": true
+  },
+  "dose": {
+    "peak_cem43": 472.5360107421875,
+    "mean_cem43": 0.2355389691973218,
+    "n_voxels_with_dose": 102400
+  },
+  "thresholds": [
+    {
+      "name": "CEM43 (brain)",
+      "quantity": "cem43",
+      "tissue_class": "brain",
+      "unit": "equivalent minutes at 43 C",
+      "limit": 2.0,
+      "n_voxels": 966,
+      "n_voxels_total": 102400,
+      "volume_mm3": 55.126359749999985,
+      "fraction": 0.00943359375,
+      "verdict": "EXCEEDED"
+    },
+    {
+      "name": "CEM43 (bone)",
+      "quantity": "cem43",
+      "tissue_class": "bone",
+      "unit": "equivalent minutes at 43 C",
+      "limit": 16.0,
+      "n_voxels": 248,
+      "n_voxels_total": 102400,
+      "volume_mm3": 14.152522999999995,
+      "fraction": 0.002421875,
+      "verdict": "EXCEEDED"
+    },
+    {
+      "name": "CEM43 (skin)",
+      "quantity": "cem43",
+      "tissue_class": "skin",
+      "unit": "equivalent minutes at 43 C",
+      "limit": 21.0,
+      "n_voxels": 187,
+      "n_voxels_total": 102400,
+      "volume_mm3": 10.671458874999997,
+      "fraction": 0.001826171875,
+      "verdict": "EXCEEDED"
+    },
+    {
+      "name": "temperature rise (non-thermal line)",
+      "quantity": "delta_t",
+      "tissue_class": null,
+      "unit": "C",
+      "limit": 2.0,
+      "n_voxels": 20303,
+      "n_voxels_total": 102400,
+      "volume_mm3": 1158.6236873749997,
+      "fraction": 0.198271484375,
+      "verdict": "EXCEEDED"
+    }
+  ],
+  "tissues": [
+    {
+      "id": 1,
+      "label": "Skin",
+      "itrusst_class": "skin",
+      "limit_cem43": 21.0,
+      "n_voxels": 3200,
+      "volume_mm3": 182.61319999999995,
+      "peak_temperature_c": 47.69753646850586,
+      "peak_delta_t_c": 10.69753646850586,
+      "peak_cem43": 4.023717880249023,
+      "n_voxels_over_limit": 0,
+      "volume_over_limit_mm3": 0.0,
+      "verdict": "PASS"
+    },
+    {
+      "id": 2,
+      "label": "Brain",
+      "itrusst_class": "brain",
+      "limit_cem43": 2.0,
+      "n_voxels": 99200,
+      "volume_mm3": 5661.009199999999,
+      "peak_temperature_c": 54.92573547363281,
+      "peak_delta_t_c": 17.925735473632812,
+      "peak_cem43": 472.5360107421875,
+      "n_voxels_over_limit": 916,
+      "volume_over_limit_mm3": 52.27302849999998,
+      "verdict": "EXCEEDED"
+    }
+  ],
+  "notes": [
+    "acoustics: westervelt on (56, 56, 80) at 0.385 mm (270 steps, converged period 28); peak |p| = 1.938 MPa in the recorded interior.",
+    "heating: f0_only at harmonics (1,) (the second harmonic WAS recorded and deliberately not heated \u2014 the M18 honesty contract); Q_max = 1.858e+07 W/m^3, 1091 mW absorbed in the region.",
+    "produced by tests/test_thermal_e2e.py::evidence_run \u2014 the same chain the e2e test runs, one size up."
+  ]
+}

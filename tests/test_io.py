@@ -204,6 +204,8 @@ def test_required_contract_attrs_present_in_every_file(tmp_path, mini_run):
             "region_stop",
             "phase_convention",
             "absorption_model",
+            "numerics_scheme",
+            "source_discretization",
         ):
             assert key in hf.attrs, f"missing root attr {key!r}"
         assert hf.attrs["format"] == RESULT_FORMAT
@@ -424,3 +426,81 @@ def test_tmp_names_are_writer_unique(tmp_path):
     names = {tmp_path_for(target).name for _ in range(8)}
     assert len(names) == 8
     assert all(n.startswith("result.h5.") and n.endswith(".tmp") for n in names)
+
+
+def test_a_result_says_which_numerics_and_which_source_made_it(tmp_path):
+    """A pressure in pascals has to carry its own provenance.
+
+    Two changes on 2026-08-24 moved absolute amplitudes by 13-18 %: zeroing
+    the Nyquist wavenumber, and giving sources their own area instead of
+    their voxel count. There is no backward compatibility to keep before
+    v0.1, but a stored MPa still has to say which side of those it came
+    from — inferring it from a commit date is not provenance.
+    """
+    import h5py
+
+    from caustica.solvers.kspace.engine import NUMERICS_SCHEME
+    from caustica.sources import bowl_cw_source
+
+    grid = Grid(shape=(40, 40, 56), dx=0.5e-3, pml=PMLSpec(thickness=3e-3))
+    medium = Medium.homogeneous(grid.shape, water())
+    spec = CWRunSpec(min_settle_periods=2, max_settle_periods=6, n_record_periods=2)
+    for mode in ("offgrid", "binary"):
+        src = bowl_cw_source(grid, 1e6, 1e5, 4e-3, 10e-3, (20, 20, 8), discretization=mode)
+        res = solvers.get("linear")().run(
+            grid, medium, src, spec, backend="numpy", reference_point=(20, 20, 28)
+        )
+        path = save_result(
+            tmp_path / f"{mode}.h5",
+            res,
+            src,
+            dx=grid.dx,
+            grid_shape=grid.shape,
+            pml_vox=grid.pml_vox,
+        )
+        with h5py.File(path, "r") as hf:
+            assert hf.attrs["numerics_scheme"] == NUMERICS_SCHEME
+            assert hf.attrs["source_discretization"] == mode
+
+
+def test_every_harmonic_is_stored_as_real_and_imaginary(tmp_path):
+    """The recording contract a dataset is built on.
+
+    Real and imaginary parts, separately, per harmonic; amplitude and phase
+    never stored; and the float16 path only taken when the round-trip error
+    it MEASURED is inside the contract, with that measurement written beside
+    the data so a reader can check rather than trust.
+    """
+    import h5py
+
+    from caustica.sources import bowl_cw_source
+
+    # dx fine enough that the third harmonic clears the temporal Nyquist: the
+    # exact-period step gives spp = floor(period / (cfl dx / c)) and the engine
+    # needs 2h < spp, so 0.5 mm (spp = 6) is one harmonic short.
+    grid = Grid(shape=(40, 40, 72), dx=0.25e-3, pml=PMLSpec(thickness=2e-3))
+    medium = Medium.homogeneous(grid.shape, water())
+    spec = CWRunSpec(min_settle_periods=2, max_settle_periods=6, n_record_periods=2)
+    src = bowl_cw_source(grid, 1e6, 1e5, 3e-3, 8e-3, (20, 20, 10))
+    res = solvers.get("linear")().run(
+        grid,
+        medium,
+        src,
+        spec,
+        backend="numpy",
+        reference_point=(20, 20, 42),
+        harmonics=(1, 2, 3),
+    )
+    path = save_result(
+        tmp_path / "h.h5", res, src, dx=grid.dx, grid_shape=grid.shape, pml_vox=grid.pml_vox
+    )
+    with h5py.File(path, "r") as hf:
+        out = hf["output"]
+        for h in (1, 2, 3):
+            assert f"p_real_h{h}" in out and f"p_imag_h{h}" in out
+            for name in (f"p_real_h{h}", f"p_imag_h{h}"):
+                err = float(out[name].attrs["quant_norm_err"])
+                assert err <= 1e-3, f"{name} stored outside the round-trip contract"
+                assert out[name].attrs["stored_dtype"] in ("float16", "float32")
+        assert list(hf.attrs["harmonics"]) == [1, 2, 3]
+        assert not any(n.startswith(("p_amp", "p_phase")) for n in out)

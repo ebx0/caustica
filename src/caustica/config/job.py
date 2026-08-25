@@ -297,6 +297,16 @@ class _ElementArrayConfig(ArrayKindConfig):
     record are identical, so they live here once.
     """
 
+    discretization: Literal["offgrid", "binary"] = Field(
+        "offgrid",
+        description=(
+            "How elements become grid quantities. 'offgrid' (default) places each "
+            "element at its own position and deposits its area through a band-limited "
+            "interpolant; 'binary' is the pre-2026-08-24 voxelizer, kept for "
+            "reproducing older results, and rounds element centres onto the lattice"
+        ),
+    )
+
     def build(self) -> TransducerArray:
         """The transducer this recipe describes (always re-derived, never baked)."""
         raise NotImplementedError(f"{type(self).__name__} must implement build()")
@@ -345,11 +355,17 @@ class _ElementArrayConfig(ArrayKindConfig):
             phases = None
             extra["phases"] = "zeros"
         asrc = arr.voxelize(
-            grid, apex_vox, f0=drive.f0_hz, amplitude=drive.amplitude_pa, phases=phases
+            grid,
+            apex_vox,
+            f0=drive.f0_hz,
+            amplitude=drive.amplitude_pa,
+            phases=phases,
+            discretization=self.discretization,
         )
         extra.update(self.derived(arr))
         extra["source_voxels"] = int(asrc.source.n_points)
         extra["elements_represented"] = asrc.n_elements_represented
+        extra["discretization"] = self.discretization
         return asrc.source, extra
 
 
@@ -400,6 +416,16 @@ class BowlArrayConfig(ArrayKindConfig):
     kind: Literal["bowl"] = "bowl"
     d_outer_mm: float = Field(..., gt=0.0)
     roc_mm: float = Field(..., gt=0.0)
+    discretization: Literal["offgrid", "binary"] = Field(
+        "offgrid",
+        description=(
+            "How the continuous cap becomes grid quantities. 'offgrid' (default) "
+            "spreads the cap's closed-form area over band-limited weights, so the "
+            "realized amplitude matches the request; 'binary' is the pre-2026-08-24 "
+            "one-voxel-thick shell, kept for reproducing older results, and "
+            "over-drives a bowl by 13-25%"
+        ),
+    )
 
     @model_validator(mode="after")
     def _check(self) -> BowlArrayConfig:
@@ -443,9 +469,12 @@ class BowlArrayConfig(ArrayKindConfig):
             aperture_radius=self.d_outer_mm / 2.0 * _MM,
             roc=self.roc_mm * _MM,
             apex_vox=apex_vox,
+            discretization=self.discretization,
         )
         extra: dict[str, Any] = dict(self.derived())
         extra["source_voxels"] = int(src.n_points)
+        extra["discretization"] = self.discretization
+        extra["drive_area_grid_squares"] = float(src.drive_weights.sum())
         return src, extra
 
 

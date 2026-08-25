@@ -1,0 +1,279 @@
+{
+  "format": "caustica-itrusst/1",
+  "generated": "2026-08-25T08:05:03+00:00",
+  "caustica": "0.1.0.dev0",
+  "git_commit": "883d8776f30219f7e867ac3eb827f9fe1fbbfcc5",
+  "host": "LOQ",
+  "solver": "linear",
+  "dx_mm": 0.5,
+  "reference": "Rayleigh surface integral over the transducer's own geometry, which is exact for a baffled source in a homogeneous medium; the intercomparison used FOCUS, a Rayleigh-integral code, for the same reason",
+  "paper": "Aubry et al., J. Acoust. Soc. Am. 152(2), 1003 (2022); arXiv:2202.04552 \u2014 reported L-infinity spread across eleven models against FOCUS",
+  "cases": {
+    "BM1-SC1": {
+      "benchmark": "BM1",
+      "source_condition": "SC1",
+      "solver": "linear",
+      "backend": "cupy",
+      "discretization": "offgrid",
+      "note": "lossless water",
+      "grid": [
+        181,
+        181,
+        281
+      ],
+      "dx_mm": 0.5,
+      "points_per_wavelength": 6.0,
+      "source_points": 90722,
+      "comparison_plane": [
+        141,
+        241
+      ],
+      "comparison_start_mm": 8.574374157795924,
+      "l_inf_pct": 3.409258920377489,
+      "l2_pct": 0.41919461434845384,
+      "l_inf_pct_including_the_source_plane": 3.409258920377489,
+      "peak_pa": {
+        "simulated": 1131423.874535736,
+        "reference": 1094391.0506095574
+      },
+      "peak_ratio": 1.0338387488691103,
+      "peak_axial_mm": {
+        "simulated": 62.0,
+        "reference": 62.0
+      },
+      "peak_lateral_mm": {
+        "simulated": 0.0,
+        "reference": 0.0
+      },
+      "reported_spread_pct": {
+        "best_seven_under_pct": 1.0,
+        "all_under_pct": 10.0
+      },
+      "steps_total": 756,
+      "elapsed_s": 13.66
+    },
+    "BM1-SC2": {
+      "benchmark": "BM1",
+      "source_condition": "SC2",
+      "solver": "linear",
+      "backend": "cupy",
+      "discretization": "offgrid",
+      "note": "lossless water",
+      "grid": [
+        181,
+        181,
+        281
+      ],
+      "dx_mm": 0.5,
+      "points_per_wavelength": 6.0,
+      "source_points": 7993,
+      "comparison_plane": [
+        141,
+        241
+      ],
+      "comparison_start_mm": 0.0,
+      "l_inf_pct": 3.824178279801818,
+      "l2_pct": 0.9988631040314013,
+      "l_inf_pct_including_the_source_plane": 32.17734785435184,
+      "peak_pa": {
+        "simulated": 124537.26998269885,
+        "reference": 119999.12069413619
+      },
+      "peak_ratio": 1.0378181878526418,
+      "peak_axial_mm": {
+        "simulated": 32.5,
+        "reference": 32.5
+      },
+      "peak_lateral_mm": {
+        "simulated": 0.0,
+        "reference": 0.0
+      },
+      "reported_spread_pct": {
+        "best_four_under_pct": 1.0,
+        "all_under_pct": 15.0
+      },
+      "steps_total": 732,
+      "elapsed_s": 13.48
+    },
+    "BM2-SC1": {
+      "benchmark": "BM2",
+      "source_condition": "SC1",
+      "solver": "linear",
+      "backend": "cupy",
+      "discretization": "offgrid",
+      "note": "water with 1 dB/cm at 500 kHz",
+      "grid": [
+        181,
+        181,
+        281
+      ],
+      "dx_mm": 0.5,
+      "points_per_wavelength": 6.0,
+      "source_points": 90722,
+      "comparison_plane": [
+        141,
+        241
+      ],
+      "comparison_start_mm": 8.574374157795924,
+      "l_inf_pct": 3.786817277879349,
+      "l2_pct": 0.47914052880910757,
+      "l_inf_pct_including_the_source_plane": 3.786817277879349,
+      "peak_pa": {
+        "simulated": 559453.8131422279,
+        "reference": 539251.4867193536
+      },
+      "peak_ratio": 1.0374636452942936,
+      "peak_axial_mm": {
+        "simulated": 61.0,
+        "reference": 60.5
+      },
+      "peak_lateral_mm": {
+        "simulated": 0.0,
+        "reference": 0.0
+      },
+      "reported_spread_pct": {
+        "best_seven_under_pct": 1.0,
+        "all_under_pct": 10.0
+      },
+      "steps_total": 756,
+      "elapsed_s": 14.04
+    },
+    "BM2-SC2": {
+      "benchmark": "BM2",
+      "source_condition": "SC2",
+      "solver": "linear",
+      "backend": "cupy",
+      "discretization": "offgrid",
+      "note": "water with 1 dB/cm at 500 kHz",
+      "grid": [
+        181,
+        181,
+        281
+      ],
+      "dx_mm": 0.5,
+      "points_per_wavelength": 6.0,
+      "source_points": 7993,
+      "comparison_plane": [
+        141,
+        241
+      ],
+      "comparison_start_mm": 0.0,
+      "l_inf_pct": 5.0312866089498876,
+      "l2_pct": 0.7046112010005104,
+      "l_inf_pct_including_the_source_plane": 34.35851938550198,
+      "peak_pa": {
+        "simulated": 114438.93207318435,
+        "reference": 110951.61345960986
+      },
+      "peak_ratio": 1.0314309860382878,
+      "peak_axial_mm": {
+        "simulated": 3.0,
+        "reference": 3.0
+      },
+      "peak_lateral_mm": {
+        "simulated": 0.0,
+        "reference": 0.0
+      },
+      "reported_spread_pct": {
+        "best_four_under_pct": 1.0,
+        "all_under_pct": 15.0
+      },
+      "steps_total": 732,
+      "elapsed_s": 13.41
+    }
+  },
+  "gates": [
+    {
+      "id": "M21.PH1-SC1",
+      "criterion": "ITRUSST PH1 benchmarks 1 and 2 with source condition SC1: the field over the paper's comparison domain agrees with the Rayleigh integral to within the spread the intercomparison itself reported (10 % L-infinity across all eleven models), and the peak lands within two voxels",
+      "required": 4,
+      "verdict": "PASS",
+      "n_pass": 4,
+      "checks": [
+        {
+          "name": "BM1-SC1: L-infinity vs the Rayleigh integral",
+          "verdict": "PASS",
+          "detail": "3.409e+00 % (limit 1.000e+01 %)",
+          "value": 3.409258920377489,
+          "limit": 10.0,
+          "unit": " %",
+          "source": "Aubry et al., J. Acoust. Soc. Am. 152(2), 1003 (2022); arXiv:2202.04552 \u2014 reported L-infinity spread across eleven models against FOCUS"
+        },
+        {
+          "name": "BM1-SC1: peak position error",
+          "verdict": "PASS",
+          "detail": "0.000e+00 mm (limit 1.000e+00 mm)",
+          "value": 0.0,
+          "limit": 1.0,
+          "unit": " mm",
+          "source": "Aubry et al., J. Acoust. Soc. Am. 152(2), 1003 (2022); arXiv:2202.04552 \u2014 reported L-infinity spread across eleven models against FOCUS"
+        },
+        {
+          "name": "BM2-SC1: L-infinity vs the Rayleigh integral",
+          "verdict": "PASS",
+          "detail": "3.787e+00 % (limit 1.000e+01 %)",
+          "value": 3.786817277879349,
+          "limit": 10.0,
+          "unit": " %",
+          "source": "Aubry et al., J. Acoust. Soc. Am. 152(2), 1003 (2022); arXiv:2202.04552 \u2014 reported L-infinity spread across eleven models against FOCUS"
+        },
+        {
+          "name": "BM2-SC1: peak position error",
+          "verdict": "PASS",
+          "detail": "5.000e-01 mm (limit 1.000e+00 mm)",
+          "value": 0.5,
+          "limit": 1.0,
+          "unit": " mm",
+          "source": "Aubry et al., J. Acoust. Soc. Am. 152(2), 1003 (2022); arXiv:2202.04552 \u2014 reported L-infinity spread across eleven models against FOCUS"
+        }
+      ]
+    },
+    {
+      "id": "M21.PH1-SC2",
+      "criterion": "ITRUSST PH1 benchmarks 1 and 2 with source condition SC2: the field over the paper's comparison domain agrees with the Rayleigh integral to within the spread the intercomparison itself reported (15 % L-infinity across all eleven models), and the peak lands within two voxels",
+      "required": 4,
+      "verdict": "PASS",
+      "n_pass": 4,
+      "checks": [
+        {
+          "name": "BM1-SC2: L-infinity vs the Rayleigh integral",
+          "verdict": "PASS",
+          "detail": "3.824e+00 % (limit 1.500e+01 %)",
+          "value": 3.824178279801818,
+          "limit": 15.0,
+          "unit": " %",
+          "source": "Aubry et al., J. Acoust. Soc. Am. 152(2), 1003 (2022); arXiv:2202.04552 \u2014 reported L-infinity spread across eleven models against FOCUS"
+        },
+        {
+          "name": "BM1-SC2: peak position error",
+          "verdict": "PASS",
+          "detail": "0.000e+00 mm (limit 1.000e+00 mm)",
+          "value": 0.0,
+          "limit": 1.0,
+          "unit": " mm",
+          "source": "Aubry et al., J. Acoust. Soc. Am. 152(2), 1003 (2022); arXiv:2202.04552 \u2014 reported L-infinity spread across eleven models against FOCUS"
+        },
+        {
+          "name": "BM2-SC2: L-infinity vs the Rayleigh integral",
+          "verdict": "PASS",
+          "detail": "5.031e+00 % (limit 1.500e+01 %)",
+          "value": 5.0312866089498876,
+          "limit": 15.0,
+          "unit": " %",
+          "source": "Aubry et al., J. Acoust. Soc. Am. 152(2), 1003 (2022); arXiv:2202.04552 \u2014 reported L-infinity spread across eleven models against FOCUS"
+        },
+        {
+          "name": "BM2-SC2: peak position error",
+          "verdict": "PASS",
+          "detail": "0.000e+00 mm (limit 1.000e+00 mm)",
+          "value": 0.0,
+          "limit": 1.0,
+          "unit": " mm",
+          "source": "Aubry et al., J. Acoust. Soc. Am. 152(2), 1003 (2022); arXiv:2202.04552 \u2014 reported L-infinity spread across eleven models against FOCUS"
+        }
+      ]
+    }
+  ],
+  "verdict": "PASS",
+  "elapsed_s": 168.67
+}

@@ -54,6 +54,13 @@ def perfect_results() -> dict[str, dict]:
             "width_oneill_mm": 15.97,
             "elapsed_s": 7.0,
         },
+        "absolute": {
+            "drive_over_cap_area": 1.0,
+            "ratio_coarse": 1.1165,
+            "ratio_fine": 1.0116,
+            "error_shrink_factor": 0.10,
+            "elapsed_s": 9.0,
+        },
         "linear_limit": {
             "phasor_max_abs_diff_pa": 0.0,
             "pmax_max_abs_diff_pa": 0.0,
@@ -130,7 +137,7 @@ def test_a_check_that_could_not_be_measured_is_never_a_pass():
 
 def test_a_missing_scenario_leaves_its_gate_open_rather_than_passing_it():
     gates = an.evaluate({})
-    assert [g.verdict for g in gates] == ["INCOMPLETE"] * 4
+    assert [g.verdict for g in gates] == ["INCOMPLETE"] * 5
     assert all(c.verdict == "SKIP" for g in gates for c in g.checks)
     assert an.overall_verdict(gates) == "INCOMPLETE"
 
@@ -148,7 +155,7 @@ def test_a_scenario_that_raised_contributes_nothing(tmp_path):
     assert "RuntimeError" in payload["scenarios"]["oneill"]["error"]
     assert any("oneill" in note for note in payload["notes"])
     # The other three gates still closed: one bad scenario does not lose the run.
-    assert [g["verdict"] for g in payload["gates"] if g["id"] != "M4.oneill"] == ["PASS"] * 3
+    assert [g["verdict"] for g in payload["gates"] if g["id"] != "M4.oneill"] == ["PASS"] * 4
 
 
 def test_a_zero_difference_is_the_only_passing_linear_limit():
@@ -166,7 +173,7 @@ def test_a_faithful_machine_passes_every_gate_it_measured(tmp_path):
     code, payload = run_suite(tmp_path)
     assert code == an.EXIT_OK
     assert payload["verdict"] == "PASS"
-    assert [g["verdict"] for g in payload["gates"]] == ["PASS"] * 4
+    assert [g["verdict"] for g in payload["gates"]] == ["PASS"] * 5
 
 
 @pytest.mark.parametrize(
@@ -416,6 +423,20 @@ def planned_results() -> dict[str, dict]:
             "vram_gib": 0.02616,
             "note": None,
         },
+        # Two rungs, so two solves: the absolute check measures the same bowl
+        # at the suite's spacing and at half of it.
+        "absolute": {
+            "target": "cpu",
+            "source": "calibrated",
+            "solves": 2,
+            "predicted_s": 11.7,
+            "measured_s": 6.41,
+            "predicted_steps": 456,
+            "actual_steps": 456,
+            "warmup_s": 6.0,
+            "vram_gib": 0.2094,
+            "note": None,
+        },
         "linear_limit": {
             "target": "cpu",
             "source": "calibrated",
@@ -498,8 +519,8 @@ def test_the_planner_rows_are_informational_and_no_gate_can_read_them(tmp_path):
 
     code, payload = run_suite(tmp_path, results)
     assert code == an.EXIT_OK and payload["verdict"] == "PASS"
-    assert [g["verdict"] for g in payload["gates"]] == ["PASS"] * 4
-    assert len(payload["gates"]) == 4
+    assert [g["verdict"] for g in payload["gates"]] == ["PASS"] * 5
+    assert len(payload["gates"]) == 5
     blob = json.dumps(payload["gates"])
     assert "planner" not in blob and "predicted_s" not in blob
     assert payload["planner"]["gated"] is False and payload["planner"]["informational"] is True
@@ -641,3 +662,67 @@ def test_the_quick_path_really_solves_grades_and_reports(tmp_path):
 
     (folder,) = tmp_path.iterdir()
     assert (folder / "REPORT.md").is_file() and (folder / "analytic.json").is_file()
+
+
+# ------------------------------------- the absolute-amplitude gate (M30)
+
+
+def test_the_absolute_gate_catches_a_source_that_does_not_shrink():
+    """The gate exists because of a defect; it has to fail on that defect.
+
+    A source-model error is a constant offset: refining the grid does not
+    move it. That is what separates it from an honest discretization error,
+    and it is what the binary bowl did — measured 1.1275 at four points per
+    wavelength and 1.1932 at eight, so the error GREW. Every one of the three
+    checks has to see it, or the gate is decoration.
+    """
+    scenarios = perfect_results()
+    scenarios["absolute"] = {
+        "drive_over_cap_area": 1.2146,  # the staircase factor, measured
+        "ratio_coarse": 1.1275,
+        "ratio_fine": 1.1932,
+        "error_shrink_factor": 1.515,
+        "elapsed_s": 9.0,
+    }
+    gate = next(g for g in an.evaluate(scenarios) if g.id == "M30.absolute")
+
+    assert gate.verdict == "FAIL"
+    assert [c.verdict for c in gate.checks] == ["FAIL", "FAIL", "FAIL"]
+
+
+def test_the_absolute_gate_passes_the_shipped_source_with_room():
+    """...and it must not be so tight that an honest run trips it.
+
+    Measured on the shipped off-grid bowl at the suite's quick preset: the
+    drive is the cap's area to five figures, the fine rung sits at 1.0116,
+    and a 2x refinement cut the error to a tenth. The limits leave six times
+    that much room on the discriminating check.
+    """
+    gate = next(g for g in an.evaluate(perfect_results()) if g.id == "M30.absolute")
+
+    assert gate.verdict == "PASS"
+    assert an.ABSOLUTE_SHRINK_MAX > 5 * 0.10, "no margin left on the shrink check"
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("drive_over_cap_area", 1.02),  # 2 % of area is 20x the tolerance
+        ("ratio_fine", 1.15),
+        ("error_shrink_factor", 0.95),
+    ],
+)
+def test_each_absolute_check_fails_on_its_own(field, value):
+    """Three checks, three independent ways to be wrong.
+
+    A gate whose checks all key on the same number is one check wearing
+    three names — and this one is deliberately layered: the source's measure
+    is exact and instant, the level is what a reader quotes, and the shrink
+    is what tells the two kinds of error apart.
+    """
+    scenarios = perfect_results()
+    scenarios["absolute"] = {**scenarios["absolute"], field: value}
+    gate = next(g for g in an.evaluate(scenarios) if g.id == "M30.absolute")
+
+    assert gate.verdict == "FAIL"
+    assert sum(c.verdict == "FAIL" for c in gate.checks) == 1

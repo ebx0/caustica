@@ -131,6 +131,14 @@ def save_result(
             hf.attrs["region_stop"] = [s.stop for s in result.region]
             hf.attrs["phase_convention"] = PHASE_CONVENTION
             hf.attrs["absorption_model"] = ABSORPTION_MODEL
+            # Which numerics produced this field, and how the source that fed
+            # them was discretized. Both moved in 2026-08-24 by 13-18 % of an
+            # absolute amplitude; a stored pressure has to say which side of
+            # that it came from rather than leaving it to a commit date.
+            hf.attrs["numerics_scheme"] = str(result.meta.get("numerics_scheme", "unknown"))
+            hf.attrs["source_discretization"] = str(
+                getattr(source, "discretization", "") or "unknown"
+            )
             for key, val in (extra_attrs or {}).items():
                 hf.attrs[key] = val
 

@@ -1,0 +1,177 @@
+{
+  "format": "caustica-nonlinear/1",
+  "environment": {
+    "caustica": "0.1.0.dev0",
+    "python": "3.12.10",
+    "numpy": "2.2.6",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "generated": "2026-08-25T11:33:28+00:00",
+    "gpu": "NVIDIA GeForce RTX 5050 Laptop GPU"
+  },
+  "checks": [
+    {
+      "id": "N1",
+      "title": "does 2f0 grow as the square of f0, and stop when it should?",
+      "data": {
+        "points_per_wavelength": 12.0,
+        "grid": [
+          250,
+          250,
+          400
+        ],
+        "dx_mm": 0.125,
+        "rows": [
+          {
+            "drive_kpa": 25.0,
+            "p1_mpa": 0.233368453125,
+            "p2_mpa": 0.0018337978515625,
+            "p2_over_p1": 0.007857950922699291,
+            "focal_gain": 9.334738125,
+            "shock_distance_mm": 657.6331801765269,
+            "elapsed_s": 71.8
+          },
+          {
+            "drive_kpa": 50.0,
+            "p1_mpa": 0.46671603125,
+            "p2_mpa": 0.00733435498046875,
+            "p2_over_p1": 0.015714812625624266,
+            "focal_gain": 9.334320625,
+            "shock_distance_mm": 328.83129720320807,
+            "elapsed_s": 71.9
+          },
+          {
+            "drive_kpa": 100.0,
+            "p1_mpa": 0.9332641875,
+            "p2_mpa": 0.029318361328125,
+            "p2_over_p1": 0.031414857358517255,
+            "focal_gain": 9.332641875,
+            "shock_distance_mm": 164.4452235894571,
+            "elapsed_s": 71.8
+          },
+          {
+            "drive_kpa": 200.0,
+            "p1_mpa": 1.86518425,
+            "p2_mpa": 0.1169530546875,
+            "p2_over_p1": 0.0627032180265837,
+            "focal_gain": 9.32592125,
+            "shock_distance_mm": 82.28186463694966,
+            "elapsed_s": 72.0
+          },
+          {
+            "drive_kpa": 400.0,
+            "p1_mpa": 3.71960475,
+            "p2_mpa": 0.4626395625,
+            "p2_over_p1": 0.1243786890260316,
+            "focal_gain": 9.299011875,
+            "shock_distance_mm": 41.25998548137957,
+            "elapsed_s": 71.9
+          },
+          {
+            "drive_kpa": 800.0,
+            "p1_mpa": 7.352748,
+            "p2_mpa": 1.767550375,
+            "p2_over_p1": 0.24039316660927315,
+            "focal_gain": 9.190935,
+            "shock_distance_mm": 20.87258232996296,
+            "elapsed_s": 71.8
+          }
+        ],
+        "quasilinear_slope": 1.9997729600861573,
+        "slope_over_full_ladder": 1.9930090123050974,
+        "leaves_the_quasilinear_regime": false,
+        "verdict": "over the weakest 3 rungs the second harmonic grows as the 2.000 power of the fundamental, against the quasi-linear prediction of 2; across the whole ladder the slope is unchanged at 1.993, with 2f0 reaching 24.0 % of f0 at 7.35 MPa"
+      },
+      "status": "OK",
+      "elapsed_s": 444.31
+    },
+    {
+      "id": "N3",
+      "title": "does 2f0 converge as dx shrinks, and where does it stop moving?",
+      "data": {
+        "drive_kpa": 150.0,
+        "reference_ppw": 14.0,
+        "rows": [
+          {
+            "ppw_at_f0": 6.0,
+            "ppw_at_2f0": 3.0,
+            "ran_on": "cupy",
+            "converged_period": 48,
+            "dx_mm": 0.25,
+            "megavoxels": 3.645,
+            "samples_per_period": 12,
+            "p1_mpa": 1.4458745,
+            "p2_mpa": 0.0783671171875,
+            "p2_over_p1_pct": 5.420049747574911,
+            "elapsed_s": 3.2,
+            "p1_rel_to_finest": 0.0332214716841212,
+            "p2_rel_to_finest": 0.19808161055946685
+          },
+          {
+            "ppw_at_f0": 8.0,
+            "ppw_at_2f0": 4.0,
+            "ran_on": "cupy",
+            "converged_period": 48,
+            "dx_mm": 0.1875,
+            "megavoxels": 8.748,
+            "samples_per_period": 16,
+            "p1_mpa": 1.414451,
+            "p2_mpa": 0.070428453125,
+            "p2_over_p1_pct": 4.9792077014332765,
+            "elapsed_s": 12.3,
+            "p1_rel_to_finest": 0.010766248277479726,
+            "p2_rel_to_finest": 0.0767147954074652
+          },
+          {
+            "ppw_at_f0": 10.0,
+            "ppw_at_2f0": 5.0,
+            "ran_on": "cupy",
+            "converged_period": 48,
+            "dx_mm": 0.15000000000000002,
+            "megavoxels": 15.116544,
+            "samples_per_period": 20,
+            "p1_mpa": 1.404593125,
+            "p2_mpa": 0.06763928125,
+            "p2_over_p1_pct": 4.815578265770025,
+            "elapsed_s": 27.2,
+            "p1_rel_to_finest": 0.0037218138433861066,
+            "p2_rel_to_finest": 0.034073753449369845
+          },
+          {
+            "ppw_at_f0": 12.0,
+            "ppw_at_2f0": 6.0,
+            "ran_on": "cupy",
+            "converged_period": 47,
+            "dx_mm": 0.125,
+            "megavoxels": 25.0,
+            "samples_per_period": 25,
+            "p1_mpa": 1.399476125,
+            "p2_mpa": 0.065891625,
+            "p2_over_p1_pct": 4.708306474324455,
+            "elapsed_s": 71.7,
+            "p1_rel_to_finest": 6.520722185174268e-05,
+            "p2_rel_to_finest": 0.007355470451991636
+          },
+          {
+            "ppw_at_f0": 14.0,
+            "ppw_at_2f0": 7.0,
+            "ran_on": "cupy",
+            "converged_period": 47,
+            "dx_mm": 0.10714285714285715,
+            "megavoxels": 43.2,
+            "samples_per_period": 29,
+            "p1_mpa": 1.399384875,
+            "p2_mpa": 0.0654105,
+            "p2_over_p1_pct": 4.6742323122507665,
+            "elapsed_s": 127.3,
+            "p1_rel_to_finest": 0.0,
+            "p2_rel_to_finest": 0.0
+          }
+        ],
+        "settles_within_5pct_at_ppw": 10.0,
+        "verdict": "against the finest rung (14 points per wavelength at f0, 7 at 2f0), the fundamental is within 3.3 % from the coarsest rung on, while the second harmonic is 19.8 % out there and first comes within 5 % at 10 points per wavelength at f0"
+      },
+      "status": "OK",
+      "elapsed_s": 250.18
+    }
+  ]
+}

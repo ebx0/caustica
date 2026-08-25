@@ -435,14 +435,17 @@ def test_existing_validations_apply_to_elements(tmp_path):
     """Shape match, the dedup refusal and the source-PML gate are SHARED code."""
     pos = ring_positions_mm().tolist()
 
-    # two elements inside one voxel -> voxelize's dedup refusal (dx = 0.5 mm)
+    # elements smaller than half a voxel -> voxelize's resolution refusal.
+    # (Before 2026-08-24 this was refused as "lost all voxels to
+    # deduplication"; off-grid elements superpose instead of deduplicating, so
+    # the refusal is now stated as what it always meant.)
     collided = [*pos, [pos[0][0] + 0.05, pos[0][1], pos[0][2]]]
     d = elements_job_dict(
         {"kind": "elements", "positions_mm": collided, "elem_radius_mm": 0.2, "roc_mm": ROC_MM}
     )
     report = validate_job(write_job(tmp_path, d, "coarse.json"))
     assert not report.ok
-    assert any("deduplication" in e for e in report.errors), report.render()
+    assert any("voxels at dx" in e for e in report.errors), report.render()
 
     # apex inside the sponge -> the shared source-clears-PML gate
     d = elements_job_dict(

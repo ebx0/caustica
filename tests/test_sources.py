@@ -54,11 +54,21 @@ def test_plane_source_1d_is_single_voxel():
 
 
 def test_bowl_source_voxelization_invariants():
+    """The binary shell: one voxel thick, apex on its voxel, inside the aperture."""
     g = Grid(shape=(64, 64, 80), dx=0.5e-3)
     a, roc = 6e-3, 15e-3  # 12 and 30 voxels
     apex = (32, 32, 10)
-    src = bowl_cw_source(g, f0=1e6, amplitude=1e5, aperture_radius=a, roc=roc, apex_vox=apex)
+    src = bowl_cw_source(
+        g,
+        f0=1e6,
+        amplitude=1e5,
+        aperture_radius=a,
+        roc=roc,
+        apex_vox=apex,
+        discretization="binary",
+    )
     assert src.n_points > 100
+    assert src.weights is None  # a binary shell drives every voxel alike
     # Unique voxels only (CWSource enforces), all inside the grid.
     src.check_inside(g)
     # Depth span ~ bowl depth h; transverse extent within the aperture.
@@ -67,6 +77,46 @@ def test_bowl_source_voxelization_invariants():
     assert src.indices[:, 2].max() <= apex[2] + int(np.ceil(h_vox)) + 1
     r_trans = np.hypot(src.indices[:, 0] - 32, src.indices[:, 1] - 32) * g.dx
     assert r_trans.max() <= a + g.dx
+
+
+def test_the_offgrid_bowl_carries_the_caps_own_area():
+    """The default discretization, and the property that makes it worth having.
+
+    A binary shell's strength is its voxel count, which for a curved surface
+    is 13-25 % more than its area and does not converge as dx shrinks. The
+    off-grid source carries the closed-form area instead, so the sum of its
+    weights IS that area in grid squares — the quantity O'Neil integrates
+    over. Everything downstream follows from that one identity.
+    """
+    g = Grid(shape=(64, 64, 80), dx=0.5e-3)
+    a, roc = 6e-3, 15e-3
+    apex = (32, 32, 10)
+    src = bowl_cw_source(g, f0=1e6, amplitude=1e5, aperture_radius=a, roc=roc, apex_vox=apex)
+
+    area = 2.0 * np.pi * roc**2 * (1.0 - np.sqrt(1.0 - (a / roc) ** 2))
+    assert src.weights is not None
+    assert float(src.drive_weights.sum()) == pytest.approx(area / g.dx**2, rel=1e-3)
+    src.check_inside(g)
+    # It is a halo, not a shell: several times the points, and signed.
+    shell = bowl_cw_source(
+        g,
+        f0=1e6,
+        amplitude=1e5,
+        aperture_radius=a,
+        roc=roc,
+        apex_vox=apex,
+        discretization="binary",
+    )
+    assert src.n_points > 3 * shell.n_points
+    assert src.drive_weights.min() < 0.0  # the interpolant's side-lobes
+    # ...and it still sits where the bowl was ordered: the drive's centre of
+    # mass is on the axis, at the depth the cap's own centroid has.
+    w = src.drive_weights.astype(np.float64)
+    com = (src.indices.astype(np.float64) * w[:, None]).sum(axis=0) / w.sum()
+    assert com[0] == pytest.approx(apex[0], abs=0.05)
+    assert com[1] == pytest.approx(apex[1], abs=0.05)
+    sag_vox = (roc - np.sqrt(roc**2 - a**2)) / g.dx
+    assert apex[2] < com[2] < apex[2] + sag_vox
 
 
 def test_bowl_source_requires_3d():

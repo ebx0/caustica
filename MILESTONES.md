@@ -13,6 +13,37 @@
 
 ---
 
+## Sabit kısıtlar — kullanıcının kullanım profili (2026-08-25)
+
+Bunlar milestone değil; **her milestone'un içinde geçerli olan koşullar.** Bir
+tasarım kararı bunlardan biriyle çelişiyorsa karar yanlıştır.
+
+1. **Mutlak basınç doğru olmak zorunda.** Kütüphane bilimsel bir araç; MPa
+   cinsinden bir sayı yayınlanacak. Normalize şekil uyuşması yeterli DEĞİL.
+   Bu, 2026-08-24/25'te iki bağımsız ~%15 mutlak hatanın bütün kapılar yeşilken
+   aylarca yaşamasının sebebiydi (kase merdiven çarpanı; dizi elemanlarının
+   ızgaraya yuvarlanması). → **M30**.
+2. **Hedef kullanım: kullanıcının kendi HIFU uygulaması, makale seviyesinde**,
+   ve büyük olasılıkla **`kwave` çözücüsüyle dataset üretimi.** k-Wave yolu bir
+   çapraz-kontrol değil, birinci sınıf üretim yolu olarak ele alınır. → **M31**.
+3. **Kayıt kontratı:** reel ve imajiner ayrı ayrı, harmonik başına (f0, 2f0, …),
+   bilimsel tutarlılıkla. (Bugün sağlanıyor: `output/p_real_h{n}` +
+   `output/p_imag_h{n}`, genlik/faz asla saklanmaz, float16 yalnız ölçülen
+   yuvarlama hatası ≤ %0.1 iken ve hata dosyaya yazılıyken kullanılır.)
+4. **Yönlendirme kullanılıyor:** hem DAS ile hem de her eleman ayrı ayrı
+   sürülerek. Faz doğruluğu birinci sınıf gereksinim.
+5. **Süre sınırı yok, VRAM bol.** RTX PRO 6000 (Blackwell) ile 24 saatlik
+   koşular mümkün. Bu, M8.time'ın önceliğini DÜŞÜRÜR (yanlış tahmin işi
+   öldürmüyor) ve büyük ızgara/ince dx'i mümkün kılar.
+6. **Geriye uyumluluk derdi yok (v0.1'e kadar).** Numerik nesil değişebilir;
+   eski sonuçlar silinebilir. Kütüphane önce gelir. Ama her sonuç dosyası hangi
+   nesilden olduğunu SÖYLEMEK zorunda. → **M32**.
+
+Çalışma düzeni: bu repoda ikinci bir Claude oturumu (docs) var; **sıralı
+çalışılır**, paralel değil (kullanıcı kararı 2026-08-25).
+
+---
+
 ## Faz Grubu A — Temel (yerel, CPU)
 
 ### M0 — Repo iskeleti ve araç zinciri `[x]` (2026-08-10)
@@ -1159,6 +1190,13 @@ bu harness'in İÇİNE doğar.
   - [x] Çok-motor: linear-vs-kwave çaprazı harness'ten r=0.99924 (relL2 0.0286, tepe kayması
         0 voksel) — `benchmarks/reports/compare/20260823-065728/`; linear-vs-westervelt(β=0)
         r=1.0 relL2=0 birebir (M5 garantisi). `@pytest.mark.kwave` ile CI'da atlanabilir
+        (Nyquist düzeltmesinden SONRA yeniden koşuldu, 2026-08-24:
+        `benchmarks/reports/compare/20260824-093305/`, üç motor PASS. Kaynak
+        ayrıklaştırması düzeltildikten sonra bir kez daha:
+        `benchmarks/reports/compare/20260824-133829/`, yine üç motor PASS.
+        `benchmarks/reports/resolution/` dx=0.2/0.1/0.05 mm merdiveninde iki kodun odak
+        tepesi %8.7'den %0.2'ye yakınsıyor ve 15 nokta/dalgaboyunda ikisi de O'Neil'in
+        mutlak tahmininde: 0.999x bizim, 0.997x k-Wave)
 
 ### M18 — Termal modül: Pennes + CEM43 `[x]` (2026-08-23 — iki fazda KAPANDI)
 Ablasyon planlamanın çıktısı basınç değil DOZ. ITRUSST güvenlik konsensüsü (Brain Stim 2025)
@@ -1181,7 +1219,10 @@ eşikleri rapora girer: ≤2 CEM43 beyin / ≤16 kemik / ≤21 deri; ΔT≤2°C.
       %8-15 uyuşmazlık) kapının görebildiğini kanıtlıyor. Uçtan uca: westervelt →
       HeatingSource → 20 s açık + 40 s kapalı (doz taşınır) → 37→53.06→40.29 °C, doz 80.5→88.3
       CEM43 tekdüze; `ThermalResult.chain` faz-üstü maks + doz-gerileyen faz reddi.
-      Kanıt: `benchmarks/reports/thermal/20260823-120953/` (Brain EXCEEDED / Skin PASS)
+      Kanıt: `benchmarks/reports/thermal/20260823-120953/` (Brain EXCEEDED / Skin PASS);
+      iki kez yeniden üretildi (2026-08-24). Nyquist düzeltmesinden sonra
+      (`.../20260824-093230/`) tepe |p| 1.946→1.938 MPa; bant-sınırlı kase kaynağından
+      sonra (`.../20260824-134131/`) 1.981 MPa. Karar hiçbirinde değişmedi.
 - Başarı kriterleri:
   - Analitik nokta-kaynak/Gaussian difüzyon rel err < %2; perfüzyon kararlı-durum < %2
   - Uçtan uca sonication → T(r,t) → CEM43; **bağımsız-gerçekleştirme çaprazı < %5**
@@ -1192,6 +1233,106 @@ eşikleri rapora girer: ≤2 CEM43 beyin / ≤16 kemik / ≤21 deri; ΔT≤2°C.
     aynı bağımsız-gerçekleştirme mutabakatı. MATLAB erişimi olursa kWaveDiffusion ek kanıt
     olarak eklenebilir, ölçüt değil)
   - Tıbbi sorumluluk notu (araştırma amaçlı; klinik karar aracı değil)
+
+### M30 — Mutlak genlik kapısı `[~]` (kase KAPANDI 2026-08-25; dizi kapısı açık)
+Kütüphanenin hiçbir kapısı mutlak genliği notlandırmıyor. Analitik süit normalize şekil,
+tepe konumu ve −6 dB genişlik ölçüyor; çok-motor karşılaştırması normalize korelasyon; mutlak
+sayının göründüğü tek yer T0 gözcüsü ve o **5 kat** toleransla geçiriyor. İki bağımsız ~%15
+hata (kase merdiveni, dizi ızgara yuvarlaması) bu körlükte aylarca yaşadı.
+- [x] **Kase kapısı: `M30.absolute`**, analitik süitte, üç kontrollü
+      (`caustica.validation run-analytic`). Tasarım ölçümden çıktı: aynı kaseyi
+      6 basamakta koşup mutlak hatanın **temiz bir güç yasası** izlediğini gördüm
+      (f/1.2, 2 MHz): ppw 3.75/5/7.5/10/15/20 → +.136/+.063/+.023/+.012/−.001/−.003,
+      yani `err ≈ 3.7·ppw^−2.5`, ppw≈12'de sıfırı geçip −%0.3'te oturuyor. Dolayısıyla
+      "O'Neil'in %X'i içinde" TEK BAŞINA çözünürlükten bağımsız bir ifade değil: 4
+      nokta/dalgaboyunda %15'lik bir kaynak hatası ile dürüst bir ayrıklaştırma hatası
+      birbirine benziyor. Ayıran şey ayrıklaştırma hatasının **küçülmesi**, kaynak
+      hatasının küçülmemesi. Kapı bu yüzden üç katmanlı:
+      1. **Kaynağın kendi ölçüsü** — `Σw·dx² / kase alanı = 1.000 ± %0.5`. Anlık, tam,
+         çözünürlükten bağımsız; bozulan da tam olarak buydu
+      2. **Mutlak seviye** ince basamakta, bant 0.90–1.10
+      3. **Yakınsama** — 2× inceltme hatayı ≤ 0.60'a indirmeli (ölçülen: 0.10; ölçülen
+         yasa 2^2.5 = 5.7× diyor, yani 6 kat marj)
+      Sahte-kusur sınavı (eski ikili kabuk geri konarak): **üç kontrolün üçü de FAIL**
+      (sürüş/alan 1.215, ince basamak 1.193, ve hata inceltmeyle *büyüyor*: 1.515).
+      İşlek kodda üçü de PASS. Meta-testler: `tests/test_validation_analytic.py`
+- [ ] Dizi kapısı: odak basıncı gerçek eleman disklerinin Rayleigh integraline karşı.
+      Ölçüm zemini var (32 elemanlı spiral: 1.142 / 1.018 / 1.001 @ 3.75/7.5/15 ppw;
+      eski yol 0.861 / 0.931 / 0.951 ve orada takılıyor) — süite bağlanmadı, çünkü ince
+      basamak 30 Mvoksel ve CPU süitine ağır. GPU süitine (M7/M8 merdiveni) ait
+- [x] Düzlem: gerçekleşen düzlem genliği `source.amplitude`'a karşı — `M4.planewave`
+      içinde `AMPLITUDE_BAND` olarak zaten vardı; kase kapısı bunun eğri-yüzey karşılığı
+- Not: bu kapı ITRUSST'ın ön provasıdır; M21'in ilk iki benchmark'ı buraya çekilebilir (A kararı)
+
+### M31 — k-Wave üretim yolu `[~]` (YENİ — kullanıcı 2026-08-25, sabit kısıt 2)
+Kullanıcı dataset'ini büyük olasılıkla `kwave` çözücüsüyle üretecek. Adaptör bugüne kadar
+çapraz-kontrol olarak tasarlandı; birinci sınıf üretim yolu olarak denetleniyor.
+- [x] **GPU ikilisi Blackwell'de ÇALIŞIYOR** (2026-08-25). `kspaceFirstOrder-cuda.exe` v1.3.0
+      kurulu geliyor ve sm_120'de koşuyor. İki uyarı: (1) sürücü önbelleği soğukken ilk çağrı
+      ~2.5 dakika JIT/PTX derlemesi ödüyor, sonrası önbellekli — taze bir Colab VM'i bunu bir
+      kez öder, 24 saatlik koşuda önemsiz; (2) ısındıktan sonra hızlanma OMP'ye göre
+      1.38× / 2.00× / 2.27× (0.4 / 3.2 / 12.8 Mvoksel) — mütevazı, çünkü ikili CUDA 11 çağından
+      (`cufft64_10.dll`). Sonuçlar OMP ile 1e-6 bağıl farkla aynı
+- [x] **Darboğaz kaydın kendisiydi, çözücü değil.** k-Wave ikilisi DFT biriktiremiyor, kayıt
+      penceresindeki HER adımı HDF5'e döküyor. Sensör maskesi `record_region`'dan bağımsız
+      olarak bütün ızgaraydı: ITRUSST geometrisinde koşum başına 731 MB girdi + 1.6 GB çıktı.
+      Maske artık istenen bölge (`7d43920`)
+- [x] **Doğruluk karşılaştırması (ITRUSST BM1-SC1).** Kâğıdın kendi çözünürlüğünde
+      (6 nokta/dalgaboyu) k-Wave L∞ %1.79 / oran 0.9987, native L∞ %3.41 / oran 1.0338 —
+      yani KABA ızgarada k-Wave belirgin biçimde daha doğru (kaydırmalı ızgara + kendi
+      k-uzay düzeltmesi). Native'in merdiveni:
+      | nokta/λ | ızgara | L∞ | oran | süre |
+      | 6.0 | 9.2 Mvox | %3.41 | 1.0338 | 14 s |
+      | 8.0 | 21.5 Mvox | %1.15 | 1.0115 | 63 s |
+      | 12.0 | 68.9 Mvox | **%0.88** | **1.0017** | 1990 s* |
+      *8 GB'lık RTX 5050'de bellek baskısı altında (68.9 Mvox × 14 dizi × 4 B = 3.9 GB,
+      kart 7.8/8.2 GB doluydu); 96 GB'lık kartta temsili değil, yeniden ölçülmeli.
+      **İki sonuç:** (1) native'i 8 ppw'de koşmak k-Wave'i 6 ppw'de koşmaktan hem daha doğru
+      (%1.15 vs %1.79) hem ~3 kat hızlı (63 s vs 187 s); (2) 12 ppw'de native L∞ %0.88 ile
+      kâğıdın **"yedi model %1'in altında"** grubuna giriyor
+- [ ] Kalan denetim: yönlendirme (DAS + eleman-başı) k-Wave yolunda, checkpoint/resume yok,
+      CFL adaptörde 0.3 sabit, bellek tavanı, `result.h5` şema eşitliği
+- Başarı kriteri: aynı iş her iki çözücüde koşar, aynı şemayı yazar, M30 kapısını ikisi de geçer
+
+### M32 — Numerik nesil damgası `[ ]` (YENİ — kullanıcı 2026-08-25, sabit kısıt 6)
+Checkpoint parmak izi nesli taşıyor (`cw-kspace-pstd/3`), `result.h5` taşımıyor. Geriye
+uyumluluk derdi yok ama bir MPa'nın hangi nesilden olduğu dosyadan okunabilmeli.
+- [ ] `result.h5` kökünde numerik nesil + kaynak ayrıklaştırması (`offgrid`/`binary`) damgası
+- Başarı kriteri: eski nesilden bir dosya okunduğunda okuyucu bunu SÖYLER
+
+### M33 — Heterojen ortam doğrulaması `[x]` (2026-08-25, kullanıcı talebi — dataset ortamı)
+Kütüphanenin notlandırıldığı her şey tek tip ortamdaydı: O'Neil, Rayleigh, Fubini, ITRUSST
+su benchmark'ları. Üreteceği dataset değil — meme fantomu katman ve kapanımdır (yağ 1.35,
+deri 1.77, kas 1.66 MRayl'a karşı suyun 1.50'si). Ayakta duran hiçbir kapı bunu kapsamıyordu;
+kayıttaki tek heterojen çapraz-kontrol 2026-08-10 tarihli bir şekil ve bu haftanın iki numerik
+neslinden de eski.
+- [x] `caustica.analytic.layered`: tabakalı akışkan için TAM transfer matrisi (`Layer`,
+      `stack_matrix`, `stack_coefficients`, `half_wave_thickness`, `quarter_wave_impedance`).
+      Soğurma karmaşık dalga sayısıyla giriyor
+- [x] `scripts/dev_hetero.py` — bir karşılaştırma tesadüf olur, o yüzden beş ayrı soru
+      (`benchmarks/reports/hetero/`):
+      | | soru | ölçülen |
+      | H1 | tek arayüz, kapalı forma karşı | dört empedans basamağında (1.35 → 3.00 MRayl) |R| %1.39, |T| %0.08 içinde |
+      | H2 | levha kalınlık taraması, yarım-dalga rezonansı | eğri genlikte 0.0003'e kadar izleniyor; yarım dalgada levha saydam (|T| 0.9999 / tam 1.0000), çeyrekte en çok yansıtıyor (0.1063 / 0.1039) |
+      | H3 | deri/yağ/kas yığını, gerçek soğurmayla | bir, iki ve üç katmanda geçen genlik %0.22, yansıyan %3.15 içinde |
+      | H4 | katmanlı ortamda odaklı çanak, k-Wave'e karşı MUTLAK genlikte | suda %4.76, deri+yağ ardında %2.36; eksenel profiller dokuda 0.98467 korele |
+      | H5 | heterojen cevap dx küçülünce yakınsıyor mu | 8 → 48 nokta/dalgaboyu: geçirme hatası %0.087 → %0.002 (×0.029), yansıma %6.714 → %0.141 |
+      H1–H3 ve H5 1-B'de koşuyor; bu kısıtlama değil amaç — transfer matrisi tam olarak o
+      geometriyi tarif ediyor, dolayısıyla karşılaştırma katmanlı fizikle ilgili ve başka
+      hiçbir şeyle değil. Her heterojen koşu aynı geometrinin homojen koşusuna bölünüyor,
+      böylece kaynak kalibrasyonu sadeleşiyor
+- [x] Yol boyunca üç kusur çıktı, üçü de referansın kendisinde, çözücüde değil: (1) "yarı
+      uzay" arkasında su olan 40 mm'lik bir levhaydı, ikinci yansıma okuma penceresine
+      dönüyordu (%91 hata); (2) homojen referans koşusu daha kısa bir ızgara alıyordu, geçen
+      pencere boşa düşüyordu; (3) `layered.py`'nin dalga sayısının imajiner işareti tersti ve
+      empedansı eşleşmiş bir yutucu `|T| = e^{+αd}` döndürüyordu. Üçüncüsünü ayıran ölçüm:
+      motorun kendi sönümü ölçüldü ve tam olarak α çıktı (oran 0.9998–1.0004), yani yanlış
+      olan yeni referanstı — H3 %24.27'den **%0.22**'ye indi
+- [x] `tests/test_analytic_layered.py` (15 test). İşaret hatasının nöbetçisi
+      `test_a_matched_absorber_only_attenuates`: eşleşmiş yutucu hiç yansıtmaz ve tam
+      `exp(-αd)` geçirir, α ve d üzerinde parametrik
+- Başarı kriterleri: dört bağımsız doğrulama (kapalı form, tam transfer matrisi, k-Wave,
+      inceltme) ve hepsi aynı yöne işaret ediyor; suite 850 geçiyor
 
 ### M15 — Eksenel simetri (AS) çözücüsü `[ ]` (KZK'nın önüne geçti — kullanıcı 2026-08-22)
 - [ ] VERIFY: güncel CuPy'de DCT/DST; yoksa ayna-genişletme DTT katmanı; WSWA/WSWS
@@ -1233,7 +1374,51 @@ Kriterler değişmedi (≥1.5× adım; parite korunur; planner rekalibre; TF32 d
 Backlog başlangıcı: research/gemini3_gpu.md §6. Referans nokta (landscape): k-wave-python
 native CuPy T4'te 256³/1000 adım = 382 s; C++ CUDA 51 s — ölçülüp yanına konulur.
 
-### M21 — ITRUSST PH1: DOKUZUN TÜMÜ, akustik-yalnız `[ ]` → **v0.1 kapısı** (kullanıcı 2026-08-22)
+### M21 — ITRUSST PH1: DOKUZUN TÜMÜ, akustik-yalnız `[~]` → **v0.1 kapısı**
+İlk ikisi öne çekildi (kullanıcı kararı A, 2026-08-25): sudaki benchmark'ların TAM referansı
+var — kaynağın kendi geometrisi üzerinden Rayleigh yüzey integrali, ki homojen ortamda,
+soğurmalı ya da soğurmasız, cevabın kendisidir. Kâğıdın su durumlarındaki referansı da
+FOCUS, yani bir Rayleigh-integrali kodu. Dolayısıyla bu ikisi kafatasını beklemeden
+notlandırılabiliyor, ve mutlak genlik körlüğünün (M30) ayakta duran biçimi oluyorlar.
+- [x] **BM1 + BM2 x SC1 + SC2**, `caustica.validation itrusst`, iki kapı
+      (`M21.PH1-SC1`, `M21.PH1-SC2`). Tanımlar kâğıttan alındı (Aubry vd., JASA 152(2),
+      1003, 2022; arXiv:2202.04552): su 1500 m/s + 1000 kg/m³; BM1 kayıpsız, BM2 "1 dB/cm
+      at 500 kHz" (kütüphanenin frekanstan bağımsız soğurması kâğıdın kabul ettiği iki
+      seçenekten biri, tek frekansta ikisi çakışıyor); sürüş 500 kHz, 0.04 m/s yüzey hızı
+      = 60 kPa; SC1 kase ROC 64 mm / açıklık çapı 64 mm (f/1); SC2 düz piston çap 20 mm;
+      karşılaştırma alanı 120 x 70 mm @ 0.5 mm = 241 x 141, kaynağın arkası ilk eksenel
+      düzlemde. **Ölçülen (2026-08-25, cupy):** L∞ %3.41 / %3.82 / %3.79 / %5.03,
+      L2 %0.42–1.00, tepe oranı 1.031–1.038, tepe konumu birebir ya da bir voksel.
+      Kapı kâğıdın KENDİ bildirdiği yayılıma karşı: kase için "hepsi %10 altı", piston
+      için maksimum %15. İkisi de PASS. Kanıt: `benchmarks/reports/itrusst/`
+      - Ölçüm sırasında iki şey öğrenildi ve koda yazıldı: (1) `reference_point` odağa
+        verilirse motor dalganın yalnız oraya ulaşmasını bekliyor ve 120 mm'lik alanın
+        sonu boş kalıyor (95 mm'den sonra 0.3 kPa, referans 104 kPa) — çözücü hatası gibi
+        görünüyor, değil; (2) karşılaştırma kaynak düzlemini İÇERİRSE piston L∞'u %32
+        çıkıyor, tamamı disk yüzeyindeki tek voksel sırasından, çünkü Rayleigh integrali
+        yüzeyin üstünde geçerli değil. Kâğıdın "from the transducer exit plane onward"
+        ifadesi tam da bunu diyor; bir voksel ötesinden %3.82; (3) 0.25 mm'de
+        koşunca BM1-SC2 kapısı düştü, ve düşmesinin nedeni model değil ölçütün
+        kendisiydi — aşağıda
+      - **Ölçüt kusuru, bulundu ve kapatıldı (2026-08-25).** Kayıpsız pistonun
+        karşılaştırma alanı içindeki üç eksenel maksimumu 119.766 / 119.907 /
+        119.999 kPa: %0.19'luk bir yayılım. argmax bu beraberliği kâğıdın izin
+        verdiği %15'in yüzde biriyle karara bağlıyor, yani izin verilen bir hata
+        tepeyi 29.5 mm ötedeki başka bir loba taşıyor ve kapı bunu "29.5 mm tepe
+        konumu hatası" diye raporluyordu. Kapı artık argmax'ı değil, izin verilen
+        hatanın küresel maksimuma çıkarabileceği HER eksenel maksimumu
+        notlandırıyor; 0.5 mm'de üç lobun üçü de referansın koyduğu yerde, sapma
+        0.00 mm. Soğurma beraberliği bozduğu için (%5.04 ayrım) aynı ölçüt BM2'de
+        bir şey söylüyor. İkinci kusur: tolerans modül varsayılanından geliyordu,
+        yani 0.25 mm'lik bir koşuda "iki voksel" aslında dört voksel demekti; artık
+        koşunun kendi dx'inden geliyor. Ayrıca kaynak alanı elendi: her iki kaynak
+        da kendi tam alanını makine hassasiyetinde taşıyor (oran 1.000000)
+      - **Açık.** Kase mutlak seviyesi dx ile yakınsıyor (0.5 mm'de x1.0338,
+        0.25 mm'de x1.0017); piston yakınsamıyor (yakın lob 0.5 mm'de x1.0269,
+        0.25 mm'de x1.043). Kâğıdın %15'inin çok içinde ama M30'un kendi ölçütüne
+        göre bu bir ayrıklama değil kaynak modeli imzası. Rapor artık lob başına
+        oran yazıyor, yani bir sonraki 0.25 mm koşusu bunu lob-lob ölçecek
+- [ ] BM3–BM9 (kemik katmanları, kafatası): yerinde, v0.1 kapısında
 Landscape (doğrulanmış): ekosistem BEKÇİSİZ ve self-serve — Zenodo 10.5281/zenodo.6020543
 (25.3 GB, CC-BY-4.0) + ucl-bug/transcranial-ultrasound-benchmarks (LGPL; 2022'den beri donmuş).
 Yol: 18 permütasyon (9 BM × bowl/piston, 500 kHz, LİNEER) → sonuçlar onların .mat düzeninde →

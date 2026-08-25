@@ -129,43 +129,64 @@ def interior_slices(shape: tuple[int, ...], margin: int) -> tuple[slice, ...]:
     return tuple(slice(margin, n - margin) for n in shape)
 
 
+#: Share of a source's drive that may sit inside the sponge before the setup
+#: is refused. Measured separations (2026-08-24): a bowl deliberately buried in
+#: the band damps 94.5% of its drive, a legitimate full-width plane source damps
+#: 44%, and a bowl with proper standoff damps none. The threshold sits between
+#: the first two and well away from both.
+PML_DAMPED_LIMIT = 0.90
+
+
+def source_damped_fraction(grid: Grid, source: CWSource) -> float:
+    """Share of ``|drive|`` that lands inside the absorbing band."""
+    band = grid.pml_vox
+    if band <= 0 or any(n <= 2 * band for n in grid.shape):
+        return 0.0
+    idx = source.indices
+    w = np.abs(source.drive_weights.astype(np.float64))
+    total = float(w.sum())
+    if total <= 0.0:
+        return 0.0
+    upper = np.asarray(grid.shape) - band
+    interior = ((idx >= band) & (idx < upper)).all(axis=1)
+    return float(w[~interior].sum() / total)
+
+
 def check_source_clears_pml(grid: Grid, source: CWSource) -> None:
-    """Refuse a source that lies ENTIRELY inside the absorbing band.
+    """Refuse a source whose drive is essentially all inside the sponge.
 
     The sponge lives INSIDE ``grid.shape`` and multiplies ``p`` and ``u`` every
     step, so a source voxel in that band is damped as fast as it is driven. When
-    that is true of EVERY source voxel the run still completes and still
+    that is true of the WHOLE source the run still completes and still
     converges — on a quietly wrong field, with no error anywhere. That is the
     natural trap for any geometry whose coupling standoff happens to be about
-    one PML thick; the first aligned phantom dataset shipped that way once (a 5 mm water gap
-    with a 5 mm PML), which is what motivated this check.
+    one PML thick; the first aligned phantom dataset shipped that way once (a
+    5 mm water gap with a 5 mm PML), which is what motivated this check.
 
     PARTIAL overlap is not an error and is not flagged: a plane source spanning
     the full transverse extent necessarily runs into the lateral band, and that
     is the intended plane-wave setup — the interior of the plane still drives
-    the domain. Only a source with no un-damped voxel at all is refused.
+    the domain.
+
+    The test is on the DRIVE, not on voxel presence, because a band-limited
+    source has a halo: a bowl buried in the sponge still puts a few outlying
+    voxels beyond it, carrying 5% of the drive and none of the intent
+    (measured 2026-08-24). Counting voxels would call that source clear.
 
     Raises :class:`SolverCapabilityError` naming the offending span.
     """
-    band = grid.pml_vox
-    if band <= 0 or any(n <= 2 * band for n in grid.shape):
-        # No band, or a grid so small the sponge fills it and "inside the PML"
-        # stops distinguishing anything. The engine's convergence-region logic
-        # gives up on the same condition, for the same reason.
+    damped = source_damped_fraction(grid, source)
+    if damped <= PML_DAMPED_LIMIT:
         return
     idx = source.indices
-    upper = np.asarray(grid.shape) - band
-    interior = ((idx >= band) & (idx < upper)).all(axis=1)
-    if interior.any():
-        return
     lo = tuple(int(v) for v in idx.min(axis=0))
     hi = tuple(int(v) for v in idx.max(axis=0))
     raise SolverCapabilityError(
-        f"every source voxel (span {lo}..{hi}) lies inside the PML band "
-        f"({band} voxels on each face of {grid.shape}), where it is damped as fast "
-        f"as it is driven — the solve would converge on a silently wrong field. "
-        f"Move the source inward, thin the PML, or enlarge the grid. A phantom's "
-        f"coupling standoff must be THICKER than the PML, not equal to it."
+        f"{damped * 100:.1f}% of this source's drive (span {lo}..{hi}) lies inside "
+        f"the PML band ({grid.pml_vox} voxels on each face of {grid.shape}), where it "
+        f"is damped as fast as it is driven — the solve would converge on a silently "
+        f"wrong field. Move the source inward, thin the PML, or enlarge the grid. A "
+        f"phantom's coupling standoff must be THICKER than the PML, not equal to it."
     )
 
 
