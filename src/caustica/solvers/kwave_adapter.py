@@ -18,7 +18,11 @@ Unit conversions (explicit, tested):
 Differences from the native solvers (documented, not hidden):
 * No adaptive convergence — k-Wave runs a FIXED schedule of
   ``tof + min_settle_periods`` settle periods plus the record window. Pick
-  ``min_settle_periods`` generously for strongly reverberant media.
+  ``min_settle_periods`` generously for strongly reverberant media, and more
+  so when asking for harmonics: the native engine settles until every
+  requested harmonic stops moving, and a schedule fixed in advance cannot.
+  Requesting 2f0 at the default settle is warned about rather than silently
+  obeyed.
 * k-Wave applies its own PML INSIDE the grid edge (``pml_inside=True``).
   The adapter passes ``pml_size = grid.pml_vox`` so the damped band matches
   the native sponge (falling back to k-Wave's default — 20 voxels in 2-D,
@@ -40,6 +44,7 @@ from typing import Any
 
 import numpy as np
 
+from caustica.core.backend import CausticaWarning
 from caustica.core.grid import Grid
 from caustica.medium import Medium
 from caustica.solvers.base import (
@@ -161,6 +166,28 @@ class KWaveSolver(SolverBase):
         settle_periods = tof_periods + max(
             spec.min_settle_periods, int(ceil(source.ramp_periods)) + 2
         )
+        # A fixed schedule cannot know when a HARMONIC has settled, and the
+        # default was never chosen with one in mind. The native engine grades
+        # every requested harmonic against its own amplitude and settles until
+        # each stops moving; nothing here can, because the binary runs to a
+        # step count decided before it starts. Measured on a focused bowl in
+        # water with beta = 0, where the true 2f0 is zero: a settle short
+        # enough to satisfy the peak alone left 2.1 % of the fundamental in
+        # the harmonic channel, and it took roughly thirty periods past
+        # time-of-flight to clear. So the default is flagged rather than
+        # silently used — the number is the caller's to pick, but not by
+        # accident.
+        if max(harmonics) > 1 and spec.min_settle_periods <= CWRunSpec().min_settle_periods:
+            warnings.warn(
+                f"harmonics {harmonics} requested with min_settle_periods="
+                f"{spec.min_settle_periods}: k-Wave runs a fixed schedule and cannot "
+                f"detect when a harmonic has stopped moving. A settle that satisfies "
+                f"the fundamental can leave a percent of it in the 2f0 channel. Raise "
+                f"min_settle_periods (about 30 sufficed for a focused bowl in water) "
+                f"or cross-check against a native run, which grades the harmonics.",
+                CausticaWarning,
+                stacklevel=2,
+            )
         total_periods = settle_periods + spec.n_record_periods
         if spec.t_end_min_us is not None:
             total_periods = max(total_periods, ceil(spec.t_end_min_us * 1e-6 / period))

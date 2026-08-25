@@ -6,11 +6,15 @@ agree. It is skipped, with a visible reason, when k-wave-python or its
 binary is unavailable — the suite stays green without it (M4b criterion).
 """
 
+import contextlib
+import warnings
+
 import numpy as np
 import pytest
 
 import caustica.solvers as solvers
 from caustica import Grid, Medium, PMLSpec
+from caustica.core.backend import CausticaWarning
 from caustica.materials import water
 from caustica.solvers import CWRunSpec
 from caustica.solvers.kwave_adapter import alpha_np_m_to_kwave, beta_to_bona
@@ -160,3 +164,34 @@ def test_the_adapter_asks_kwave_for_the_absorption_law_the_engine_implements():
     # alpha_power = 0 makes it mean.
     np.testing.assert_allclose(seen["alpha_coeff"], alpha_np_m_to_kwave(5.0), rtol=1e-9)
     np.testing.assert_allclose(seen["sound_speed"], C0)
+
+
+def test_asking_kwave_for_a_harmonic_at_the_default_settle_is_flagged():
+    """A fixed schedule cannot know when a harmonic has stopped moving.
+
+    The native engine grades every requested harmonic against its own
+    amplitude and settles until each one stops changing. k-Wave's binary runs
+    to a step count decided before it starts, so the caller has to pick that
+    count -- and the default was chosen for a fundamental. Measured on a
+    focused bowl in water with beta = 0, where the true 2f0 is zero: a settle
+    short enough to satisfy the peak alone left 2.1 % of the fundamental in
+    the harmonic channel.
+
+    The warning fires before any binary runs, so this needs neither k-Wave nor
+    a GPU -- which is the point of raising it where the schedule is computed.
+    """
+    grid = Grid(shape=(48, 48), dx=DX, pml=PMLSpec(thickness=6 * DX))
+    med = Medium.homogeneous(grid.shape, water(c=C0, beta=3.5))
+    src = _disc_source((24, 8), 3, ndim=2)
+
+    with pytest.warns(CausticaWarning, match="fixed schedule"):
+        with contextlib.suppress(Exception):
+            solvers.get("kwave")().run(grid, med, src, CWRunSpec(), harmonics=(1, 2))
+
+    # Ask for the fundamental alone, or settle deliberately, and it stays quiet.
+    for spec, harmonics in ((CWRunSpec(), (1,)), (CWRunSpec(min_settle_periods=30), (1, 2))):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            with contextlib.suppress(Exception):
+                solvers.get("kwave")().run(grid, med, src, spec, harmonics=harmonics)
+        assert not [w for w in caught if "fixed schedule" in str(w.message)]
