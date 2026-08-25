@@ -20,6 +20,9 @@ found in seconds rather than in hours)::
     analytic    the closed-form gates, full size, absolute amplitude included
     gpu-gates   the on-device VRAM ladder and the numpy/cupy parity check
     geometry    what was ordered against what was built
+    invariants  ten properties the code must have whatever the physics says:
+                phase, superposition, scaling, the stored file, resume,
+                determinism, placement, the sponge, dt, steering
     hetero      layered media against the exact transfer matrix, and k-Wave
     array       the spiral driven by YOUR phase vector
     nonlinear   harmonics: the scaling law, convergence, k-Wave, the
@@ -106,6 +109,24 @@ def stages(args: argparse.Namespace, out: Path) -> list[tuple[str, str, list[str
             "was the geometry that got built the geometry that was ordered?",
             sc("dev_geometry.py") + ["--out", str(rep / "geometry")],
             3600,
+        ),
+        (
+            "invariants",
+            "the phase, superposition, the file, resume, determinism, the sponge",
+            sc("dev_invariants.py")
+            + [
+                "--out",
+                str(rep / "invariants"),
+                "--ppw",
+                "12" if full else "5",
+                "--ladder",
+                "6,10,16,20" if full else "5,8",
+                "--pml-ladder",
+                "2,4,6,8,12,16" if full else "2,6",
+                "--cfl-ladder",
+                "0.48,0.36,0.24,0.12" if full else "0.48,0.24",
+            ],
+            21600,
         ),
         (
             "hetero",
