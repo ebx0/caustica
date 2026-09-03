@@ -48,7 +48,7 @@ hifu_pred_dx300_t128.ipynb
 
 # The local phantom-data root (CAUSTICA_PHANTOM_DATA points here): raw UWCEM
 # downloads, caches, exports, the generated dataset and the stored setups.
-# All of it moved OUT of this repository's git at M10k — the tooling lives in
+# All of it moved OUT of this repository's git — the tooling lives in
 # the uwcem-phantom repo, the bytes stay local.
 data/
 runs/
