@@ -10,11 +10,10 @@ to run identically on a local workstation and on Google Colab (T4/L4/A100/H100).
 
 > Status: pre-alpha, under active development. Formerly developed under the working name
 > `hifusim`; renamed to `caustica` before the first public release (2026-08-21).
-> See [MILESTONES.md](MILESTONES.md) for the roadmap
-> with per-milestone acceptance criteria and current progress, [PLAN.md](PLAN.md) for the
-> architecture plan, [docs/job_reference.md](docs/job_reference.md) +
-> [docs/conventions.md](docs/conventions.md) for the job format and its conventions, and
-> [docs/devlog.md](docs/devlog.md) for the engineering log.
+> See [what has been measured](https://ebx0.github.io/caustica/validation/) for what has actually been measured,
+> [the job format](https://ebx0.github.io/caustica/job_reference/) +
+> [the conventions](https://ebx0.github.io/caustica/conventions/) for the job format and its conventions, and
+> [CHANGELOG.md](CHANGELOG.md) for what changed when.
 
 ## Quickstart (no checkout, no external data)
 
@@ -33,7 +32,7 @@ would write into `site-packages`. The `[report]` extra pulls matplotlib for
 `caustica report`; everything up to and including `run` needs only the base
 install. GPU (CuPy) support is packaged (`pip install "caustica[gpu]"`) but
 **not yet verified on real hardware** — every solver result above is
-CPU-validated (see [MILESTONES.md](MILESTONES.md), M7).
+CPU-validated (see [what has been measured](https://ebx0.github.io/caustica/validation/)).
 
 Runs identically in a Colab cell (prefix each line with `!`); the same four
 commands are the whole workflow.
@@ -44,13 +43,14 @@ Ten steps from an empty shell to a focal metric — the same ten decisions wheth
 job file, call `caustica.simulate()` from Python, or run it in a Colab cell.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/how-to-use-real-dark.svg">
-  <img src="docs/assets/how-to-use-real.svg" width="100%"
+  <source media="(prefers-color-scheme: dark)" srcset="https://ebx0.github.io/caustica/assets/how-to-use-real-dark.svg">
+  <img src="https://ebx0.github.io/caustica/assets/how-to-use-real.svg" width="100%"
        alt="How to use caustica, in ten steps: install it; choose the space (1-D, 2-D or 3-D, voxel size, box size, absorbing border); describe what the sound travels through (homogeneous, scene, volume_import, medium_volume); build the geometry from solids; put a transducer in the box (bowl, archimedean spiral, element file); aim it and drive it; choose how much physics you want (linear or westervelt); find out what it will cost before it starts; run it from the command line, Python or Colab; read the result (focal metrics, the -6 dB spot, an HTML report).">
 </picture>
 
-<sub>The diagram is generated, not drawn: <code>python scripts/make_howto.py</code> rebuilds it from
-<a href="scripts/make_howto.py">scripts/make_howto.py</a>, and the thumbnails on the left are what
+<sub>The diagram is generated, not drawn:
+<a href="https://github.com/ebx0/ebx0.github.io/blob/caustica-docs/scripts/make_howto.py"><code>scripts/make_howto.py</code></a>, in the documentation repository, rebuilds it by calling
+this library, and the thumbnails on the left are what
 they claim to be — the real absorbing profile, real constructive geometry, the real spiral element
 table, a real Rayleigh preview of a steered focus, the real Fubini harmonics, the planner's real
 estimate for this machine and an A100, and the axial line and focal plane of a real solve.
@@ -120,20 +120,21 @@ yourself.
 
 ## Bring your own setup
 
-These documents are the contract, and each is kept honest by a test:
+These pages are the contract, and each is kept honest by a test that runs
+before the site is published:
 
-- **[docs/job_reference.md](docs/job_reference.md)** — every field of the job
+- **[the job format](https://ebx0.github.io/caustica/job_reference/)** — every field of the job
   file: each medium kind, each array kind, drive / run / output, with a working
   snippet per kind. `caustica schema` prints the same thing as JSON Schema,
   generated from the models.
-- **[docs/conventions.md](docs/conventions.md)** — the five things that make a
+- **[the conventions](https://ebx0.github.io/caustica/conventions/)** — the five things that make a
   result *silently* wrong if you assume otherwise: the phasor convention
   `p(t) = Re{P·e^(-iωt)}`, Np/m vs dB/cm, what `amplitude` actually means, the
   `+z` beam-axis frame, and that the PML is inside `grid.size_mm`.
-- **[docs/extending.md](docs/extending.md)** — the five extension points
+- **[the extension points](https://ebx0.github.io/caustica/extending/)** — the five extension points
   (solver, medium kind, array kind, backend, report renderer), their frozen
   entry-point group names, and a copy-paste plugin package that uses all five.
-- **[docs/gui_contract.md](docs/gui_contract.md)** — the surface a GUI (or any
+- **[the GUI contract](https://ebx0.github.io/caustica/gui_contract/)** — the surface a GUI (or any
   other program driving caustica) may rely on: the run folder, the exit codes,
   `status.json`, `error.json`, the `cancel` stop signal, and the progress
   payload. Nothing outside that page is a contract.
@@ -319,7 +320,7 @@ src/caustica/
   __main__.py # the CLI: python -m caustica {validate | run | report | schema | example}
 apps/            # focus study (library consumer; not in the wheel)
 tests/        # pytest; CPU-only by default; kwave/gpu tests auto-skip
-scripts/      # validation-report generator
+scripts/      # validation-report generator + the dev_* measurement runners
 ```
 
 ## Command line

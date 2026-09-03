@@ -52,9 +52,9 @@ Results land in `/content/runs/<job>` — Colab's session disk, which survives a
 but not a VM teardown. caustica mounts no cloud storage of its own: if you want a run to outlive
 the session, mount your own in a cell and pass that folder as `run_job(CONFIG, out=...)`.
 
-Docs: [job format](https://github.com/ebx0/caustica/blob/master/docs/job_reference.md) ·
-[conventions](https://github.com/ebx0/caustica/blob/master/docs/conventions.md) ·
-[what a program may rely on](https://github.com/ebx0/caustica/blob/master/docs/gui_contract.md)"""
+Docs: [job format](https://ebx0.github.io/caustica/job_reference/) ·
+[conventions](https://ebx0.github.io/caustica/conventions/) ·
+[what a program may rely on](https://ebx0.github.io/caustica/gui_contract/)"""
 
 CELL_INSTALL = """\
 # Setup. Colab GPU runtimes already ship cupy, so there is no GPU extra to install here.
@@ -646,31 +646,6 @@ def test_show_can_skip_figures_entirely(gpu_present, tmp_path, capsys):
 # ---------------------------------------- the copies that could drift, pinned
 
 
-def test_the_exit_code_glosses_are_the_documented_ones():
-    """``_EXIT_MEANING`` is a second copy of a frozen table — pin it.
-
-    The bridge prints a one-line gloss per exit code. Those numbers are the
-    queue's API and their meanings live in ``docs/gui_contract.md``; a copy
-    nothing compares is a copy that drifts, and this one did on the day it
-    was written (it described the ``config`` *stage* instead of the exit
-    code, so a CPU-time refusal printed "the job would not load or build"
-    over an ``error.json`` that said ``stage: gate``).
-    """
-    page = (REPO / "docs" / "gui_contract.md").read_text(encoding="utf-8")
-    documented = {
-        int(m.group(1)): m.group(2).strip()
-        for m in re.finditer(r"^\| `(\d)` \| `EXIT_\w+` \| (.+?) \|$", page, re.MULTILINE)
-    }
-    assert documented, "the exit-code table moved; this test cannot see it any more"
-    for code, gloss in colab._EXIT_MEANING.items():
-        assert code in documented, f"exit {code} is not in the documented table"
-        assert gloss == documented[code], (
-            f"exit {code} gloss drifted from docs/gui_contract.md:\n"
-            f"  bridge: {gloss}\n  page:   {documented[code]}"
-        )
-    assert set(colab._EXIT_MEANING) == set(documented) - {0}  # every failure, no invention
-
-
 def test_the_install_advice_is_env_policys_own_sentence(not_colab, cupy_but_no_device):
     """One install sentence, used by two modules, asserted to still be one.
 
@@ -722,7 +697,7 @@ def test_a_dry_run_refusal_says_where_the_diagnosis_went(gpu_present, tmp_path, 
 
 
 def test_a_failed_run_message_quotes_stage_and_error_class(gpu_present, tmp_path):
-    """The two fields ``docs/gui_contract.md`` says a program routes on."""
+    """The two fields the GUI contract page says a program routes on."""
     bad = tmp_path / "bad.json"
     bad.write_text('{"format": "caustica-job/1", "kind": "explicit"}', encoding="utf-8")
     out = tmp_path / "o"

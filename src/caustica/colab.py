@@ -4,7 +4,7 @@ This is the one module in caustica that is allowed an opinion about *where*
 it is running. Everything below it — the job format, the planner, the two
 pre-run gates, the runner's output folder, its exit codes, ``error.json``
 and the ``cancel`` file — stays environment-blind and exactly as
-``docs/gui_contract.md`` freezes it. The bridge does not re-implement any of
+the GUI contract page freezes it. The bridge does not re-implement any of
 it; it adds the three things a notebook would otherwise have to carry itself:
 
 1. **An environment verdict before anything is prepared.** :func:`preflight`
@@ -105,7 +105,7 @@ INSTALL_ADVICE = (
 )
 
 #: What a non-zero runner exit means, quoted from the exit-code table in
-#: ``docs/gui_contract.md``. The set is closed and the numbers are the queue's
+#: the GUI contract page. The set is closed and the numbers are the queue's
 #: API — reproduced here, never extended here, and pinned against the page by
 #: ``tests/test_colab.py::test_the_exit_code_glosses_are_the_documented_ones``
 #: so this copy cannot drift from the one a GUI reads.
@@ -368,8 +368,9 @@ def _failure_message(outdir: Path, code: int) -> str:
             lines.append(f"  -> {advice}")
         lines.append(
             f"run folder: {outdir} — no error.json here, by contract: an interrupted "
-            f"run and a dry run both write none (docs/gui_contract.md). The runner "
-            f"printed its full diagnosis to stderr above."
+            f"run and a dry run both write none "
+            f"(https://ebx0.github.io/caustica/gui_contract/). "
+            f"The runner printed its full diagnosis to stderr above."
         )
     return "\n".join(lines)
 

@@ -8,8 +8,8 @@ here is not style — it is **evidence**.
 > A claim is not true because the code looks right. It is true because
 > something measured it.
 
-`MILESTONES.md` is the project ledger, and no box in it is ticked without a
-test or a measurement to point at. The same applies to a pull request: if it
+Nothing in this project is ticked off without a test or a measurement to point
+at. The same applies to a pull request: if it
 changes numerics, it comes with the number that shows what changed. "Tests
 pass" is necessary, never sufficient — a defect that is invisible on the
 machine you ran on has happened here before (see the 256³ entry in
@@ -26,8 +26,18 @@ pip install -e ".[dev]"
 ```
 
 Optional extras, none of them installed implicitly: `[gpu]` (cupy — do **not**
-install it on Colab, the runtime already ships it), `[kwave]`, `[report]`,
-`[docs]`.
+install it on Colab, the runtime already ships it), `[kwave]`, `[report]`.
+
+## Where the documentation is
+
+<https://ebx0.github.io/caustica/> is built from
+[`ebx0/ebx0.github.io`, branch `caustica-docs`](https://github.com/ebx0/ebx0.github.io/tree/caustica-docs),
+not from this repository — there are no pages here. Four of those pages are a
+contract rather than prose (the GUI contract, the job format, the conventions,
+the extension points) and that repository's build asserts them against the
+caustica it installs from `master`. So a change here that moves one of those
+surfaces turns the *site* build red, not this one: land the code, then open the
+matching change there.
 
 ## Before you open a pull request
 
@@ -44,15 +54,50 @@ For anything that touches the GPU path, `scripts/dev_validate.py` is the
 development validator: `--profile local` is a light CPU pass, `--profile colab`
 runs the full ladder on a hosted GPU and writes a stamped JSON report.
 
-## Commit and branch conventions
+## Commit conventions
 
-- One trunk: `master`. Work in a topic branch, open a PR against `master`.
-- Subject line: `kind(scope): what changed, in the imperative`, e.g.
-  `fix(256^3): drop the Nyquist wavenumber from the collocated first derivative`.
-  Common kinds: `feat`, `fix`, `docs`, `test`, `perf`, `chore`, `dev`.
-- The body is where the reasoning goes. Say what was wrong, how you know, and
-  what the numbers were. Future readers of a physics library need the *why*
-  far more than they need the diff restated.
+One trunk: `master`. Work in a topic branch, open a PR against `master`.
+
+History is meant to be readable by someone who has never seen the project
+ledger, so it follows [Conventional Commits](https://www.conventionalcommits.org/)
+with a narrow set of types and real module names as scopes:
+
+```
+type(scope): imperative summary, lower case, no full stop
+```
+
+- **Types**, and nothing outside this list: `feat`, `fix`, `docs`, `test`,
+  `refactor`, `perf`, `build`, `ci`, `chore`.
+- **Scope** is the package or area the change lives in — `kspace`, `solvers`,
+  `planner`, `config`, `runner`, `io`, `report`, `registry`, `validation`,
+  `thermal`, `study`, `colab`, `packaging`, `cli`. Leave it out when the change
+  really is repository-wide.
+- **Subject** is at most 72 characters, imperative ("add", "drop", "zero"), and
+  free of milestone codes, ticket numbers and dates. Internal bookkeeping lives
+  in the (git-ignored) `archive/` ledgers, which is precisely why it does not
+  belong in a subject line.
+- **Breaking changes** take `type(scope)!:` plus a `BREAKING CHANGE:` footer
+  saying what callers have to do.
+
+**A body is the exception, not the rule.** Most commits are one subject line.
+Write a body only when the change turns on a *why* the diff cannot show: a
+measurement that motivated it, a mechanism that is not visible in the code, or
+a decision a future reader would otherwise undo. Then wrap at 72 columns, lead
+with the mechanism, and give the number:
+
+```
+fix(kspace): zero the Nyquist bin in the collocated first derivative
+
+k_vectors passed the raw fftfreq ladder to spectral_derivative_factors,
+leaving a live Nyquist bin on every even-length axis. numpy's pocketfft
+projects that away; cuFFT documents its input as Hermitian and is free
+not to, and at 256^3 the GPU run reached NaN by period 2 while the
+identical CPU run sat at 45 kPa.
+```
+
+What to keep out of a message: em dashes, narration of the process that
+produced the change ("the review round", "belt-and-braces"), running test
+counts, and the file list the diff already carries.
 
 ## Reporting a problem
 

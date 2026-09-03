@@ -740,7 +740,7 @@ class ExplicitJobConfig(CausticaModel):
         "auto",
         description=(
             "'auto' | 'numpy' | 'cupy' | any name registered through the "
-            "'caustica.backends' entry-point group (docs/extending.md)"
+            "'caustica.backends' entry-point group (https://ebx0.github.io/caustica/extending/)"
         ),
         json_schema_extra={"examples": ["auto", "numpy", "cupy"]},
     )
@@ -814,7 +814,7 @@ def job_schema() -> dict[str, Any]:
         "description": (
             "One JSON file = one complete caustica solve. Generated from the "
             "pydantic models; medium and source.array kinds reflect what is "
-            "registered right now (see docs/job_reference.md)."
+            "registered right now (see https://ebx0.github.io/caustica/job_reference/)."
         ),
     }
 

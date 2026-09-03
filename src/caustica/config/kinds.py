@@ -259,7 +259,7 @@ class KindRegistry(PluginRegistry[type[CausticaModel]]):
 
         They are registered by :mod:`caustica.config.job` as it is imported,
         which nothing else forces. A plugin author who imports only the seam
-        — the import ``docs/extending.md`` tells them to write — was told
+        — the import the extension-points page tells them to write — was told
         ``Available: (none)``, or worse was shown their own kind and nothing
         else (found by the M10n verification round).
 

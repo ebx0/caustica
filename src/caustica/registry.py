@@ -30,7 +30,7 @@ declares them in its ``pyproject.toml``::
     [project.entry-points."caustica.backends"]
     my_backend = "my_pkg.backend:make_backend"
 
-See ``docs/extending.md`` for a working skeleton of all five.
+See the extension-points page for a working skeleton of all five.
 """
 
 from __future__ import annotations

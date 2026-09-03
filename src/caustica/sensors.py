@@ -17,7 +17,7 @@ unit volume is ``Q_n = 2 alpha_n I_n``, so::
     Q = sum_n alpha_n * |P_n|^2 / (rho * c)          [W/m^3]
 
 with ``P_n`` the complex pressure amplitude of harmonic ``n`` in the
-library-wide convention ``p(t) = Re{P exp(-i omega t)}`` (docs/conventions.md
+library-wide convention ``p(t) = Re{P exp(-i omega t)}`` (https://ebx0.github.io/caustica/conventions/
 section 1), so ``|P_n|`` is a peak amplitude, not an RMS one.
 
 Two assumptions are baked into that expression, and both are stated rather
@@ -29,7 +29,7 @@ than hidden:
    part of the field carries no net power and this over-states heating.
 2. **alpha is absorption, not attenuation.** Only the absorbed part of the
    loss heats the tissue. ``Material.alpha_np_m`` is documented as an
-   absorption coefficient (docs/conventions.md section 2); if a table is
+   absorption coefficient (https://ebx0.github.io/caustica/conventions/ section 2); if a table is
    filled with *total attenuation* (absorption + scattering) instead, the
    heating computed here is an upper bound.
 

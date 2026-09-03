@@ -47,7 +47,7 @@ solvers can be cancelled this way; a ``kwave`` job ignores the file, because
 stopping it would lose the whole run rather than pause it.
 
 The whole surface a GUI may rely on — this folder, the exit codes,
-``error.json``, ``cancel`` — is written down in ``docs/gui_contract.md``.
+``error.json``, ``cancel`` — is written down in the GUI contract page.
 """
 
 from __future__ import annotations
@@ -312,7 +312,7 @@ class _StepTiming:
     two intervals to take a median over, and the answer is ``None`` — a stamp
     that says "not measured" beats one that says a number it cannot support.
     The historical keys are untouched; these are ADDITIONS (M8's Colab gates
-    and ``docs/gui_contract.md`` read the old ones).
+    and the GUI contract page read the old ones).
     """
 
     def __init__(self) -> None:
