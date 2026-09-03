@@ -1,4 +1,4 @@
-"""One registry shape for every extensible axis (K15, PLAN.md §2 rule 6).
+"""One registry shape for every extensible axis.
 
 caustica has five plugin seams — solvers, medium kinds, array kinds, backends
 and report renderers — and every one of them needs the same four things:

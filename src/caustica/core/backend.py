@@ -62,7 +62,7 @@ class CausticaWarning(UserWarning):
 #: Thread-count override for CPU (scipy.fft) transforms; ``None`` defers to
 #: the ``CAUSTICA_CPU_WORKERS`` env var, then the default of 1. The default
 #: is DELIBERATELY single-threaded: two measurement rounds on a 10-core
-#: i5-13450HX (2026-08-22, devlog) found no reproducible speed-up from any
+#: i5-13450HX (2026-08-22) found no reproducible speed-up from any
 #: worker count at 1-26 Mvox engine shapes — apparent per-cell wins and
 #: losses did not survive a repeat. Machines that do profit can opt in via
 #: the env var or :func:`set_cpu_fft_workers`; pocketfft splits nd

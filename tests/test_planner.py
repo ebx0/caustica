@@ -5,7 +5,7 @@ hardware: same dt/spp (single source of truth), a VRAM inventory that
 matches a hand count of engine.py's buffers, estimate sources labeled
 db|calibrated|measured, and OOM verdicts that carry actionable advice.
 The ±10% VRAM and ±25% calibrated-time gates are ON-DEVICE (Colab) gates —
-tracked as open sub-criteria in MILESTONES.md, not testable here.
+tracked separately, not testable here.
 """
 
 from __future__ import annotations

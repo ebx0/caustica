@@ -1,6 +1,6 @@
 """M10 gates: in-run checkpoints — interrupt, resume, and trajectory identity.
 
-The headline criterion (MILESTONES M10): a run killed at period k and resumed
+The headline criterion: a run killed at period k and resumed
 reproduces the uninterrupted run's phasor to rel < 1e-6. On one backend the
 saved state is bit-exact and the step loop deterministic, so these tests
 assert the STRONGER property — bitwise identity — and the documented 1e-6

@@ -1,6 +1,6 @@
 """M10 gates: quantization contract, atomic writes, result contract, resume.
 
-Criteria encoded here (MILESTONES M10):
+Criteria encoded here:
 - float16 round-trip max norm error <= 1e-3, verified; fallback to float32
   when the contract cannot be met;
 - a writer killed mid-write leaves NO visible corrupt file (tmp swept, the

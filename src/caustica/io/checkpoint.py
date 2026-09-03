@@ -7,7 +7,7 @@ that was in flight — this module can: the engine writes its complete time-
 stepping state every N acoustic periods, atomically, and a rerun of the SAME
 call continues from the last checkpoint instead of from silence.
 
-Correctness contract (MILESTONES M10): a resumed run reproduces the
+Correctness contract: a resumed run reproduces the
 uninterrupted run's phasor to rel < 1e-6. On one backend this holds trivially
 — the saved state is bit-exact (float32 arrays through uncompressed ``.npz``,
 scalars through JSON) and the step loop is deterministic — so the resumed

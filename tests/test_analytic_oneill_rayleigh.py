@@ -2,8 +2,7 @@
 
 The two implementations are independent (closed-form algebra vs point-cloud
 quadrature), so agreement validates BOTH: geometry conventions, the
-prefactor, the focal-gain limit and the equal-area cap sampling. Criteria
-from MILESTONES.md M3:
+prefactor, the focal-gain limit and the equal-area cap sampling. Criteria:
   * focal-region correlation r > 0.999 (normalized |p|),
   * peak position difference < the axial sampling step,
   * focal amplitude relative difference < 2%.

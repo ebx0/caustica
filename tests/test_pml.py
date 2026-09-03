@@ -49,7 +49,7 @@ def test_profile_validation():
 
 
 def test_missing_pml_warns_about_periodic_wraparound(caplog):
-    """The periodic-boundary footgun (devlog 2026-08-10) must stay loud."""
+    """The periodic-boundary footgun (found 2026-08-10) must stay loud."""
     import numpy as np
 
     from caustica import Grid, Medium

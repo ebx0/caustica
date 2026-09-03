@@ -1,7 +1,7 @@
 """M10j gates: the progress hook and its presentation.
 
 The hook is the one instrumentation site the notebook, the CLI, ``status.json``
-and a future GUI all read (PLAN.md section 8). These tests pin the three
+and a future GUI all read. These tests pin the three
 properties that make it trustworthy: it fires WITHOUT a checkpoint (trap T1),
 it never reaches the k-Wave adapter (trap T3), and a consumer that throws
 cannot cost hours of compute.

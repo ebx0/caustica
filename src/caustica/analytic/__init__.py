@@ -1,7 +1,7 @@
 """Analytic acoustic references.
 
-These are the library's ground truth: solvers are validated against them
-(milestone gates in MILESTONES.md), and they double as fast preview engines
+These are the library's ground truth: solvers are validated against them,
+and they double as fast preview engines
 (Rayleigh) for array design. CPU/numpy only by design — they must run
 anywhere, instantly, with zero GPU dependencies.
 """

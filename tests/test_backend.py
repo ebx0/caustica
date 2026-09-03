@@ -78,7 +78,7 @@ def test_cpu_fft_workers_default_and_overrides(monkeypatch):
     from caustica.core import backend as B
 
     monkeypatch.delenv("CAUSTICA_CPU_WORKERS", raising=False)
-    assert B.cpu_fft_workers() == 1  # measured decision, 2026-08-22 (devlog)
+    assert B.cpu_fft_workers() == 1  # measured decision, 2026-08-22
     monkeypatch.setenv("CAUSTICA_CPU_WORKERS", "-1")
     assert B.cpu_fft_workers() == -1
     monkeypatch.setenv("CAUSTICA_CPU_WORKERS", "junk")

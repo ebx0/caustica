@@ -11,7 +11,7 @@ still prove: the fake-Colab detection, the two separate refusals, where output
 lands, and — the one that matters most — that ``run_job`` adds nothing to and
 takes nothing from the runner's contract (exit codes, ``error.json``,
 ``cancel``). The Colab-gated half (a real GPU, a real session) is deliberately
-NOT simulated here; it is a live-session criterion in MILESTONES M10f.
+NOT simulated here; it is a live-session criterion.
 """
 
 from __future__ import annotations

@@ -61,7 +61,7 @@ if str(REPO / "src") not in sys.path:
 MM = 1e-3
 C_W, RHO_W = 1500.0, 1000.0
 
-#: The project's standard array (MILESTONES M6f, "S1"): 64 elements on a
+#: The project's standard array ("S1"): 64 elements on a
 #: 60 mm spherical cap of 60 mm radius, inner hole 26.4 mm, f/1.0. Nine stored
 #: setups use it, so a phase vector graded here is graded on the transducer
 #: the dataset will be produced with.

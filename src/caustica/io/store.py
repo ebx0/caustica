@@ -12,7 +12,7 @@ sample" to "one CW solve":
 * Every write is atomic (:mod:`caustica.io.atomic`), so a file that exists is
   a file that was completely written — the invariant the resume scan trusts.
 * The phase convention and the absorption model travel as root/output attrs
-  in EVERY file (downstream contract; MILESTONES M10 gate). Nothing reading
+  in EVERY file (a downstream contract, and a release gate). Nothing reading
   a result a year from now should have to guess either.
 
 :class:`ResultStore` wraps a directory of such files with the notebook's

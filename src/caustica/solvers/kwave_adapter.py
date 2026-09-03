@@ -5,7 +5,7 @@ selectable solver, and the validation chain centers on cross-checking our
 native solvers against it (plus the analytic references). This adapter maps
 caustica's Grid/Medium/CWSource onto k-wave-python's objects, drives the
 precompiled kspaceFirstOrder binary (CPU/OMP by default — the GPU binary is
-known-broken on Colab, see MILESTONES M12), and converts the recorded time
+known-broken on Colab), and converts the recorded time
 series back into the project's phasor contract via
 :func:`caustica.spectral.single_bin_phasor`.
 

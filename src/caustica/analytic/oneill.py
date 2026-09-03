@@ -3,7 +3,7 @@
 Closed-form linear lossless axial pressure of a concave bowl with uniform
 normal velocity ``u0`` — the exact on-axis evaluation of the Rayleigh
 integral over the cap. This is validation gate #1 for every full-wave
-solver in this library (MILESTONES.md M3/M4), and the sanity anchor for the
+solver in this library, and the sanity anchor for the
 Rayleigh point-cloud discretization (the two must agree to <2%).
 
 Geometry (shared with :mod:`caustica.analytic.geometry`): bowl apex at z=0,

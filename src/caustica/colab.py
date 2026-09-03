@@ -204,9 +204,9 @@ def require_gpu_here(reason: str = "caustica.colab.run_job") -> None:
     fails first. On Colab that message is the CPU-runtime one, so a GPU
     runtime with a broken CUDA stack is told to switch to the runtime it is
     already on, and it names no install command — the honest fix for that
-    case is env policy's to make, and env policy is not this milestone's to
-    edit (M10i; recorded in the devlog as a known wart, not papered over
-    here with a third message that guesses).
+    case is env policy's to make, and env policy is not this module's to
+    edit: a known wart, recorded rather than papered over here with a
+    third message that guesses.
     """
     if cupy_available():
         return

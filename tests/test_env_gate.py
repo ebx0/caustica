@@ -2,7 +2,7 @@
 
 The mini job solves in seconds, so the gate is exercised by moving the
 threshold (``CAUSTICA_CPU_LIMIT_MIN``) rather than by hours-long runs; the
-full-size refusal is a manual evidence run recorded in the devlog.
+full-size refusal is a manual evidence run.
 """
 
 import warnings as _warnings

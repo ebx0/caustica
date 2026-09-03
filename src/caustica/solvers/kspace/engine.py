@@ -21,8 +21,8 @@ the analytic references.
 
 The nonlinear term is the notebook's validated form: dp_nl = -2 beta dt p
 (div u), i.e. the local Westervelt correction to the equation of state.
-Absorption is applied symmetrically to p and u (spatial decay = alpha; see
-the M4 devlog entry for the alpha/2 pitfall this avoids).
+Absorption is applied symmetrically to p and u (spatial decay = alpha; this
+is what avoids the alpha/2 pitfall).
 
 Steady-state harmonics: the record window accumulates a leakage-free
 single-bin DFT at n*f0 for every requested harmonic n (exact-period dt makes
@@ -204,7 +204,7 @@ def run_cw_kspace_pstd(
     ``progress`` is called with ONE dict per period boundary and once more at
     the settle -> record transition — never per step, which would force a
     device->host sync every step and destroy GPU throughput. The payload is
-    the library-wide progress contract (PLAN.md section 8)::
+    the library-wide progress contract::
 
         {period, periods_expected, step, steps_expected, peak,
          converge_delta, elapsed_s, eta_s, stage}   # stage: settle | record

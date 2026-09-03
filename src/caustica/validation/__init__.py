@@ -1,6 +1,6 @@
 """Machine-checked milestone gates (M11's first piece).
 
-A criterion in ``MILESTONES.md`` is a sentence until something measures it.
+A validation criterion is a sentence until something measures it.
 This package turns the ones that need real hardware into commands that
 produce a stamped report — evidence a milestone box can be ticked against,
 instead of a memory of a session that went well.

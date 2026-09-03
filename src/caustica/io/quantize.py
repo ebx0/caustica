@@ -16,7 +16,7 @@ from typing import NamedTuple
 import numpy as np
 
 #: Project-wide default contract: max round-trip error, as a fraction of the
-#: field's own peak (0.1 %). MILESTONES M10 gate.
+#: field's own peak (0.1 %). A release gate.
 DEFAULT_MAX_NORM_ERR = 1e-3
 
 

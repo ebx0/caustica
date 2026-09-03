@@ -1,6 +1,6 @@
 """M5 gates: Westervelt nonlinearity vs Fubini + linear-limit equivalence.
 
-Resolution note (calibrated empirically, see devlog 2026-08-10 session 5):
+Resolution note (calibrated empirically, 2026-08-10):
 harmonic-cascade accuracy needs headroom above f0 — at 8 ppw the 3rd
 harmonic sits at 2.67 ppw and aliases, inflating A2/A1 by ~10%. At 16 ppw
 (2f0 at 8 ppw, 3f0 at 5.3 ppw) A2/A1 lands within 1-3% of Fubini across
