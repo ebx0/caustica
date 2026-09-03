@@ -768,13 +768,13 @@ def _e6(ctx):
 
 
 # --------------------------------------------------------------------------
-# E7 — the M8.time hypothesis, measured directly
+# E7 — the time hypothesis, measured directly
 # --------------------------------------------------------------------------
 
 
 @experiment("E7", "warmup: a fresh process pays what a warm one never sees", gpu=True)
 def _e7(ctx):
-    """The standing explanation for M8.time is that calibration probes run inside
+    """The standing explanation for time is that calibration probes run inside
     a process that has ALREADY paid the CUDA context, module-load and plan costs,
     so the warmup they measure is not the warmup a real run pays."""
     rows = []

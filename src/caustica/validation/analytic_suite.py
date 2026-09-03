@@ -1,4 +1,4 @@
-"""M11's second box: the library's ANALYTIC references, graded on this machine.
+"""The library's ANALYTIC references, graded on this machine.
 
 ``caustica.analytic`` holds the closed forms every solver in this repository
 was built against — exponential absorption, O'Neil's on-axis bowl solution,
@@ -217,7 +217,7 @@ def size_preset(name: str) -> Size:
 
 # --------------------------------------------------------------- planning
 #
-# M11 asks this report to carry the planner's estimate next to what the run
+# This report carries the planner's estimate next to what the run
 # actually cost. Every solve below therefore goes through _planned_run,
 # which takes planner.estimate() on the setup FIRST and times the solve
 # second. Nothing here is gated -- see planner_block for the reasons, which
@@ -908,7 +908,7 @@ def _num(scenarios: dict[str, dict], scenario: str, key: str) -> float | None:
 def evaluate(scenarios: dict[str, dict]) -> list[Gate]:
     """Turn measurements into gate verdicts. Pure — no I/O, no solving."""
     planewave = Gate(
-        id="M4.planewave",
+        id="planewave",
         criterion=(
             "1-D plane wave: the realized drive amplitude honours the mass-source "
             "contract, the numerical phase speed matches k = omega/c, and the decay "
@@ -939,7 +939,7 @@ def evaluate(scenarios: dict[str, dict]) -> list[Gate]:
     )
 
     oneill = Gate(
-        id="M4.oneill",
+        id="oneill",
         criterion=(
             "3-D focused bowl vs analytic.axial_pressure (O'Neil): normalized axial "
             "profile correlation, focal peak position, and -6 dB axial width"
@@ -968,7 +968,7 @@ def evaluate(scenarios: dict[str, dict]) -> list[Gate]:
     )
 
     absolute = Gate(
-        id="M30.absolute",
+        id="absolute",
         criterion=(
             "the focused bowl radiates the pressure it was asked to: the source "
             "carries the cap's own area, the on-axis focal pressure sits inside an "
@@ -999,7 +999,7 @@ def evaluate(scenarios: dict[str, dict]) -> list[Gate]:
     limit_data = scenarios.get("linear_limit") or {}
     nonlinear_active = None if limit_data.get("error") else limit_data.get("nonlinear_active")
     linear_limit = Gate(
-        id="M5.linear_limit",
+        id="linear_limit",
         criterion=(
             "westervelt with beta = 0 is bit-identical to the linear solver, and says "
             "so in its metadata"
@@ -1030,7 +1030,7 @@ def evaluate(scenarios: dict[str, dict]) -> list[Gate]:
     fubini_data = scenarios.get("fubini") or {}
     stations = [] if fubini_data.get("error") else (fubini_data.get("stations") or [])
     fubini = Gate(
-        id="M5.fubini",
+        id="fubini",
         criterion=(
             f"second-harmonic ratio A2/A1 within {FUBINI_TOL:.0%} of analytic.fubini_harmonic "
             f"at >= {FUBINI_STATIONS_REQUIRED} pre-shock sigma stations"

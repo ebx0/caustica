@@ -452,7 +452,7 @@ def test_a_fit_that_cannot_reproduce_its_samples_is_flagged():
     assert cal.fit_max_rel_residual(good, ga, gb) < cal.FIT_RESIDUAL_LIMIT
 
 
-# ------------------------------- the time curve is interpolated (M8.time)
+# ------------------------------- the time curve is interpolated (time)
 #
 # A device's per-element cost is a curve, and a two-parameter global law
 # cannot bend the way a real one does. On an RTX PRO 6000 Blackwell (95 GiB,
@@ -525,7 +525,7 @@ def test_the_ladder_the_gate_measured_is_predicted_within_the_m8_tolerance():
     """The rungs are genuinely out of sample: probes at 216/320/432^3,
     rungs at 400/512/640^3. Two of the three EXTRAPOLATE above the probes.
 
-    This is the M8.time per-step half, which the session already passed on
+    This is the time per-step half, which the session already passed on
     the anchored model (-6..-9%); interpolation must not lose that.
     """
     for side, steady in BLACKWELL_LADDER.items():
@@ -740,10 +740,10 @@ def test_a_bigger_grid_is_never_predicted_cheaper_than_a_smaller_one():
     assert cal.interp_step_time(noisy, 200_000) == pytest.approx(predictions[0])
 
 
-# ----------------------------- the warmup curve is interpolated too (M8.time)
+# ----------------------------- the warmup curve is interpolated too (time)
 #
 # Subtracting each rung's measured warmup from its wall time, the anchored
-# per-step model was only -6..-9% out. M8.time failed on the OTHER half: the
+# per-step model was only -6..-9% out. time failed on the OTHER half: the
 # plans used the probe's warmup (0.2/0.6/1.2/2.3 s) while the real runs paid
 # 4.389/12.838/32.375 s, and those are superlinear in P. record_warmup_model
 # wrote them back, the linear refit landed on a NEGATIVE context -- clamped

@@ -11,6 +11,16 @@ measured, and how, is [documented here](https://ebx0.github.io/caustica/validati
 
 ## [Unreleased]
 
+### Changed
+
+- **The validation gates lost their milestone prefixes.** `M4.planewave` is now
+  `planewave`, `M8.vram` is `vram`, `M21.PH1-SC1` is `PH1-SC1`, and so on for
+  every gate the analytic, compare, gpu-gates and ITRUSST suites write. The
+  second half of the name always said what the gate measured; the first half
+  indexed a ledger that no longer ships with the repository. Reports written
+  before this change carry the old ids, so a diff across that boundary has to
+  map them by hand.
+
 ### Added
 
 - **Solvers.** A shared k-space PSTD CW engine behind two registered solvers,
@@ -59,7 +69,7 @@ measured, and how, is [documented here](https://ebx0.github.io/caustica/validati
 - **`result.h5` carries its numerics generation** — `numerics_scheme` and
   `source_discretization` at the root, so a pressure in pascals says which
   side of the 2026-08-24 source changes it came from.
-- **An absolute-amplitude gate** (`M30.absolute` in the analytic suite). Every
+- **An absolute-amplitude gate** (`absolute` in the analytic suite). Every
   other check in that suite grades a normalized quantity, which is how two
   independent 13–18 % absolute errors survived months of green gates. Its
   tolerance came from measurement: the error follows `3.7 * ppw^-2.5`, so a

@@ -363,7 +363,8 @@ def _a1(ctx):
 
 @check("A2", "absolute pressure against the Rayleigh integral, same phase vector")
 def _a2(ctx):
-    """The gate M30 left open, asked with the phases a dataset will use.
+    """The gate the absolute-amplitude work left open, asked with the phases a
+    dataset will use.
 
     The bowl half of the absolute-amplitude gate closed against O'Neil. The
     array half did not, and this is the case it was left open on: with an

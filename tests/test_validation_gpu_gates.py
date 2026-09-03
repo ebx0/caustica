@@ -1,6 +1,6 @@
 """Everything about the GPU gate suite that does NOT need a GPU.
 
-The suite exists to close M7's and M8's on-device criteria, so its expensive
+The suite exists to close the on-device criteria, so its expensive
 half runs exactly once, on somebody else's machine, in a session that is
 awkward to repeat. That makes the cheap half — ladder sizing, the verdict
 algebra, the report schema, the refusal branch, the no-GPU exit — the part
@@ -240,7 +240,7 @@ def test_the_ladder_is_clipped_to_the_device_and_still_gives_two_points():
     assert any(r.shape == (512, 512, 512) for r in fitting), "the M7 full-size rung is missing"
 
     # A 16 GiB T4 cannot hold the 28 GiB target; it must still produce the two
-    # measurements M8's criterion counts.
+    # measurements the criterion counts.
     small = [r for r in gg.build_ladder(15.0) if r.expect_fit]
     assert len(small) >= 2
     assert all(r.predicted_gib <= 15.0 for r in small)
@@ -343,23 +343,23 @@ def test_a_faithful_model_passes_every_gate_it_measured(tmp_path):
     device = FakeDevice(vram_error=0.03, time_error=0.05)
     code, payload = run_suite(tmp_path, device)
 
-    assert gate_of(payload, "M8.vram")["verdict"] == "PASS"
-    assert gate_of(payload, "M8.time")["verdict"] == "PASS"
-    assert gate_of(payload, "M7.fullsize")["verdict"] == "PASS"
-    assert gate_of(payload, "M8.oom")["verdict"] == "PASS"
+    assert gate_of(payload, "vram")["verdict"] == "PASS"
+    assert gate_of(payload, "time")["verdict"] == "PASS"
+    assert gate_of(payload, "fullsize")["verdict"] == "PASS"
+    assert gate_of(payload, "oom")["verdict"] == "PASS"
     # Parity was not run here, so its gate MUST stay open and the suite must
     # not claim overall success.
-    assert gate_of(payload, "M7.parity")["verdict"] == "INCOMPLETE"
+    assert gate_of(payload, "parity")["verdict"] == "INCOMPLETE"
     assert payload["verdict"] == "INCOMPLETE"
     assert code == gg.EXIT_FAILED
 
-    assert gate_of(payload, "M8.vram")["n_pass"] >= 2  # "at least 2 grid sizes"
-    assert gate_of(payload, "M8.time")["n_pass"] >= 2  # "at least 2 scenarios"
+    assert gate_of(payload, "vram")["n_pass"] >= 2  # "at least 2 grid sizes"
+    assert gate_of(payload, "time")["n_pass"] >= 2  # "at least 2 scenarios"
 
 
 def test_a_vram_model_off_by_twenty_percent_fails_the_vram_gate(tmp_path):
     _, payload = run_suite(tmp_path, FakeDevice(vram_error=0.20))
-    vram = gate_of(payload, "M8.vram")
+    vram = gate_of(payload, "vram")
     assert vram["verdict"] == "FAIL"
     assert any(c["verdict"] == "FAIL" for c in vram["checks"])
     assert payload["verdict"] == "FAIL"
@@ -367,18 +367,18 @@ def test_a_vram_model_off_by_twenty_percent_fails_the_vram_gate(tmp_path):
 
 def test_a_time_model_off_by_forty_percent_fails_the_time_gate(tmp_path):
     _, payload = run_suite(tmp_path, FakeDevice(time_error=0.40))
-    assert gate_of(payload, "M8.time")["verdict"] == "FAIL"
-    assert gate_of(payload, "M8.vram")["verdict"] == "PASS"  # independent gates
+    assert gate_of(payload, "time")["verdict"] == "FAIL"
+    assert gate_of(payload, "vram")["verdict"] == "PASS"  # independent gates
 
 
 def test_one_measurement_is_not_two(tmp_path):
-    """M8 says "at least 2". A ladder with a single fitting rung leaves the
+    """The criterion says "at least 2". A ladder with a single fitting rung leaves the
     gate INCOMPLETE — it does not get to pass on one good number."""
     _, payload = run_suite(tmp_path, FakeDevice(), targets_gib=(2.0,), oom_rung=False)
     fitting = [r for r in payload["rungs"] if r["expect_fit"]]
     assert len(fitting) == 1
-    assert gate_of(payload, "M8.vram")["verdict"] == "INCOMPLETE"
-    assert gate_of(payload, "M8.oom")["verdict"] == "INCOMPLETE"
+    assert gate_of(payload, "vram")["verdict"] == "INCOMPLETE"
+    assert gate_of(payload, "oom")["verdict"] == "INCOMPLETE"
     assert payload["verdict"] != "PASS"
 
 
@@ -386,7 +386,7 @@ def test_a_device_that_solves_what_it_cannot_fit_fails_the_refusal_gate(tmp_path
     """The refusal is a gate, not a formality: a run that should have been
     refused and was solved instead is a FAIL, not a quietly-missing check."""
     _, payload = run_suite(tmp_path, FakeDevice(solve_oversized=True))
-    oom = gate_of(payload, "M8.oom")
+    oom = gate_of(payload, "oom")
     assert oom["verdict"] == "FAIL"
     assert payload["verdict"] == "FAIL"
 
@@ -396,37 +396,37 @@ def test_a_step_count_that_does_not_match_the_plan_is_not_compared(tmp_path):
     wall-time comparison is measuring the convergence heuristic, not the
     timing model — so it is SKIPped rather than counted either way."""
     _, payload = run_suite(tmp_path, FakeDevice(steps_mismatch=True))
-    timing = gate_of(payload, "M8.time")
+    timing = gate_of(payload, "time")
     assert all(c["verdict"] == "SKIP" for c in timing["checks"])
     assert timing["verdict"] == "INCOMPLETE"
-    assert gate_of(payload, "M8.vram")["verdict"] == "PASS"  # VRAM is still comparable
+    assert gate_of(payload, "vram")["verdict"] == "PASS"  # VRAM is still comparable
 
 
 def test_a_datasheet_estimate_never_closes_the_post_calibration_time_gate(tmp_path):
-    """M8's wording is "kalibrasyon SONRASI". A "db" plan is datasheet-coarse
+    """The wording is "kalibrasyon SONRASI". A "db" plan is datasheet-coarse
     to about 2x, so it can land inside +/-25% by luck — and closing a
     calibration gate with an uncalibrated number is the quietest false PASS
     available to this suite."""
     _, payload = run_suite(tmp_path, FakeDevice(plan_source="db", time_error=0.01))
-    timing = gate_of(payload, "M8.time")
+    timing = gate_of(payload, "time")
     assert timing["verdict"] == "INCOMPLETE"
     assert all(c["verdict"] == "SKIP" for c in timing["checks"])
     assert any("not 'calibrated'" in c["detail"] for c in timing["checks"])
     # VRAM does not depend on calibration, so that gate is unaffected.
-    assert gate_of(payload, "M8.vram")["verdict"] == "PASS"
+    assert gate_of(payload, "vram")["verdict"] == "PASS"
 
 
 def test_a_failed_calibration_costs_the_time_gate_not_the_session(tmp_path):
     """Fifteen minutes into a Colab session is the wrong moment to lose every
     measurement to a traceback — but it is also the wrong moment to grade
-    M8's calibrated gate on plans that were never calibrated."""
+    the calibrated gate on plans that were never calibrated."""
     device = FakeDevice(calibration_raises=True, plan_source="db")
     _, payload = run_suite(tmp_path, device)
 
     assert "error" in payload["calibration"]
     assert any("calibration failed" in n for n in payload["notes"])
-    assert gate_of(payload, "M8.time")["verdict"] == "INCOMPLETE"
-    assert gate_of(payload, "M8.vram")["verdict"] == "PASS"  # still measured
+    assert gate_of(payload, "time")["verdict"] == "INCOMPLETE"
+    assert gate_of(payload, "vram")["verdict"] == "PASS"  # still measured
     assert payload["rungs"], "the ladder still ran"
 
 
@@ -440,13 +440,13 @@ def test_a_rung_that_did_not_complete_contributes_nothing(tmp_path):
     dropping this guard survived every other test).
     """
     _, payload = run_suite(tmp_path, FakeDevice(exit_code_after_stamp=4))
-    for gate_id in ("M8.vram", "M8.time"):
+    for gate_id in ("vram", "time"):
         gate = gate_of(payload, gate_id)
         assert all(c["verdict"] == "SKIP" for c in gate["checks"]), gate
         assert gate["verdict"] == "INCOMPLETE"
-    # M7's full-size criterion is different in kind: it asks whether the run
+    # The full-size criterion is different in kind: it asks whether the run
     # COMPLETED, and "it exited 4" is an answer, not a missing measurement.
-    assert gate_of(payload, "M7.fullsize")["verdict"] == "FAIL"
+    assert gate_of(payload, "fullsize")["verdict"] == "FAIL"
     assert payload["verdict"] == "FAIL"
     # ... and a failed rung is not a step-time baseline either.
     assert payload["step_time_baseline"] == []
@@ -527,23 +527,23 @@ def test_field_diff_is_whole_field_not_a_headline():
 def test_parity_verdicts_read_both_norms_of_both_fields():
     tight = {"rel_l2": 1e-9, "rel_linf": 1e-9}
     gates = gg.evaluate([], {"phasor": tight, "p_max": tight})
-    parity = next(g for g in gates if g.id == "M7.parity")
+    parity = next(g for g in gates if g.id == "parity")
     assert parity.verdict == "PASS" and len(parity.checks) == 4
 
     # L2 can hide a single bad voxel; L-infinity cannot, and one failing norm
     # fails the gate.
     gates = gg.evaluate([], {"phasor": {"rel_l2": 1e-9, "rel_linf": 1e-2}, "p_max": tight})
-    assert next(g for g in gates if g.id == "M7.parity").verdict == "FAIL"
+    assert next(g for g in gates if g.id == "parity").verdict == "FAIL"
 
     # ALL FOUR norms have to be measured. Three good ones and one that could
     # not be evaluated is not "parity shown" — it is parity shown for three
     # quarters of the claim (mutation round: relaxing the count to 1 survived
     # every other assertion here).
     gates = gg.evaluate([], {"phasor": {"rel_l2": None, "rel_linf": 1e-9}, "p_max": tight})
-    partial = next(g for g in gates if g.id == "M7.parity")
+    partial = next(g for g in gates if g.id == "parity")
     assert partial.n_pass == 3 and partial.verdict == "INCOMPLETE"
 
-    assert next(g for g in gg.evaluate([], None) if g.id == "M7.parity").verdict == "INCOMPLETE"
+    assert next(g for g in gg.evaluate([], None) if g.id == "parity").verdict == "INCOMPLETE"
 
 
 def test_the_parity_gate_is_measured_on_fp32_fields_not_on_a_stored_file():
@@ -553,7 +553,7 @@ def test_the_parity_gate_is_measured_on_fp32_fields_not_on_a_stored_file():
     agreed with a local CPU run to 3.6e-5 relative L2 and 4.883e-4 relative
     L-infinity — and 4.883e-4 is exactly 2^-11, ONE float16 ULP (99.17% of
     ``p_max`` bit-identical, 517 voxels off by one ULP, none by more). The
-    fields agree below the resolution of the file. Gating M7's 1e-5 criterion
+    fields agree below the resolution of the file. Gating the 1e-5 criterion
     on that round trip would fail a perfect solver, so this test reproduces
     the floor synthetically and pins that (a) storage alone exceeds the gate
     tolerance, and (b) the gate does not look there.
@@ -584,9 +584,9 @@ def test_the_parity_gate_is_measured_on_fp32_fields_not_on_a_stored_file():
 
     # The gate, fed the fp32 numbers, passes; fed the stored ones, it would not.
     passes = gg.evaluate([], {"phasor": in_memory, "p_max": in_memory})
-    assert next(g for g in passes if g.id == "M7.parity").verdict == "PASS"
+    assert next(g for g in passes if g.id == "parity").verdict == "PASS"
     fails = gg.evaluate([], {"phasor": through_storage, "p_max": through_storage})
-    assert next(g for g in fails if g.id == "M7.parity").verdict == "FAIL"
+    assert next(g for g in fails if g.id == "parity").verdict == "FAIL"
 
 
 def test_run_parity_gates_the_fp32_numbers_and_only_reports_the_stored_ones(tmp_path):
@@ -629,7 +629,7 @@ def test_run_parity_gates_the_fp32_numbers_and_only_reports_the_stored_ones(tmp_
         assert data["stored_float16_reference"][key]["rel_l2"] > gg.PARITY_TOL, (
             "the informational block is not showing the storage floor"
         )
-    assert next(g for g in gg.evaluate([], data) if g.id == "M7.parity").verdict == "PASS"
+    assert next(g for g in gg.evaluate([], data) if g.id == "parity").verdict == "PASS"
 
 
 @pytest.mark.slow
@@ -752,7 +752,7 @@ def test_the_gate_notebook_points_the_reader_at_the_user_notebook():
         assert code in intro
 
 
-# --------------------------------------- one process per rung (M8, fix F2)
+# ------------------------------------------------- one process per rung
 
 
 def _mini_job_file(tmp_path):

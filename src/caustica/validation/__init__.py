@@ -1,4 +1,4 @@
-"""Machine-checked milestone gates (M11's first piece).
+"""Machine-checked validation gates.
 
 A validation criterion is a sentence until something measures it.
 This package turns the ones that need real hardware into commands that
@@ -7,7 +7,7 @@ instead of a memory of a session that went well.
 
 Three suites live here.
 
-:mod:`caustica.validation.gpu_gates` closes M7's and M8's on-device criteria
+:mod:`caustica.validation.gpu_gates` closes the on-device criteria
 in a single run — it needs a real GPU and books it for minutes::
 
     python -m caustica.validation gpu-gates

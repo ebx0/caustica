@@ -184,10 +184,10 @@ reference.
 
 | name | physics | dims | backend | status |
 |---|---|---|---|---|
-| `linear` | linear full-wave k-space PSTD | 1/2/3-D | numpy (cupy: M7) | ✅ validated |
-| `westervelt` | nonlinear (Westervelt) k-space PSTD, multi-harmonic capture | 1/2/3-D | numpy (cupy: M7) | ✅ validated |
+| `linear` | linear full-wave k-space PSTD | 1/2/3-D | numpy (cupy: provisional) | ✅ validated |
+| `westervelt` | nonlinear (Westervelt) k-space PSTD, multi-harmonic capture | 1/2/3-D | numpy (cupy: provisional) | ✅ validated |
 | `kwave` | [k-Wave](http://www.k-wave.org) kspaceFirstOrder via `k-wave-python` (CPU/OMP binary) | 2/3-D | external | ✅ wrapped + cross-validated |
-| `kzk` | parabolic KZK (z-marching) | planned | — | M9 |
+| `kzk` | parabolic KZK (z-marching) | planned | — | planned |
 
 ```python
 import numpy as np
@@ -315,7 +315,7 @@ src/caustica/
   runner.py   # plan-first job execution: disjoint exit codes, heartbeat, resume
   facade.py   # caustica.simulate(...): one call over the SAME build_job/plan/gates
   colab.py    # caustica.colab: the Colab bridge — environment verdict BEFORE anything
-              # is prepared, output under /content, no Drive anywhere (M10f)
+              # is prepared, output under /content, no Drive anywhere
   progress.py # progress payload presentation (tqdm or plain lines, focal preview)
   __main__.py # the CLI: python -m caustica {validate | run | report | schema | example}
 apps/            # focus study (library consumer; not in the wheel)

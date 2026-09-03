@@ -354,7 +354,7 @@ def _h4(ctx):
     analytic answer for that — only another implementation. k-Wave is the one
     available, and it shares nothing with this engine but the source voxels.
 
-    Graded on ABSOLUTE amplitude. The shipped cross-check (`M11.cross`) grades
+    Graded on ABSOLUTE amplitude. The shipped cross-check (`cross`) grades
     normalized correlation, which is how a 13-18 % amplitude error survived
     months of green gates; repeating that mistake in the heterogeneous case
     would be careless.

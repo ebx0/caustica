@@ -57,7 +57,7 @@ class Check:
         tol_pct: float,
         unit: str = "",
     ) -> Check:
-        """``|predicted - actual| / |actual| <= tol_pct`` -- M8's gate shape."""
+        """``|predicted - actual| / |actual| <= tol_pct`` -- the planner gate shape."""
         data = {
             "predicted": predicted,
             "actual": actual,
@@ -160,7 +160,7 @@ class Check:
 class Gate:
     """One milestone criterion and the checks that answer it.
 
-    ``required`` is the milestone's own wording made countable: M8 says "at
+    ``required`` is the criterion's own wording made countable: it says "at
     least 2 grid sizes" and "at least 2 scenarios", so one good measurement
     is not enough and the gate stays INCOMPLETE until the ladder has produced
     the second. A gate with no checks at all is INCOMPLETE, never PASS.

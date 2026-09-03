@@ -11,7 +11,7 @@ The suite has three separable risks and this file pins them separately:
   registry whose "solvers" return canned fields, so the whole pipeline runs
   in milliseconds against engines that cannot possibly be right by accident;
 * the **real thing**, twice at the bottom: linear vs westervelt on a linear
-  medium (bit-identical by M5's guarantee, so relative L2 is exactly zero),
+  medium (bit-identical by the linear-limit guarantee, so relative L2 is zero),
   and — behind the ``kwave`` marker — the live linear-vs-kwave cross-check
   the harness exists to reproduce.
 
@@ -175,7 +175,7 @@ def test_a_field_compared_against_itself_is_perfect_agreement():
 
 
 def test_a_scaled_copy_agrees_because_the_comparison_is_normalized():
-    """The old M12 criterion, as a test: amplitude is an engine convention.
+    """The old criterion, as a test: amplitude is an engine convention.
 
     A field twice as loud is the SAME field for cross-engine purposes — that
     is exactly the difference between k-Wave's internal source normalization
@@ -205,7 +205,7 @@ def test_a_scrambled_field_fails_the_correlation_gate():
         [{"reference": "ref", "compared": "other", "status": "ok", **out}],
         "ref",
     )
-    assert gate_by_id_obj(gates, "M11.cross").verdict == "FAIL"
+    assert gate_by_id_obj(gates, "cross").verdict == "FAIL"
 
 
 def test_a_shifted_peak_is_reported_in_voxels_and_fails_the_focus_gate():
@@ -248,7 +248,7 @@ def test_a_dead_engine_fails_the_sanity_gate_instead_of_producing_a_correlation(
 
     assert payload["runs"]["dead"]["status"] == "sanity"
     assert check_by_name(payload, "t0.dead.peak")["verdict"] == "FAIL"
-    assert gate_by_id(payload, "M11.t0")["verdict"] == "FAIL"
+    assert gate_by_id(payload, "t0")["verdict"] == "FAIL"
     # It never reached the comparison, and the pair says so rather than vanishing.
     assert payload["runs"]["dead"]["run"] is None
     (pair,) = payload["pairs"]
@@ -313,7 +313,7 @@ def test_the_t0_band_is_wide_enough_to_be_a_garbage_detector_not_a_physics_gate(
     for factor, ok in ((1.0, True), (0.5, True), (4.9, True), (5.1, False), (0.0, False)):
         run = {"status": "ok", "finite": True, "peak_over_expected": factor}
         gates = cmp.evaluate({"s": {"status": "ok", "t0": {**run}}}, [], "s")
-        assert (gate_by_id_obj(gates, "M11.t0").verdict == "PASS") is ok, factor
+        assert (gate_by_id_obj(gates, "t0").verdict == "PASS") is ok, factor
 
 
 # ------------------------------------------------------- environment-broken
@@ -431,8 +431,8 @@ def test_an_empty_comparison_cannot_pass_by_having_nothing_to_check():
         [],
         "a",
     )
-    assert gate_by_id_obj(gates, "M11.t0").verdict == "PASS"
-    assert gate_by_id_obj(gates, "M11.cross").verdict == "INCOMPLETE"
+    assert gate_by_id_obj(gates, "t0").verdict == "PASS"
+    assert gate_by_id_obj(gates, "cross").verdict == "INCOMPLETE"
 
 
 def test_the_gate_requires_a_passing_check_from_every_engine_that_could_run():
@@ -441,7 +441,7 @@ def test_the_gate_requires_a_passing_check_from_every_engine_that_could_run():
         "b": {"status": "ok", "t0": {"status": "ok", "finite": True, "peak_over_expected": 1.0}},
         "c": {"status": "environment", "t0": {"status": "environment", "message": "no binary"}},
     }
-    gate = gate_by_id_obj(cmp.evaluate(runs, [], "a"), "M11.t0")
+    gate = gate_by_id_obj(cmp.evaluate(runs, [], "a"), "t0")
     assert gate.required == 4, "two live engines, two checks each; the broken one is not counted"
     assert gate.verdict == "PASS"
 
@@ -655,7 +655,7 @@ def test_the_real_harness_reproduces_m5_bit_identity_between_linear_and_westerve
 
     Everything above runs on canned fields and would still pass if the
     engines returned constants. Here two REAL engines run the same mini job
-    on a linear (beta = 0) medium, where M5 guarantees not "close" but the
+    on a linear (beta = 0) medium, where the linear limit guarantees not "close" but the
     same arithmetic — so the normalized relative L2 is exactly zero, and any
     stray normalization, cropping or ordering bug in the harness would show
     up as a non-zero number rather than as a slightly different green.
@@ -689,7 +689,7 @@ def test_the_real_harness_reproduces_m5_bit_identity_between_linear_and_westerve
 @pytest.mark.kwave
 @pytest.mark.slow
 def test_the_real_harness_reproduces_the_linear_vs_kwave_cross_check(tmp_path):
-    """M11's success criterion, verbatim: the existing linear-vs-kwave cross
+    """The success criterion, verbatim: the existing linear-vs-kwave cross
     checks are reproduced FROM THE HARNESS at r > 0.99.
 
     Skips exactly the way ``tests/test_kwave_adapter.py`` skips — on a machine

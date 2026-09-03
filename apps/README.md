@@ -6,7 +6,7 @@ reach into internals, so they are the honest end-to-end check that what the
 milestones claim is actually usable.
 
 Apps are not part of the library: they are not packaged by `pip install -e .`.
-They ARE reached by `pytest` since M10d — tests/test_report.py imports
+They ARE reached by `pytest` — tests/test_report.py imports
 `apps.focus_study.{scenarios,analysis}` for the metric-single-source parity
 tests — and covered by `ruff` (`ruff check apps src tests`). Run outputs land
 in `apps/outputs/`, which is git-ignored.
@@ -65,11 +65,11 @@ apps/outputs/<scenario>-<timestamp>/
 
 ### Deliberate limits (they mirror the library's own)
 
-- **CPU only.** The CuPy path is M7; `backend="numpy"` is passed explicitly.
-- **`.npz`, not HDF5.** The IO contract with resume is M10.
-- **One run per invocation.** Parameter sweeps are the Study harness, M11.
+- **CPU only.** The CuPy path is still provisional; `backend="numpy"` is passed explicitly.
+- **`.npz`, not HDF5.** The HDF5 contract is the runner's, with resume.
+- **One run per invocation.** Parameter sweeps are the Study harness.
 - **Absorption is exponential at f0.** Harmonics are absorbed with the
-  fundamental's alpha, so second-harmonic levels are optimistic (M16).
+  fundamental's alpha, so second-harmonic levels are optimistic.
 - **Resolution is checked, not enforced.** Recording harmonic `n` on a grid
   sized for f0 leaves it under-resolved; the app prints exactly how far off it
   is and what `--dx` would fix it, then runs anyway.
@@ -77,4 +77,4 @@ apps/outputs/<scenario>-<timestamp>/
 ---
 
 > The phantom launcher and Phantom Studio moved to the `uwcem-phantom`
-> repository at M10k, together with the `uwcem_phantoms` package.
+> repository, together with the `uwcem_phantoms` package.

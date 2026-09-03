@@ -371,7 +371,7 @@ def evaluate(cases: dict[str, dict]) -> list[Gate]:
             )
         gates.append(
             Gate(
-                id=f"M21.PH1-{sc_id}",
+                id=f"PH1-{sc_id}",
                 criterion=(
                     f"ITRUSST PH1 benchmarks 1 and 2 with source condition {sc_id}: the "
                     f"field over the paper's comparison domain agrees with the Rayleigh "

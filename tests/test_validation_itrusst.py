@@ -78,9 +78,9 @@ def test_the_gate_reads_the_spread_the_paper_reported():
     assert it.REPORTED_SPREAD["SC1"]["all_under_pct"] == 10.0
     assert it.REPORTED_SPREAD["SC2"]["all_under_pct"] == 15.0
     gates = {g.id: g for g in it.evaluate({})}
-    assert set(gates) == {"M21.PH1-SC1", "M21.PH1-SC2"}
-    assert "10 %" in gates["M21.PH1-SC1"].criterion
-    assert "15 %" in gates["M21.PH1-SC2"].criterion
+    assert set(gates) == {"PH1-SC1", "PH1-SC2"}
+    assert "10 %" in gates["PH1-SC1"].criterion
+    assert "15 %" in gates["PH1-SC2"].criterion
 
 
 def measured(l_inf: float, peak_err_mm: float = 0.0, dx_mm: float = 0.5) -> dict:
@@ -109,7 +109,7 @@ def test_the_position_tolerance_follows_the_spacing_the_run_used():
     cases["BM1-SC2"] = measured(3.5, peak_err_mm=0.75, dx_mm=0.25)
     gates = {g.id: g for g in it.evaluate(cases)}
 
-    assert gates["M21.PH1-SC2"].verdict == "FAIL", (
+    assert gates["PH1-SC2"].verdict == "FAIL", (
         "0.75 mm is three voxels at dx = 0.25 mm; grading it against the module "
         "default would call it one and a half and let it through"
     )
@@ -155,8 +155,8 @@ def test_a_run_outside_it_fails_the_right_gate(case, field, value):
     cases = {k: measured(3.5) for k in ("BM1-SC1", "BM2-SC1", "BM1-SC2", "BM2-SC2")}
     cases[case] = measured(value) if field == "l_inf" else measured(3.5, value)
     gates = {g.id: g for g in it.evaluate(cases)}
-    failed = gates[f"M21.PH1-{case.split('-')[1]}"]
-    other = gates[f"M21.PH1-{'SC2' if case.endswith('SC1') else 'SC1'}"]
+    failed = gates[f"PH1-{case.split('-')[1]}"]
+    other = gates[f"PH1-{'SC2' if case.endswith('SC1') else 'SC1'}"]
 
     assert failed.verdict == "FAIL"
     assert other.verdict == "PASS", "one bad case took an unrelated gate down"
@@ -168,5 +168,5 @@ def test_a_case_that_never_ran_leaves_its_gate_open():
     cases["BM2-SC2"] = {"error": "RuntimeError: no GPU"}
     gates = {g.id: g for g in it.evaluate(cases)}
 
-    assert gates["M21.PH1-SC2"].verdict == "INCOMPLETE"
-    assert gates["M21.PH1-SC1"].verdict == "PASS"
+    assert gates["PH1-SC2"].verdict == "INCOMPLETE"
+    assert gates["PH1-SC1"].verdict == "PASS"

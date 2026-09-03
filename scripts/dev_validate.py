@@ -1996,7 +1996,7 @@ def stage_u2(ctx: Ctx) -> Outcome:
     time_checks = [
         {"name": c.get("name"), "verdict": c.get("verdict"), "detail": c.get("detail")}
         for g in payload.get("gates", [])
-        if g.get("id") == "M8.time"
+        if g.get("id") == "time"
         for c in g.get("checks", [])
     ]
     diverged = [

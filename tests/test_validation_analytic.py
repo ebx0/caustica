@@ -150,19 +150,19 @@ def test_a_scenario_that_raised_contributes_nothing(tmp_path):
 
     assert code == an.EXIT_FAILED
     assert payload["verdict"] == "INCOMPLETE"
-    assert gate_by_id(payload, "M4.oneill")["verdict"] == "INCOMPLETE"
-    assert all(c["verdict"] == "SKIP" for c in gate_by_id(payload, "M4.oneill")["checks"])
+    assert gate_by_id(payload, "oneill")["verdict"] == "INCOMPLETE"
+    assert all(c["verdict"] == "SKIP" for c in gate_by_id(payload, "oneill")["checks"])
     assert "RuntimeError" in payload["scenarios"]["oneill"]["error"]
     assert any("oneill" in note for note in payload["notes"])
     # The other three gates still closed: one bad scenario does not lose the run.
-    assert [g["verdict"] for g in payload["gates"] if g["id"] != "M4.oneill"] == ["PASS"] * 4
+    assert [g["verdict"] for g in payload["gates"] if g["id"] != "oneill"] == ["PASS"] * 4
 
 
 def test_a_zero_difference_is_the_only_passing_linear_limit():
     """The one gate whose limit is exactly zero must mean exactly zero."""
     results = perfect_results()
     results["linear_limit"]["phasor_max_abs_diff_pa"] = 1e-9
-    gate = [g for g in an.evaluate(results) if g.id == "M5.linear_limit"][0]
+    gate = [g for g in an.evaluate(results) if g.id == "linear_limit"][0]
     assert gate.verdict == "FAIL"
 
 
@@ -180,13 +180,13 @@ def test_a_faithful_machine_passes_every_gate_it_measured(tmp_path):
     ("scenario", "key", "value", "gate_id"),
     [
         # Just outside each inherited tolerance, in the direction that matters.
-        ("planewave", "amplitude_ratio", 1.13, "M4.planewave"),
-        ("planewave", "amplitude_ratio", 0.89, "M4.planewave"),
-        ("planewave", "alpha_measured_np_m", 30.4, "M4.planewave"),
-        ("planewave", "k_measured_rad_m", 4200.0, "M4.planewave"),
-        ("oneill", "axial_corr", 0.985, "M4.oneill"),
-        ("oneill", "focus_pos_err_vox", 1.5, "M4.oneill"),
-        ("oneill", "width_solver_mm", 17.5, "M4.oneill"),
+        ("planewave", "amplitude_ratio", 1.13, "planewave"),
+        ("planewave", "amplitude_ratio", 0.89, "planewave"),
+        ("planewave", "alpha_measured_np_m", 30.4, "planewave"),
+        ("planewave", "k_measured_rad_m", 4200.0, "planewave"),
+        ("oneill", "axial_corr", 0.985, "oneill"),
+        ("oneill", "focus_pos_err_vox", 1.5, "oneill"),
+        ("oneill", "width_solver_mm", 17.5, "oneill"),
     ],
 )
 def test_one_measurement_outside_its_inherited_tolerance_fails_its_gate(
@@ -205,7 +205,7 @@ def test_three_good_fubini_stations_are_not_four(tmp_path):
     results = perfect_results()
     results["fubini"]["stations"] = results["fubini"]["stations"][:3]
     code, payload = run_suite(tmp_path, results)
-    gate = gate_by_id(payload, "M5.fubini")
+    gate = gate_by_id(payload, "fubini")
     assert gate["n_pass"] == 3 and gate["required"] == an.FUBINI_STATIONS_REQUIRED
     assert gate["verdict"] == "INCOMPLETE"
     assert code == an.EXIT_FAILED
@@ -215,7 +215,7 @@ def test_a_fubini_scenario_with_no_pre_shock_station_says_why(tmp_path):
     results = perfect_results()
     results["fubini"]["stations"] = []
     _code, payload = run_suite(tmp_path, results)
-    gate = gate_by_id(payload, "M5.fubini")
+    gate = gate_by_id(payload, "fubini")
     assert gate["verdict"] == "INCOMPLETE"
     assert gate["checks"] and gate["checks"][0]["verdict"] == "SKIP"
     assert "pre-shock" in gate["checks"][0]["detail"]
@@ -382,7 +382,7 @@ def test_the_two_sizes_are_graded_against_the_same_tolerances():
     assert "size" not in inspect.getsource(an.evaluate)
 
 
-# ------------------------------------------- the planner table (M11's first)
+# --------------------------------------------------------- the planner table
 #
 # The suite reports what the planner PREDICTED next to what the solve cost.
 # Two separate risks again: that the table exists and reads correctly for
@@ -510,7 +510,7 @@ def test_the_planner_rows_are_informational_and_no_gate_can_read_them(tmp_path):
     """A wildly wrong prediction must not cost a physics gate.
 
     The planner is graded on a device, by ``caustica.validation gpu-gates``
-    and by the M8 ±25% criterion — not here, where the setups are hundredths
+    and by the ±25% criterion — not here, where the setups are hundredths
     of a second and the number is mostly a per-run constant.
     """
     results = planned_results()
@@ -684,7 +684,7 @@ def test_the_absolute_gate_catches_a_source_that_does_not_shrink():
         "error_shrink_factor": 1.515,
         "elapsed_s": 9.0,
     }
-    gate = next(g for g in an.evaluate(scenarios) if g.id == "M30.absolute")
+    gate = next(g for g in an.evaluate(scenarios) if g.id == "absolute")
 
     assert gate.verdict == "FAIL"
     assert [c.verdict for c in gate.checks] == ["FAIL", "FAIL", "FAIL"]
@@ -698,7 +698,7 @@ def test_the_absolute_gate_passes_the_shipped_source_with_room():
     and a 2x refinement cut the error to a tenth. The limits leave six times
     that much room on the discriminating check.
     """
-    gate = next(g for g in an.evaluate(perfect_results()) if g.id == "M30.absolute")
+    gate = next(g for g in an.evaluate(perfect_results()) if g.id == "absolute")
 
     assert gate.verdict == "PASS"
     assert an.ABSOLUTE_SHRINK_MAX > 5 * 0.10, "no margin left on the shrink check"
@@ -722,7 +722,7 @@ def test_each_absolute_check_fails_on_its_own(field, value):
     """
     scenarios = perfect_results()
     scenarios["absolute"] = {**scenarios["absolute"], field: value}
-    gate = next(g for g in an.evaluate(scenarios) if g.id == "M30.absolute")
+    gate = next(g for g in an.evaluate(scenarios) if g.id == "absolute")
 
     assert gate.verdict == "FAIL"
     assert sum(c.verdict == "FAIL" for c in gate.checks) == 1

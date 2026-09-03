@@ -1,4 +1,4 @@
-"""M11's multi-engine box: ONE job, N registered solvers, one stamped table.
+"""Multi-engine comparison: ONE job, N registered solvers, one stamped table.
 
 The library has three registered solvers today (``linear``, ``westervelt``,
 ``kwave``) and the plan adds more. Every cross-check between them
@@ -90,7 +90,7 @@ FORMAT = "caustica-compare/1"
 # is one an existing test already validated this library against, and each
 # check carries that test's name into the report through ``Check.citing``.
 
-#: The success criterion of M11's multi-engine box, verbatim from the
+#: The success criterion of the multi-engine comparison, verbatim from the
 #: milestone ("mevcut linear-vs-kwave caprazlari harness'ten yeniden
 #: uretilir (r>0.99)") and from the test that first measured it.
 CROSS_CORR_MIN = 0.99
@@ -104,7 +104,7 @@ PEAK_SHIFT_SOURCE = CROSS_CORR_SOURCE
 
 #: T0's band, as a multiplicative factor on the analytic focal gain. This is
 #: NOT a physics tolerance and must not be read as one -- the physics gate
-#: for bowl agreement is ``M11.oneill`` in the analytic suite, at 5%. This is
+#: for bowl agreement is ``oneill`` in the analytic suite, at 5%. This is
 #: a garbage detector: a factor of five on each side is far too loose to
 #: constrain a solver and far too tight to admit zeros, NaN-adjacent noise, a
 #: silently damped source or a truncated buffer, which is the entire failure
@@ -541,7 +541,7 @@ def choose_solvers(
 def evaluate(runs: dict[str, dict], pairs: list[dict], reference: str) -> list[Gate]:
     """Turn the measurements into milestone verdicts. Pure -- no I/O, no solve."""
     t0 = Gate(
-        id="M11.t0",
+        id="t0",
         criterion=(
             "every solver with a working environment produces a finite field on the "
             "trivial T0 job, with an interior peak within a factor "
@@ -603,7 +603,7 @@ def evaluate(runs: dict[str, dict], pairs: list[dict], reference: str) -> list[G
     t0.required = 2 * attempted
 
     corr = Gate(
-        id="M11.cross",
+        id="cross",
         criterion=(
             f"normalized |phasor| correlation r >= {CROSS_CORR_MIN} between the reference "
             f"solver '{reference}' and every other compared solver"
@@ -611,7 +611,7 @@ def evaluate(runs: dict[str, dict], pairs: list[dict], reference: str) -> list[G
         required=0,
     )
     focus = Gate(
-        id="M11.focus",
+        id="focus",
         criterion=(
             f"the interior peak of the normalized field agrees within "
             f"{PEAK_SHIFT_MAX_VOX:g} voxel per axis across engines"

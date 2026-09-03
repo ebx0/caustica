@@ -1,12 +1,12 @@
-"""M7 + M8's on-device criteria, measured in one self-contained command.
+"""The on-device criteria, measured in one self-contained command.
 
-Both milestones stalled on the same thing: their remaining criteria can only
-be answered by a real GPU, and a single session is not enough to answer them.
-M8 asks for VRAM accuracy over **at least two grid sizes** and post-calibration
-time accuracy over **at least two scenarios**; M7 asks for a full-size
-(dx = 0.30 mm, 512-cubed FFT class) run that does not die of OOM, a numpy-vs-cupy
-parity number, and a step-time baseline for M19. That is a protocol, not a
-run — so it is written down here as one, and the operator's whole job is::
+They all stalled on the same thing: they can only be answered by a real GPU,
+and a single session is not enough to answer them. The planner criteria ask
+for VRAM accuracy over **at least two grid sizes** and post-calibration time
+accuracy over **at least two scenarios**; the backend criteria ask for a
+full-size (dx = 0.30 mm, 512-cubed FFT class) run that does not die of OOM, a
+numpy-vs-cupy parity number, and a step-time baseline. That is a protocol, not
+a run — so it is written down here as one, and the operator's whole job is::
 
     python -m caustica.validation gpu-gates
 
@@ -14,7 +14,7 @@ What it does, in order:
 
 1. Prints :func:`caustica.env.env_report`. No GPU: exit 2 with the fix for
    THIS machine (which is what a CI leg sees as a clean skip).
-2. Runs :func:`caustica.planner.calibrate` on the target device — M8's gate
+2. Runs :func:`caustica.planner.calibrate` on the target device — the gate
    is explicitly about the *calibrated* path, so the suite must produce that
    state rather than assume it.
 3. Walks a **VRAM ladder**: several jobs of increasing size (~2, 8, 14, 28
@@ -31,10 +31,10 @@ What it does, in order:
 6. Writes a stamped report (JSON + Markdown) under
    ``benchmarks/reports/gpu_gates/<gpu>-<timestamp>/``, with every rung's
    plan-vs-actual line, its deviation, and a PASS/FAIL/SKIP verdict per
-   milestone criterion. Step times are stamped as the M19 baseline.
+   criterion. Step times are stamped as the step-time baseline.
 
 **A missing measurement is never a pass.** A check whose two sides are not
-both present is ``SKIP``, a gate needs its milestone's required *count* of
+both present is ``SKIP``, a gate needs its own required *count* of
 PASSing checks and no FAILs, and a gate with nothing in it is ``INCOMPLETE``.
 The suite's own exit code is 0 only when every gate is PASS.
 
@@ -74,7 +74,7 @@ from caustica.validation._verdict import fmt_num as _g
 FORMAT = "caustica-gpu-gates/1"
 
 #: Default VRAM ladder [GiB]. 14 is the 512-cubed / dx=0.30 mm full-size class
-#: M7 names; the others bracket it so the model is checked over a decade of
+#: the criterion names; the others bracket it so the model is checked over a decade of
 #: sizes rather than at one point.
 DEFAULT_TARGETS_GIB = (2.0, 8.0, 14.0, 28.0)
 
@@ -94,7 +94,7 @@ PREVIEW_ONLY_ABOVE_GIB = 4.0
 #: step above what fits" is the interesting case — a refusal that only
 #: triggers at 3x would hide an off-by-a-lot gate.
 
-#: M8's two tolerances and M7's parity tolerance, in one place.
+#: The two planner tolerances and the parity tolerance, in one place.
 VRAM_TOL_PCT = 10.0
 TIME_TOL_PCT = 25.0
 PARITY_TOL = 1e-5
@@ -232,7 +232,7 @@ def build_ladder(
 
     The default targets are clipped to what the device can actually hold; a
     device too small for two of them gets a ladder derived from its own free
-    VRAM instead, because M8's criterion is "at least two grid sizes", not
+    VRAM instead, because the criterion is "at least two grid sizes", not
     "these particular sizes". The last entry is the rung that must NOT fit,
     which is evidence for the refusal path rather than for the model.
     """
@@ -241,7 +241,7 @@ def build_ladder(
     kept = [t for t in sorted(targets_gib) if 0 < t <= budget]
     if len(kept) < 2 <= len(targets_gib):
         # CLIPPING left too few points: a small (or heavily occupied) device
-        # still has to produce two, or M8's "at least 2 grid sizes" can never
+        # still has to produce two, or "at least 2 grid sizes" can never
         # close on it. An operator who explicitly asked for ONE target is not
         # overruled here — that is their ladder, and the gate will honestly
         # come out INCOMPLETE.
@@ -353,7 +353,7 @@ def rung_job(spec: RungSpec, *, f0_mhz: float = 0.5, settle_periods: int = 2) ->
 
 
 def parity_job(name: str = "parity-mini", dx_mm: float = 0.6, side: int = 40) -> dict:
-    """The mini 3-D scenario M7's parity criterion is measured on.
+    """The mini 3-D scenario the parity criterion is measured on.
 
     Small enough that the numpy leg is seconds, big enough to be a real 3-D
     focused field with a PML, a curved source and a settling history — the
@@ -584,7 +584,7 @@ def run_rung(
             out=outdir,
             backend="cupy",
             gpu=gpu_key,
-            # No timing probe: calibration has already run (that IS M8's
+            # No timing probe: calibration has already run (that IS the
             # gate), and the probe's ~20 steps would leave their own blocks
             # in the memory pool and inflate the VRAM measurement it is
             # about to be judged against.
@@ -607,7 +607,7 @@ def field_diff(reference, compared) -> dict:
     """Relative L2 and L-infinity between two fields, normalized by the reference.
 
     Whole-field, deliberately: a peak-pressure comparison can agree to 1e-7
-    while an entire plane is wrong, and M7's parity criterion is about the
+    while an entire plane is wrong, and the parity criterion is about the
     two backends computing the same FIELD.
     """
     import numpy as np  # noqa: PLC0415
@@ -629,7 +629,7 @@ def field_diff(reference, compared) -> dict:
 def field_parity(a_dir: Path, b_dir: Path) -> dict:
     """:func:`field_diff` over two runs' STORED ``result.h5`` fields.
 
-    Not what M7's parity gate is measured on — see :func:`run_parity`. With
+    Not what the parity gate is measured on — see :func:`run_parity`. With
     the default float16 storage this bottoms out around one float16 ULP
     (~4.9e-4 relative L-infinity) no matter how well the solvers agree, so a
     1e-5 criterion applied here would fail a perfect port. Kept because
@@ -655,7 +655,7 @@ def evaluate(results: list[RungResult], parity: dict | None) -> list[Gate]:
     refused = [r for r in results if not r.spec.expect_fit]
 
     vram = Gate(
-        id="M8.vram",
+        id="vram",
         criterion=(
             "VRAM prediction within +/-10% of the mempool peak measured in the rung's "
             "OWN process, on at least 2 grid sizes"
@@ -663,7 +663,7 @@ def evaluate(results: list[RungResult], parity: dict | None) -> list[Gate]:
         required=2,
     )
     timing = Gate(
-        id="M8.time",
+        id="time",
         criterion=(
             "post-calibration wall-time prediction within +/-25% of actual, "
             "on at least 2 scenarios (same device); a plan whose source is not "
@@ -672,17 +672,17 @@ def evaluate(results: list[RungResult], parity: dict | None) -> list[Gate]:
         required=2,
     )
     fullsize = Gate(
-        id="M7.fullsize",
+        id="fullsize",
         criterion="a full-size run (dx=0.30 mm, 512^3 FFT class) completes without OOM",
         required=1,
     )
     parity_gate = Gate(
-        id="M7.parity",
+        id="parity",
         criterion=f"numpy vs cupy on a mini 3-D scenario: field relative error < {PARITY_TOL:g}",
         required=2,
     )
     oom = Gate(
-        id="M8.oom",
+        id="oom",
         criterion="a run larger than the device is REFUSED before solving (exit 3) with advice",
         required=2,
     )
@@ -701,7 +701,7 @@ def evaluate(results: list[RungResult], parity: dict | None) -> list[Gate]:
         )
         # Two things must hold before a wall-time number means anything.
         #
-        # 1. M8's criterion is about the CALIBRATED path. If the plan says
+        # 1. The criterion is about the CALIBRATED path. If the plan says
         #    "db" — calibration failed, or the device did not match a
         #    gpu_db key — then a datasheet guess is being graded, and a
         #    datasheet guess is coarse to ~2x: it can land inside +/-25% by
@@ -957,7 +957,7 @@ def gpu_gates(
     outdir.mkdir(parents=True, exist_ok=True)
     log(f"\nreport folder: {outdir}")
 
-    # ---- M8 says "post-calibration": produce that state, do not assume it --
+    # ---- "post-calibration": produce that state, do not assume it --------
     log(f"\ncalibrating {device} (datasheet key: {key}) ...")
     try:
         calibration = harness.calibrate(backend="cupy")
@@ -1147,7 +1147,7 @@ def run_parity(
     Voxelwise, 99.17% of ``p_max`` was bit-identical, 517 voxels differed by
     one ULP and none by more; the handful of larger relative deviations were
     all sign-bit noise near zero. The fields agree BELOW the resolution of
-    the file they were written to. Gating M7's 1e-5 criterion on a float16
+    the file they were written to. Gating the 1e-5 criterion on a float16
     round trip would therefore have produced a confident FAIL for a perfect
     solver — which is the exact failure mode this suite must not have.
 
