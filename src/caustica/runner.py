@@ -453,8 +453,8 @@ class RunnerOptions:
     status_interval_s: float = 30.0
     vram_limit_gib: float | None = None  # None -> actual device VRAM on cupy
     stop_after_periods: int | None = None  # deterministic stop (tests/ops)
-    allow_slow_cpu: bool = False  # M10i/D20: override the CPU time gate
-    preview_only: bool = False  # M10i/D34: skip result.h5, keep the preview
+    allow_slow_cpu: bool = False  # override the CPU time gate
+    preview_only: bool = False  # skip result.h5, keep the preview
     #: Progress display: None (silent — the library default, so a test
     #: or an embedding app gets no surprise output), "auto"/"plain", or any
     #: callable taking the payload dict. status.json is written either way:
@@ -1025,7 +1025,7 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
         "solver": built.solver,
         "backend": backend_name,
         "pid": os.getpid(),
-        "ppw_warnings": ppw_warns,  # D31: visible in every status heartbeat
+        "ppw_warnings": ppw_warns,  # visible in every status heartbeat
     }
     hb = _Heartbeat(
         status_path,
@@ -1249,9 +1249,9 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
         # env_report keeps the historical key names (the Colab gates read
         # them) and only ADDS facts — see caustica.env.
         "environment": env_report(backend_name),
-        "ppw_warnings": ppw_warns,  # D31: the report head re-reads these
+        "ppw_warnings": ppw_warns,  # the report head re-reads these
         "planner": plan_payload,  # None for non-native solvers
-        "actual": actual,  # planner-vs-actual: M8's Colab gates read this
+        "actual": actual,  # planner-vs-actual: the Colab gates read this
         "derived": built.derived,  # re-derivable geometry (check_derived contract)
     }
     try:

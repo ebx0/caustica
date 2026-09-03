@@ -29,9 +29,9 @@ class Material(CausticaModel):
     c: float = Field(..., gt=0.0, description="Sound speed [m/s]")
     beta: float = Field(..., ge=0.0, description="Nonlinearity coefficient (1 + B/2A)")
     # --- thermal hooks (declared, unused in v1) ---
-    thermal_conductivity: float | None = Field(None, description="[W/m/K] (M18)")
-    specific_heat: float | None = Field(None, description="[J/kg/K] (M18)")
-    perfusion_rate: float | None = Field(None, description="[1/s] (M18)")
+    thermal_conductivity: float | None = Field(None, description="[W/m/K]")
+    specific_heat: float | None = Field(None, description="[J/kg/K]")
+    perfusion_rate: float | None = Field(None, description="[1/s]")
 
 
 class MaterialDB(CausticaModel):

@@ -327,7 +327,7 @@ def test_core_kinds_register_through_the_same_door():
 
 def test_unknown_kind_lists_what_is_registered():
     with pytest.raises(KeyError, match="medium_volume") as exc:
-        medium_kinds.get("phantom_dataset")  # the kind M10k removed
+        medium_kinds.get("phantom_dataset")  # the kind that was removed
     assert MEDIUM_GROUP in str(exc.value)  # ...and how to add your own
     with pytest.raises(KeyError, match="archimedean_spiral") as exc:
         array_kinds.get("linear_array")

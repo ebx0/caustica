@@ -237,7 +237,7 @@ def test_the_ladder_is_clipped_to_the_device_and_still_gives_two_points():
     fitting = [r for r in big if r.expect_fit]
     assert len(fitting) >= 2
     assert all(r.predicted_gib <= 39.0 * gg.LADDER_HEADROOM for r in fitting)
-    assert any(r.shape == (512, 512, 512) for r in fitting), "the M7 full-size rung is missing"
+    assert any(r.shape == (512, 512, 512) for r in fitting), "the full-size rung is missing"
 
     # A 16 GiB T4 cannot hold the 28 GiB target; it must still produce the two
     # measurements the criterion counts.
@@ -470,7 +470,7 @@ def test_the_report_is_written_stamped_and_readable(tmp_path):
         assert g["id"] in md and g["criterion"] in md
     for r in doc["rungs"]:
         assert r["name"] in md
-    assert "Step-time baseline" in md  # M19 reads this
+    assert "Step-time baseline" in md
 
     # Each rung keeps its own output folder next to the report: the evidence
     # is not a summary of evidence.

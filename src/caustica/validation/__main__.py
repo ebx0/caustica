@@ -43,7 +43,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     g = sub.add_parser(
         "gpu-gates",
-        help="close M7's and M8's on-device criteria in one run: calibrate, walk a "
+        help="close the on-device criteria in one run: calibrate, walk a "
         "VRAM ladder, refuse the rung above the device, compare numpy vs cupy, "
         "and write a stamped PASS/FAIL report (exit: 0 all gates pass, "
         "2 no usable GPU, 4 a gate failed or is incomplete)",
@@ -66,7 +66,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_TARGETS_GIB,
         help="ladder targets in GiB (default: 2,8,14,28; clipped to the device)",
     )
-    g.add_argument("--dx-mm", type=float, default=0.30, help="voxel size (M7 says 0.30)")
+    g.add_argument("--dx-mm", type=float, default=0.30, help="voxel size (full size: 0.30)")
     g.add_argument("--solver", default="westervelt", choices=("westervelt", "linear"))
     g.add_argument(
         "--settle-periods",
@@ -78,12 +78,12 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument(
         "--no-oom-rung",
         action="store_true",
-        help="skip the deliberately-too-large rung (leaves M8's refusal gate INCOMPLETE)",
+        help="skip the deliberately-too-large rung (leaves the refusal gate INCOMPLETE)",
     )
     g.add_argument(
         "--no-parity",
         action="store_true",
-        help="skip the numpy-vs-cupy comparison (leaves M7's parity gate INCOMPLETE)",
+        help="skip the numpy-vs-cupy comparison (leaves the parity gate INCOMPLETE)",
     )
     g.add_argument(
         "--gpu",

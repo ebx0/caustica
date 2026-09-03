@@ -258,7 +258,7 @@ def test_validate_catches_source_buried_in_pml(tmp_path):
 
 
 def test_validate_catches_unknown_solver(tmp_path):
-    d = scene_job_dict(solver="kzk")  # planned (M9) but not registered yet
+    d = scene_job_dict(solver="kzk")  # planned but not registered yet
     rep = validate_job(write_job(tmp_path, d))
     assert not rep.ok and any("kzk" in e for e in rep.errors)
 

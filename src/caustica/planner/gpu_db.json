@@ -1,5 +1,5 @@
 {
-  "_comment": "Datasheet-nominal GPU specs for the M8 planner 'db' estimate path. vram_gib uses binary GiB (nvidia-smi convention). Bandwidth GB/s and fp32 TFLOPS are vendor nominal; the calibrated path supersedes both.",
+  "_comment": "Datasheet-nominal GPU specs for the planner's 'db' estimate path. vram_gib uses binary GiB (nvidia-smi convention). Bandwidth GB/s and fp32 TFLOPS are vendor nominal; the calibrated path supersedes both.",
   "devices": {
     "T4": { "vram_gib": 16, "mem_bw_gbs": 320, "fp32_tflops": 8.1, "notes": "Colab free tier" },
     "L4": { "vram_gib": 24, "mem_bw_gbs": 300, "fp32_tflops": 30.3, "notes": "Colab paid tier" },

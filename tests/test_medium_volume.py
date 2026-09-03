@@ -90,7 +90,7 @@ def test_existing_dataset_file_gives_bit_identical_medium():
 def test_existing_dataset_file_grid_and_cmin():
     npz = sorted(PHANTOMS.glob("*.npz"))[0]
     vol = load_medium_volume(npz)
-    assert vol.shape == (560, 700, 480)  # the aligned common grid (M6e)
+    assert vol.shape == (560, 700, 480)  # the aligned common grid
     assert vol.dx == pytest.approx(0.25e-3)
     assert vol.is_continuous  # the dataset stores pval-blended properties
     assert 1400.0 < vol.c_min() < 1600.0

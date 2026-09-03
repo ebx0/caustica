@@ -284,7 +284,7 @@ def layered_tissue(knobs: Knobs) -> Setup:
             "Heterogeneous: the realized focus generally does NOT sit at the geometric "
             "focus (speed-of-sound refraction + attenuation weighting).",
             "v1 absorption is exponential at f0 only — harmonics are absorbed with the "
-            "same alpha, so second-harmonic levels here are optimistic (M16 fixes this).",
+            "same alpha, so second-harmonic levels here are optimistic.",
         ),
     )
 

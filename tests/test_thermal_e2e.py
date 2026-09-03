@@ -286,7 +286,7 @@ def evidence_run(outdir: str | Path | None = None) -> Path:
         chain["full"],
         chain["thermal_medium"],
         outdir,
-        label="M18 evidence — 1 MHz bowl into a skin/brain phantom, 30 s on + 60 s off",
+        label="1 MHz bowl into a skin/brain phantom, 30 s on + 60 s off",
         tissue_labels=labels_from_db(DB),
         notes=[
             f"acoustics: westervelt on {tuple(chain['grid'].shape)} at "
@@ -294,7 +294,7 @@ def evidence_run(outdir: str | Path | None = None) -> Path:
             f"{result.converged_period}); peak |p| = {result.amp.max() / 1e6:.4g} MPa "
             f"in the recorded interior.",
             f"heating: {heat.alpha_model} at harmonics {heat.harmonics} (the second "
-            f"harmonic WAS recorded and deliberately not heated — the M18 honesty "
+            f"harmonic WAS recorded and deliberately not heated — the honesty "
             f"contract); Q_max = {heat.q_max:.4g} W/m^3, "
             f"{heat.total_power_w * 1e3:.4g} mW absorbed in the region.",
             "produced by tests/test_thermal_e2e.py::evidence_run — the same chain the "

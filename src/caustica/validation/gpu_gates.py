@@ -268,7 +268,7 @@ def build_ladder(
                 predicted_gib=predicted,
                 preview_only=predicted > PREVIEW_ONLY_ABOVE_GIB,
                 expect_fit=True,
-                note="M7 full-size class (512^3)" if side == 512 else "",
+                note="full-size class (512^3)" if side == 512 else "",
             )
         )
 
@@ -728,7 +728,7 @@ def evaluate(results: list[RungResult], parity: dict | None) -> list[Gate]:
                 check.name,
                 "SKIP",
                 f"estimate source is {r.plan.get('source')!r}, not 'calibrated' — "
-                f"M8's gate is about the calibrated path",
+                f"the gate is about the calibrated path",
                 {**check.data, "plan_source": r.plan.get("source")},
             )
         timing.checks.append(check)
@@ -832,7 +832,7 @@ def render_markdown(payload: dict) -> str:
 
     lines += [
         "",
-        "## Step-time baseline (M19 reads this)",
+        "## Step-time baseline",
         "",
         "| shape | voxels | steady s/step | measured s/step (incl. warmup) | warmup s |",
         "|---|---|---|---|---|",
@@ -973,7 +973,7 @@ def gpu_gates(
         log(f"  calibration FAILED: {calibration['error']}")
         notes.append(
             f"calibration failed ({calibration['error']}): every plan below is a datasheet "
-            f"estimate, so M8's post-calibration time gate cannot be judged and stays open"
+            f"estimate, so the post-calibration time gate cannot be judged and stays open"
         )
 
     ladder = build_ladder(
