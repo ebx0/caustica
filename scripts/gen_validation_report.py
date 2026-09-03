@@ -45,7 +45,7 @@ from caustica.solvers import CWRunSpec
 from caustica.sources import CWSource, bowl_cw_source, plane_cw_source
 
 # ---------------------------------------------------------------------------
-# Style (validated reference palette; see docs/devlog.md session 5)
+# Style (validated reference palette)
 # ---------------------------------------------------------------------------
 SURFACE = "#fcfcfb"
 INK = "#0b0b0b"

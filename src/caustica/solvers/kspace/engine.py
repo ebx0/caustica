@@ -487,7 +487,7 @@ def run_cw_kspace_pstd(
         Progress comes FIRST and unconditionally: this call site used to
         return immediately when no checkpoint was configured, which made a
         callback added here invisible to exactly the in-memory notebook run
-        it exists for (trap T1 in docs/library_first_plan.md).
+        it exists for.
         """
         _emit_progress("settle")
         if checkpoint is None:

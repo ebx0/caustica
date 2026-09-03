@@ -52,16 +52,14 @@ hifu_pred_dx300_t128.ipynb
 # the uwcem-phantom repo, the bytes stay local.
 data/
 runs/
-janitor/
-
-# The one .npz that IS committed: three 5 KB label slices cut out of a UWCEM
-# phantom, so `scripts/make_howto.py` can redraw the medium thumbnail without
-# the multi-GB (git-ignored) dataset under data/.
-!docs/assets/howto-phantom.npz
-!docs/assets/hero-field.npz
-
-# The rendered documentation site (mkdocs build) — deployed by CI, never committed.
-site/
 
 # Generated at build time by build_stamp.py (fix A1) — never committed.
 src/caustica/_build_info.py
+
+# The attic. Everything the project accumulated that the library, its tests, its
+# packaging and its documentation site do not need in order to work: the Turkish
+# ledgers (MILESTONES.md, PLAN.md, docs/devlog.md, docs/library_first_plan.md),
+# the landscape notes, the local-only issue and janitor folders, and the
+# superseded evidence runs. Kept on disk because the history in them is real,
+# out of git because a live library repository is not a filing cabinet.
+archive/

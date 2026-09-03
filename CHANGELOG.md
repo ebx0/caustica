@@ -5,9 +5,9 @@ Notable changes to **caustica**. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Nothing has been released yet: `0.1.0` is the first planned release and the
-sections below describe what is on `master` today. The milestone ledger that
-drives this work — including the rule that no box is ticked without measured
-evidence — lives in [`MILESTONES.md`](https://github.com/ebx0/caustica/blob/master/MILESTONES.md).
+sections below describe what is on `master` today. The rule behind every entry
+is that nothing is claimed without a measurement to point at; what has been
+measured, and how, is [documented here](https://ebx0.github.io/caustica/validation/).
 
 ## [Unreleased]
 
