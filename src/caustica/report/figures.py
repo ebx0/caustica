@@ -1,4 +1,4 @@
-"""Figure set for one CW solve (M10d — extracted from ``apps/focus_study``).
+"""Figure set for one CW solve (extracted from ``apps/focus_study``).
 
 Style follows the project's dataviz rules (as in scripts/gen_validation_report.py):
 a sequential single-hue ramp for magnitude fields, a diverging ramp for signed

@@ -1,8 +1,8 @@
-"""The layering rule, enforced (PLAN §2 / W8, written early as the W0c gate).
+"""The layering rule, enforced: the import direction is one-way.
 
 Arrows point DOWN only: nothing under ``src/caustica`` may import the repo
 side packages (``apps``, ``uwcem_phantoms``) or a GUI package. This test was
-written BEFORE the extraction and stayed red until M10k/W0c landed — it is
+written BEFORE the extraction and stayed red until it landed — it is
 the proof the split actually happened, and the tripwire against relapse.
 """
 
@@ -39,7 +39,7 @@ def test_caustica_never_imports_upward():
 
 
 def test_no_uwcem_reference_survives_in_source_text():
-    """The M10k gate verbatim: `grep -ri uwcem src/` is EMPTY — not just
+    """The gate verbatim: `grep -ri uwcem src/` is EMPTY — not just
     imports; comments and docstrings must not smuggle the coupling back."""
     hits: dict[str, int] = {}
     for py in sorted(SRC.rglob("*.py")):

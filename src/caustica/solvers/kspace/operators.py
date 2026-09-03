@@ -2,7 +2,7 @@
 
 Everything here is a pure function of (shape, dx, dt, medium constants) and
 an array module ``xp`` — no solver state. The linear and Westervelt solvers
-compose these; the GPU backend (M7) reuses them unchanged.
+compose these; the GPU backend reuses them unchanged.
 
 Ported, with the numerics intact, from the production notebook:
 * 2/3/5-smooth FFT sizes (fast paths in cuFFT AND pocketfft),
@@ -146,7 +146,7 @@ def sponge_volume(shape: tuple[int, ...], width: int, edge: float, xp: ModuleTyp
     """Full multiplicative sponge volume (float32) as a separable product.
 
     One dense volume trades memory for step-loop simplicity; the GPU path
-    may switch back to separable per-axis multiplies in M19 if VRAM demands.
+    may switch back to separable per-axis multiplies later if VRAM demands.
     """
     out = xp.ones(shape, dtype=xp.float32)
     for ax, n in enumerate(shape):

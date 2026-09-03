@@ -1,4 +1,4 @@
-"""M10d: shared focal metrics, the preview package and `caustica report`.
+"""Shared focal metrics, the preview package and `caustica report`.
 
 The criteria under test:
 * metric definitions are single-sourced — focus_study and the library
@@ -83,7 +83,7 @@ def runner_outdir(tmp_path_factory) -> Path:
     return out
 
 
-# --------------------------------------------- single source of truth (M10d)
+# --------------------------------------------- single source of truth
 
 
 def test_focus_study_and_library_compute_identical_metrics(water_setup_result):
@@ -200,7 +200,7 @@ def _synthetic_result(shape: tuple[int, int, int]) -> SolverResult:
 
 
 def test_preview_stays_under_10mb_on_a_full_grid(tmp_path):
-    """The M10d gate, measured: a 256^3 full-grid field -> <= 10 MB package."""
+    """The gate, measured: a 256^3 full-grid field -> <= 10 MB package."""
     shape = (256, 256, 256)
     result = _synthetic_result(shape)
     path = write_preview(
@@ -311,10 +311,10 @@ def test_coarse_step_formula_targets_the_budget():
 # ------------------------------------------- janitor round (2026-08-21)
 
 
-def test_report_on_pre_m10d_result_without_apex_attrs(runner_outdir, tmp_path):
-    """An M10c-era result.h5 (no apex_vox/focus_vox stamp) must still report.
+def test_report_on_an_unstamped_result_without_apex_attrs(runner_outdir, tmp_path):
+    """An older result.h5 (no apex_vox/focus_vox stamp) must still report.
 
-    Every pre-M10d output folder on a Drive is exactly this shape; the report
+    Every older output folder on a Drive is exactly this shape; the report
     falls back to the grid origin and says so in a caveat.
     """
     from caustica.io.store import load_result, save_result
@@ -337,7 +337,7 @@ def test_report_on_pre_m10d_result_without_apex_attrs(runner_outdir, tmp_path):
         grid_shape=(36, 36, 48),
         pml_vox=6,
         quantize=False,
-        # NO apex_vox / focus_vox extra_attrs — the pre-M10d layout.
+        # NO apex_vox / focus_vox extra_attrs — the older layout.
     )
     assert cli_main(["report", str(old)]) == 0
     report = (old / "REPORT.md").read_text(encoding="utf-8")

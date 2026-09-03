@@ -5,12 +5,12 @@ Public entry points are re-exported here so user code can stay short::
     import caustica as hs
     grid = hs.Grid(shape=(128, 128, 128), dx=0.3e-3)
 
-or, for a whole job in one call (M10j)::
+or, for a whole job in one call::
 
     res = caustica.simulate("job.json")      # plan, gates, progress, result
     res.metrics; res.preview(); res.save("result.h5")
 
-or, for a parameter study with one stamped report (M11)::
+or, for a parameter study with one stamped report::
 
     sweep = caustica.Study("p0", "job.json", out="studies/p0").sweep(
         "drive.amplitude_kpa", [50, 100, 200])
@@ -43,10 +43,10 @@ _LAZY = {
     "SimulationError": "caustica.facade",
     "SimulationRun": "caustica.facade",
     "simulate": "caustica.facade",
-    # M11: a Study composes simulate(), so reaching it costs the same
+    # A Study composes simulate(), so reaching it costs the same
     # runner/h5py import — which is exactly why it lives here and not above.
     "Study": "caustica.study",
-    # M18: the sonication -> heating -> dose chain. These need nothing
+    # The sonication -> heating -> dose chain. These need nothing
     # heavier than numpy today; they are listed here rather than imported
     # eagerly so the door keeps ONE rule (value types above, everything
     # composed lazy) and a future dependency in the thermal chain cannot

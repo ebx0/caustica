@@ -1,4 +1,4 @@
-"""Presentation for the progress payload (M10j) — rendering lives OUTSIDE the solver.
+"""Presentation for the progress payload — rendering lives OUTSIDE the solver.
 
 The engine emits one dict per period boundary (see
 :func:`caustica.solvers.kspace.engine.run_cw_kspace_pstd`); everything that
@@ -13,7 +13,7 @@ Two consumers ship:
   ``pip install caustica`` must both work, so the import is attempted once and
   its absence is not an error. Piped into a log, a rewriting bar is noise, so
   the plain renderer takes over.
-* a mid-run preview — ON by default (decision D21): every
+* a mid-run preview — ON by default (by decision): every
   :data:`DEFAULT_PREVIEW_EVERY` periods the payload's lazy ``snapshot`` is
   called ONCE and rendered as a coarse ASCII map of the field through the
   focus. Coarse and text-only on purpose: it answers "is this run going

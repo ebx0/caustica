@@ -3,10 +3,10 @@
 These two are the cheapest, sharpest solver probes we have:
 
 * The absorption law validates the dissipative part of a solver in
-  isolation (M4 gate: measured alpha within 1% of configured alpha).
+  isolation (measured alpha within 1% of configured alpha).
 * The Fubini solution gives the exact pre-shock harmonic amplitudes of an
   initially sinusoidal plane wave in a lossless fluid — the reference for
-  the Westervelt nonlinear term (M5 gate) and for KZK's Burgers step (M9).
+  the Westervelt nonlinear term and for KZK's Burgers step.
 """
 
 from __future__ import annotations

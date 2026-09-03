@@ -1,17 +1,17 @@
-"""Static VRAM and wall-time models for the k-space CW engine (M8 planner).
+"""Static VRAM and wall-time models for the k-space CW engine.
 
 The memory model is a literal inventory of what ``run_cw_kspace_pstd``
 allocates — ``engine.py`` is the ground truth, and ``tests/test_planner.py``
 pins this inventory so any new persistent buffer added to the engine breaks
 a test here instead of silently invalidating the planner. On top of the
 inventory sit an FFT-workspace share and a flat allocator margin
-(fragmentation + cuFFT plan cache), per the M8 contract.
+(fragmentation + cuFFT plan cache), per the planner contract.
 
 The "db" time model is deliberately coarse (datasheet numbers, expected
 within ~2x): its job is device *comparison* before any hardware is touched.
 The accuracy path is calibration (``calibrate.py``), which fits the same
 ``t_step = a*N*log2(N) + b*N`` form to ~20 measured steps on the device —
-the M8 gate (±25%) applies to the calibrated path only.
+the ±25% gate applies to the calibrated path only.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from math import ceil, log2, prod
 from caustica.solvers.kspace import operators as ops
 
 #: Flat margin over the buffer inventory: allocator fragmentation, cuFFT plan
-#: cache, and small unlisted temporaries (M8 contract: +15%).
+#: cache, and small unlisted temporaries (planner contract: +15%).
 ALLOCATOR_MARGIN = 1.15
 
 #: Bytes reserved on-device before any caustica allocation: CUDA context,
@@ -150,5 +150,5 @@ def db_time_coeffs(
 
 
 def step_time(a: float, b: float, p_elems: int) -> float:
-    """Evaluate the M8 time model ``t_step = a*P*log2(P) + b*P`` [s]."""
+    """Evaluate the time model ``t_step = a*P*log2(P) + b*P`` [s]."""
     return a * p_elems * log2(p_elems) + b * p_elems

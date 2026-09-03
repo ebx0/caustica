@@ -1,4 +1,4 @@
-"""Pre-run resource planner (M8): "will it fit, how long will it take?"
+"""Pre-run resource planner: "will it fit, how long will it take?"
 
 COMSOL-feel contract: before committing a Colab GPU (or hours of CPU), ask::
 
@@ -7,7 +7,7 @@ COMSOL-feel contract: before committing a Colab GPU (or hours of CPU), ask::
     est.fits, est.t_expected_s, est.source     # source: "db"|"calibrated"|"measured"
     print(planner.compare(grid, medium, src, spec))   # all known GPUs, one table
 
-Three estimate sources, always labeled on the result (M8 gate):
+Three estimate sources, always labeled on the result:
 
 * ``"db"`` — datasheet numbers from ``gpu_db.json``; coarse (~2x), for
   device comparison before touching hardware.

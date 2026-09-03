@@ -1,4 +1,4 @@
-"""M2 gate: Medium property volumes — layout, mapping, refusal to guess."""
+"""Medium property volumes — layout, mapping, refusal to guess."""
 
 import numpy as np
 import pytest

@@ -1,4 +1,4 @@
-"""``caustica.study`` — one config, many runs, one stamped report (M11).
+"""``caustica.study`` — one config, many runs, one stamped report.
 
 A :class:`~caustica.study.core.Study` is the layer above
 :func:`caustica.simulate`: it holds a base job, produces variants of it by

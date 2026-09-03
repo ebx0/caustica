@@ -1,4 +1,4 @@
-"""``caustica report <out-dir>``: render a runner output folder locally (M10d).
+"""``caustica report <out-dir>``: render a runner output folder locally.
 
 Two speeds, one command:
 
@@ -85,7 +85,7 @@ def _wall_time(meta: dict | None) -> str | None:
 
 
 def _with_run_warnings(description: str, meta: dict | None) -> str:
-    """Prepend the run's ppw warnings to the report HEAD (M10i/D31).
+    """Prepend the run's ppw warnings to the report HEAD.
 
     A reader who opens only the report must meet the resolution warning
     before any number — it cannot live in a footnote."""

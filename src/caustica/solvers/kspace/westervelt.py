@@ -7,7 +7,7 @@ Westervelt term ``dp_nl = -2 beta dt p (div u)`` in the pressure update,
 which produces harmonic growth and shock steepening.
 
 Accepts linear media too (beta = 0 volumes take the identical code path as
-`linear`, which is exactly the M5 equivalence gate). Request harmonic
+`linear`, which is exactly the equivalence gate). Request harmonic
 phasors with ``harmonics=(1, 2)`` to capture the 2f0 field in the same
 record pass (leakage-free thanks to the exact-period dt policy).
 """

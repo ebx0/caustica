@@ -7,7 +7,7 @@ field (additive pressure injection, ramp shape) is solver policy shared via
 
 The per-voxel representation deliberately mirrors the production notebook:
 transducer elements are voxelized into 1-voxel-thick curved shells and each
-shell voxel carries its element's phase. The arrays module (M6) will build
+shell voxel carries its element's phase. The arrays module will build
 CWSources from real transducer geometries; the helpers here cover the
 validation geometries (plane, bowl) needed by the solver test gates.
 """

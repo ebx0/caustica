@@ -1,4 +1,4 @@
-"""M18 gate: the whole chain, for real — sonication -> T(r,t) -> CEM43 -> report.
+"""The whole chain, for real — sonication -> T(r,t) -> CEM43 -> report.
 
 Every earlier thermal test isolates one link: ``test_sensors.py`` checks that
 ``Q = 2 alpha I``, ``test_thermal.py`` checks the Pennes solve against closed

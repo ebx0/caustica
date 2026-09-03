@@ -1,4 +1,4 @@
-"""M18 gate: the dose/threshold report — what it prints and what it refuses.
+"""The dose/threshold report — what it prints and what it refuses.
 
 The report computes no physics, so every test here is about the contract:
 
@@ -133,7 +133,7 @@ def test_the_liability_note_is_in_both_files_verbatim(tmp_path):
 
 
 def test_the_note_says_research_only_not_clinical_and_makes_no_medical_claim():
-    """The three statements M18 requires, and one definition of the first."""
+    """The three statements the report requires, and one definition of the first."""
     assert MEDICAL_LIABILITY_NOTE.startswith(MEDICAL_DISCLAIMER), (
         "the research-use sentence must be caustica.thermal.dose's, not a second copy"
     )

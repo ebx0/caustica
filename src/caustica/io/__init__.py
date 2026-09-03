@@ -1,4 +1,4 @@
-"""IO: the result contract, atomic writes, resume, and in-run checkpoints (M10).
+"""IO: the result contract, atomic writes, resume, and in-run checkpoints.
 
 Four deliberately separate concerns:
 

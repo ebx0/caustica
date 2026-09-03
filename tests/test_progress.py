@@ -1,9 +1,9 @@
-"""M10j gates: the progress hook and its presentation.
+"""The progress hook and its presentation.
 
 The hook is the one instrumentation site the notebook, the CLI, ``status.json``
 and a future GUI all read. These tests pin the three
-properties that make it trustworthy: it fires WITHOUT a checkpoint (trap T1),
-it never reaches the k-Wave adapter (trap T3), and a consumer that throws
+properties that make it trustworthy: it fires WITHOUT a checkpoint,
+it never reaches the k-Wave adapter, and a consumer that throws
 cannot cost hours of compute.
 """
 
@@ -59,11 +59,11 @@ def run_mini(progress=None, solver="linear", **kw):
     )
 
 
-# ------------------------------------------------------------------ trap T1
+# -------------------------------------------------------------------- traps
 
 
 def test_progress_fires_once_per_period_without_a_checkpoint():
-    """T1 regression: the period boundary used to return early with no checkpoint."""
+    """Regression: the period boundary used to return early with no checkpoint."""
     events: list[dict] = []
     res = run_mini(progress=events.append)
 
@@ -160,7 +160,7 @@ def test_progress_does_not_change_the_field():
 
 
 def test_both_native_solvers_accept_progress():
-    """T2: the kwarg exists on linear AND westervelt, not just the engine."""
+    """The kwarg exists on linear AND westervelt, not just the engine."""
     for name in ("linear", "westervelt"):
         events: list[dict] = []
         run_mini(progress=events.append, solver=name)
@@ -225,7 +225,7 @@ def test_progress_does_not_change_the_runners_result(tmp_path):
 
 
 def test_kwave_job_with_progress_set_does_not_crash(tmp_path, monkeypatch):
-    """T3: the adapter rejects unknown kwargs, so progress= must not reach it."""
+    """The adapter rejects unknown kwargs, so progress= must not reach it."""
     from tests.test_runner import mini_job, opts
 
     import caustica.solvers as solvers
@@ -374,7 +374,7 @@ def _fake_events(n_settle: int):
 
 
 def test_the_mid_run_preview_fires_every_eight_periods(tmp_path):
-    """D21's cadence itself, independent of the record-flip preview.
+    """The cadence itself, independent of the record-flip preview.
 
     Pinned because the cadence is the whole cost argument: one device->host
     copy every 8 periods, not every period.

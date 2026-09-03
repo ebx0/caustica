@@ -1,4 +1,4 @@
-"""M0 gate: the package installs, imports and exposes its public surface."""
+"""The package installs, imports and exposes its public surface."""
 
 import caustica
 

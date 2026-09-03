@@ -1,4 +1,4 @@
-"""The Colab bridge (M10f): one call from a notebook cell, no logic in the notebook.
+"""The Colab bridge: one call from a notebook cell, no logic in the notebook.
 
 This is the one module in caustica that is allowed an opinion about *where*
 it is running. Everything below it — the job format, the planner, the two
@@ -11,7 +11,7 @@ it; it adds the three things a notebook would otherwise have to carry itself:
    prints :func:`caustica.env.env_report` and then *requires* a GPU. Nothing
    is downloaded, no folder is created and no medium is built until it has
    passed, because an unusable runtime should cost a message, not a
-   multi-GB build. caustica never installs anything for you (PLAN K6), so
+   multi-GB build. caustica never installs anything for you, so
    the refusal names the fix for the machine you are actually on — and it
    keeps apart the two failures a single "no GPU" line would blur (see
    :func:`require_gpu_here`).
@@ -31,11 +31,11 @@ deliberately does not make: the runner's ``backend="auto"`` falls back to
 numpy on a GPU-less machine, which on Colab means an hours-long CPU run
 nobody asked for.
 
-**No Google Drive, anywhere (PLAN K12).** This module does not mount Drive,
+**No Google Drive, anywhere.** This module does not mount Drive,
 does not know any Drive path, and carries no Drive-specific retry logic. If
 you want a run to outlive the session, mount Drive yourself in a cell and
-pass ``out=<that path>`` — the runner writes wherever it is pointed, and has
-since M10c. The accepted risk is written down: ``/content`` survives a
+pass ``out=<that path>`` — the runner writes wherever it is pointed, and always
+has. The accepted risk is written down: ``/content`` survives a
 runtime restart (so ``resume=True`` works) but not a VM teardown.
 
 ``google.colab`` is never imported either. The bridge only *asks* whether it
@@ -89,7 +89,7 @@ __all__ = [
 
 #: Colab's session-local disk. This is NOT Google Drive: it is the scratch
 #: space every Colab runtime already has, it needs no mount, and it is gone
-#: when the VM goes away (PLAN K12's accepted risk).
+#: when the VM goes away (an accepted risk).
 CONTENT_ROOT = Path("/content")
 
 #: Where a job given as a URL is downloaded to, under the session root.
@@ -186,7 +186,7 @@ def require_gpu_here(reason: str = "caustica.colab.run_job") -> None:
       Colab this almost always means the runtime is not a GPU one, since a
       Colab GPU runtime ships cupy preinstalled — so the fix is the Runtime
       menu, and the pip command is named only as the fallback for a custom
-      image. caustica will not run it for you (PLAN K6/D6).
+      image. caustica will not run it for you.
     * **cupy is installed, but no CUDA device answers.** The runtime itself
       has no GPU. That sentence is :func:`caustica.env.require_gpu`'s, and it
       is *called*, not restated — the device wording exists once.
@@ -424,7 +424,7 @@ def run_job(
         Where to write. Defaults to :func:`default_out`, i.e. under
         ``/content`` on Colab. Any path works, **including one inside a Drive
         folder you mounted yourself** — this module neither mounts nor knows
-        about Drive (PLAN K12). Because an explicit folder is always passed
+        about Drive. Because an explicit folder is always passed
         on, a job's own ``output.folder`` field does not take effect here;
         when a job names one, that is said out loud rather than swallowed.
     gpu:

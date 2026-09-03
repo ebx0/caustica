@@ -1,4 +1,4 @@
-"""M10j gates: ``caustica.simulate`` — one call, one code path.
+"""``caustica.simulate`` — one call, one code path.
 
 The facade earns its place only if it describes the same world as
 ``caustica run``. The first test in this file is the one that says so: the
@@ -252,7 +252,7 @@ def test_a_builtjob_remembers_where_its_relative_paths_resolve(tmp_path, monkeyp
 
 
 def test_the_in_memory_plan_carries_ppw_warnings_like_plan_json(tmp_path):
-    """D31: a consumer must tell "no warnings" from "no such field"."""
+    """A consumer must tell "no warnings" from "no such field"."""
     job = example_job()
     out = tmp_path / "run"
     written = simulate(write_job(tmp_path, job), out=out, progress=None)
@@ -313,7 +313,7 @@ def test_options_that_need_a_folder_are_refused_not_ignored(tmp_path, monkeypatc
 
 
 def test_the_facade_default_is_progress_on(tmp_path, monkeypatch, capsys):
-    """D21/K11: on by default here, while the library-level default is silent."""
+    """On by default here, while the library-level default is silent."""
     monkeypatch.chdir(tmp_path)
     simulate(example_job())
     assert "[settle" in capsys.readouterr().err
@@ -372,7 +372,7 @@ def test_preview_is_read_back_from_the_package_a_run_wrote(tmp_path):
 
 
 def test_out_none_still_warns_about_low_ppw(tmp_path, monkeypatch):
-    """D31: the warning is not an output-folder feature."""
+    """The warning is not an output-folder feature."""
     monkeypatch.chdir(tmp_path)
     # The example resolves f0 fine; its SECOND harmonic is what is coarse.
     with pytest.warns(caustica.CausticaWarning, match="low spatial resolution"):

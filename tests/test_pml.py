@@ -1,4 +1,4 @@
-"""M1 gate: sponge PML spec + profile (port-parity with the notebook)."""
+"""Sponge PML spec + profile (port-parity with the notebook)."""
 
 import numpy as np
 import pytest

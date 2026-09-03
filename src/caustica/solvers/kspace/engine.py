@@ -2,9 +2,9 @@
 
 One implementation, one set of numerics: the two native solvers differ ONLY
 in whether the Westervelt nonlinear term enters the pressure update. Keeping
-a single engine guarantees the M5 gate "beta=0 => westervelt == linear"
+a single engine guarantees the gate "beta=0 => westervelt == linear"
 structurally (identical code path when the medium is linear) and gives the
-future GPU work (M7) a single surface to optimize.
+future GPU work a single surface to optimize.
 
 Scheme per time step (dt), all states float32 on the chosen backend:
 
@@ -106,7 +106,7 @@ def cw_discretization(
 ) -> tuple[int, float]:
     """Exact-period ``(spp, dt)`` under the CFL limit (notebook policy).
 
-    Single source of truth shared by the engine and the planner (M8): the
+    Single source of truth shared by the engine and the planner: the
     planner MUST predict the same dt the engine will use, or its step-count
     and VRAM figures drift from reality. Raises on temporal-Nyquist violation
     for the requested harmonics (h*f0 must sit strictly below spp*f0/2).
@@ -348,7 +348,7 @@ def run_cw_kspace_pstd(
         normalize_record_region(record_region, grid.shape) if record_region is not None else active
     )
 
-    # ---- checkpoint plumbing (M10): resume, cadence writes, graceful stop ----
+    # ---- checkpoint plumbing: resume, cadence writes, graceful stop ----
     # Everything that shapes the floating-point trajectory goes into the
     # fingerprint; load_checkpoint() refuses to splice two different runs.
     fingerprint = None
@@ -596,7 +596,7 @@ def run_cw_kspace_pstd(
 
     # ---- record window: leakage-free single-bin DFTs + time peak ----
     if stage == "settle":
-        # The stage flip is reported whether or not a checkpoint exists (T1):
+        # The stage flip is reported whether or not a checkpoint exists:
         # "settling done, recording now" is the one transition a watcher
         # needs, and an in-memory run has no checkpoint at all.
         stage = "record"

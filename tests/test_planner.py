@@ -1,4 +1,4 @@
-"""M8 planner gates (local half).
+"""Planner gates (local half).
 
 The planner must mirror the engine exactly where it can be checked without
 hardware: same dt/spp (single source of truth), a VRAM inventory that
@@ -249,7 +249,7 @@ def test_the_calibrated_warmup_scales_with_the_grid(tmp_path):
 
     Treating it as a constant under-predicted the 512^3 rung's 20.9 s by the
     whole plan-creation term, which is 46% of that run's wall time — enough
-    on its own to miss M8's +/-25% gate (first gate session, 2026-08-22).
+    on its own to miss the +/-25% gate (first gate session, 2026-08-22).
     """
     calfile = tmp_path / "calibration.json"
     entry = {
@@ -400,7 +400,7 @@ def test_record_warmup_writes_back_what_a_real_run_paid(tmp_path):
     assert cal.record_warmup("cpu", -1.0, path=calfile)["warmup_s"] == 0.0  # never negative
 
 
-# ------------------------------------------- probe sizing (M8 time, fix F3)
+# ------------------------------------------------------- probe sizing
 
 
 def test_gpu_probe_shapes_saturate_the_device():
@@ -513,7 +513,7 @@ def test_a_curved_device_defeats_the_global_fit_but_not_the_interpolator():
 
     # (d) the honest quality number is leave-one-out, not the residual
     # against knots it is guaranteed to hit. 12% held-out against a 70%
-    # global miss -- inside M8's +/-25% gate, still above the recalibrate
+    # global miss -- inside the +/-25% gate, still above the recalibrate
     # threshold, and the plan says so rather than pretending.
     loo = cal.interp_loo_rel_err(BLACKWELL_PROBES)
     assert loo == pytest.approx(0.121, abs=0.001)
@@ -928,7 +928,7 @@ def test_a_calibration_that_misses_its_own_samples_warns_every_plan(tmp_path):
 
 
 def test_the_cpu_probe_stays_small(tmp_path):
-    """M8's gate is about a GPU; a CPU calibration must not take minutes."""
+    """The gate is about a GPU; a CPU calibration must not take minutes."""
     assert cal.default_probe_shapes("numpy") == ((48, 48, 48), (72, 72, 72))
 
 
@@ -950,7 +950,7 @@ def test_the_calibration_probe_does_not_overflow_float32():
         assert run["t_step_s"] > 0.0
 
 
-# -------------------------------------- unrecognised devices (M8, fix F4)
+# -------------------------------------- unrecognised devices
 
 
 def test_an_unrecognised_gpu_is_not_silently_relabelled():
@@ -977,7 +977,7 @@ def test_an_unknown_device_reaches_its_own_calibration(tmp_path):
     ``find_calibration_for`` searched for the datasheet key's first token in
     the device name; "a100" is not in "NVIDIA RTX PRO 6000 Blackwell Server
     Edition", so the freshly measured entry was invisible and the plan fell
-    back to ``db`` -- which is why M8's time gate could not even be graded
+    back to ``db`` -- which is why the time gate could not even be graded
     on that device (2026-08-22).
     """
     device = "NVIDIA RTX PRO 6000 Blackwell Server Edition"

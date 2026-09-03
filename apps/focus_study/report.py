@@ -1,6 +1,6 @@
 """Report assembly: REPORT.md + a self-contained index.html.
 
-Since M10d the renderers (markdown/html skeleton, CSS) and the metric-row
+The renderers (markdown/html skeleton, CSS) and the metric-row
 builders live in :mod:`caustica.report.html`; this module keeps only what is
 scenario-specific — the Setup/planner rows and the focus_study framing.
 Both renderers show the SAME numbers from metrics.json.

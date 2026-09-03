@@ -1,7 +1,7 @@
 """Kind registries: the plugin seam for job ``medium`` and ``source.array`` kinds.
 
 The shared seam is :class:`caustica.registry.PluginRegistry` (one shape for
-all five axes, K15 / PLAN rule 6); this module applies it to the two places
+all five axes); this module applies it to the two places
 the job schema used to hard-code a closed pydantic union, and adds what only
 a pydantic axis needs: the registry key is read out of the class's ``kind``
 field, and the discriminated union is *built from the registry* instead of
@@ -57,9 +57,9 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 
 log = logging.getLogger("caustica")
 
-#: Entry-point group for third-party medium kinds (frozen name, M10n).
+#: Entry-point group for third-party medium kinds (frozen name).
 MEDIUM_GROUP = MEDIUM_KIND_GROUP
-#: Entry-point group for third-party transducer/array kinds (frozen name, M10n).
+#: Entry-point group for third-party transducer/array kinds (frozen name).
 ARRAY_GROUP = ARRAY_KIND_GROUP
 
 
@@ -168,7 +168,7 @@ class ArrayKindConfig(CausticaModel):
     def derived(self) -> dict[str, float]:
         """Numbers a stored run records so a reload can falsify the geometry.
 
-        The M6f "nothing is baked" rule: element positions are always
+        The "nothing is baked" rule: element positions are always
         re-derived; these values exist to detect a library change that
         silently builds a DIFFERENT transducer.
         """
@@ -261,7 +261,7 @@ class KindRegistry(PluginRegistry[type[CausticaModel]]):
         which nothing else forces. A plugin author who imports only the seam
         — the import the extension-points page tells them to write — was told
         ``Available: (none)``, or worse was shown their own kind and nothing
-        else (found by the M10n verification round).
+        else (found by the verification round).
 
         Re-entrancy is free: while job.py is executing it is ALREADY in
         ``sys.modules``, so this is a no-op exactly when it has to be. Core
@@ -307,7 +307,7 @@ class KindRegistry(PluginRegistry[type[CausticaModel]]):
         is annotated this way picks up a kind registered after the model was
         defined as soon as it is rebuilt — pydantic only re-resolves a field
         annotation that failed to resolve, so a plain module global would go
-        stale (found while writing the plugin test, M10m).
+        stale (found while writing the plugin test).
 
         The one cost: the field's *declared* annotation is ``Any``, so
         ``model_fields[...].annotation`` and ``typing.get_type_hints`` see

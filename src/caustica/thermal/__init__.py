@@ -1,4 +1,4 @@
-"""``caustica.thermal`` — Pennes bioheat + CEM43 dose (M18).
+"""``caustica.thermal`` — Pennes bioheat + CEM43 dose.
 
 The output of ablation planning is not pressure, it is DOSE. This package is
 the second half of that chain; the first half is

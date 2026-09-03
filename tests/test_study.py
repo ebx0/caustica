@@ -1,4 +1,4 @@
-"""M11 gates: ``caustica.study`` — config, run(s), result, figures, report.
+"""``caustica.study`` — config, run(s), result, figures, report.
 
 A Study is orchestration on top of :func:`caustica.simulate`, so the tests
 that matter are the ones that would catch it becoming something else: a
@@ -174,7 +174,7 @@ def test_one_run_end_to_end_carries_the_stamp_and_both_halves_of_the_prediction(
 def test_the_report_quotes_the_runs_own_metrics_json(tmp_path):
     """One definition of "peak pressure", not two.
 
-    ``caustica.report.metrics`` is the single source (M10d). If the study
+    ``caustica.report.metrics`` is the single source. If the study
     ever recomputed a metric, this equality is what would break — and it
     compares the whole dict, so a new key on either side is caught too.
     """
@@ -216,7 +216,7 @@ def p0_sweep(tmp_path_factory):
 
 
 def test_the_three_point_p0_sweep_writes_one_combined_report(p0_sweep):
-    """M11's success criterion, end to end.
+    """The success criterion, end to end.
 
     Three runs, one report, and every swept value visible in it — the last
     part is the one worth pinning: a combined table that silently dropped a
@@ -286,7 +286,7 @@ def test_each_value_gets_its_own_folder_and_its_own_job_hash(p0_sweep):
 
 
 def test_the_combined_figure_and_its_caption_come_from_one_place(p0_sweep):
-    """The M10d caption rule: the figure builder states the caption, once.
+    """The caption rule: the figure builder states the caption, once.
 
     ``sweep_figures`` returns ``{filename: caption}`` and the report renders
     the image list and the caption list from that same mapping, so a renamed
@@ -355,7 +355,7 @@ def test_import_caustica_does_not_import_the_study_machinery():
 
     Reaching a Study pulls in the runner (h5py) and, at report time,
     matplotlib. Neither may be charged to a plain ``import caustica`` — the
-    M10n review found one eager report import doubling CLI startup for every
+    review found one eager report import doubling CLI startup for every
     command, ``--help`` included.
     """
     code = textwrap.dedent(

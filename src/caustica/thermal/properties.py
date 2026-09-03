@@ -60,7 +60,7 @@ def _missing_thermal_fields(material: Material) -> list[str]:
 def _require_thermal(material: Material, tissue_id: int | None = None) -> None:
     """Refuse a material that has not declared its thermal properties.
 
-    Mirrors the M6f frequency guard: name the thing, name the missing field,
+    Mirrors the frequency guard: name the thing, name the missing field,
     say what silently using a default would cost, and give the fix.
     """
     missing = _missing_thermal_fields(material)

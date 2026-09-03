@@ -1,6 +1,6 @@
 """Figure set for one focus study — thin adapter over :mod:`caustica.report.figures`.
 
-Since M10d the drawing code (and the dataviz style) lives in the library so
+The drawing code (and the dataviz style) lives in the library so
 ``caustica report`` produces the same figures; this module only translates a
 scenario ``Setup`` into the library's :class:`FigureContext` and hands the
 whole set off to :func:`caustica.report.figures.make_all`.

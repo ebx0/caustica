@@ -1,4 +1,4 @@
-"""M18 gate: HeatingSource — Q = 2 alpha I, and the harmonic-alpha contract.
+"""HeatingSource — Q = 2 alpha I, and the harmonic-alpha contract.
 
 The physics here is one line long, so the tests that matter are the ones
 about what the library REFUSES: the v1 absorption model knows alpha at f0
@@ -93,7 +93,7 @@ def test_harmonics_without_a_declared_alpha_model_are_refused():
     assert "alpha_power_law_y" in msg  # way out 1
     assert "alpha_at_harmonics" in msg  # way out 2
     assert "harmonics=(1,)" in msg  # way out 3 (explicit fundamental-only)
-    assert "M16" in msg  # and the real fix
+    assert "future release" in msg  # and the real fix
 
 
 def test_power_law_y_two_absorbs_the_second_harmonic_four_times_harder():

@@ -1,17 +1,17 @@
 """Library command line: ``caustica <command>`` (also ``python -m caustica``).
 
-M10b ships ``validate`` — every check that does not require solving, so a
-typo'd or impossible job dies HERE, on the local machine, instead of after a
-Colab session has been booked and a dataset staged. The M10c runner adds
-``run`` on top of the same job contract; M10d adds ``report`` — local HTML +
-figures from a run's output folder (or from its preview package alone).
-M10h adds the ``caustica`` console entry point and ``example`` — packaged,
-zero-data jobs copied *out* of the install before running (running them in
-place would write into site-packages, see ``caustica.examples``). M10m adds
-``schema`` — the job format's JSON Schema, generated from the pydantic
-models and reflecting every registered medium/array kind. M10j turns the
-runner's progress payload into visible output here — per-period lines and a
-periodic focal preview on stderr, silenced with ``--no-progress``.
+``validate`` runs every check that does not require solving, so a typo'd or
+impossible job dies HERE, on the local machine, instead of after a Colab
+session has been booked and a dataset staged. ``run`` executes the same job
+contract; ``report`` renders local HTML + figures from a run's output folder
+(or from its preview package alone). ``example`` copies a packaged, zero-data
+job *out* of the install before running it (running one in place would write
+into site-packages, see ``caustica.examples``), and the ``caustica`` console
+entry point reaches all of it without ``python -m``. ``schema`` prints the job
+format's JSON Schema, generated from the pydantic models and reflecting every
+registered medium/array kind. The runner's progress payload becomes visible
+output here — per-period lines and a periodic focal preview on stderr,
+silenced with ``--no-progress``.
 """
 
 from __future__ import annotations
@@ -171,7 +171,7 @@ def main(argv: list[str] | None = None) -> int:
 
         from caustica.runner import RunnerOptions, run_job_file
 
-        # D33: the LIBRARY installs no logging handler on import; the CLI is
+        # The LIBRARY installs no logging handler on import; the CLI is
         # an application and turns logging on at its entry point — scoped to
         # the caustica logger so a notebook calling main() does not suddenly
         # see every third-party INFO record (review, 2026-08-22).
@@ -198,7 +198,7 @@ def main(argv: list[str] | None = None) -> int:
                 stop_after_periods=args.stop_after_periods,
                 allow_slow_cpu=args.allow_slow_cpu,
                 preview_only=args.preview_only,
-                # Same payload the notebook facade renders (M10j) — the CLI
+                # Same payload the notebook facade renders — the CLI
                 # is an application, so it opts in; the library default stays
                 # silent. stderr keeps stdout's contract (plan, result path)
                 # parseable.
@@ -242,7 +242,7 @@ def main(argv: list[str] | None = None) -> int:
         # Imported HERE, not at parser-build time: `caustica.report.renderers`
         # pulls in `caustica.report`, whose __init__ eagerly imports the numpy
         # metrics and preview modules. Reading one default name there doubled
-        # startup for EVERY command, `--help` included (M10n review).
+        # startup for EVERY command, `--help` included.
         from caustica.report.renderers import DEFAULT_RENDERER, render_report
 
         try:

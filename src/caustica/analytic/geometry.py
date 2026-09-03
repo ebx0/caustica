@@ -2,7 +2,7 @@
 
 Currently: uniform-area point sampling of a spherical cap (focused bowl).
 Used by the Rayleigh integral (validation + beam preview) and later by the
-KZK initial-plane projection (M9).
+KZK initial-plane projection.
 """
 
 from __future__ import annotations

@@ -109,7 +109,7 @@ def element_table_digest(array: TransducerArray) -> str:
     survive mirroring the array, rotating it, re-scattering every element but
     the outermost, swapping two elements' radii, or changing every normal.
     Each of those changes the radiated field by tens of per cent while every
-    recorded number stays put (measured, M10m review). So a *table*-backed
+    recorded number stays put (measured). So a *table*-backed
     kind records a digest of the table itself, and a reload that reads a
     different table says so.
 

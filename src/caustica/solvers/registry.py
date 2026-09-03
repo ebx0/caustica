@@ -7,7 +7,7 @@ a broken plugin can never break ``import caustica``.
 
 The mechanics (lazy scan, collision guard, actionable lookup failure) are
 :class:`caustica.registry.PluginRegistry`, shared with the other four
-extensible axes (K15). What is specific here: the registry key is the
+extensible axes. What is specific here: the registry key is the
 solver class's own ``name`` attribute, so an entry-point declaration cannot
 disagree with the class it points at.
 """
@@ -40,7 +40,7 @@ class SolverRegistry(PluginRegistry[type[SolverBase]]):
             log.warning("%s plugin '%s' is not a SolverBase subclass; ignored", self.group, ep_name)
 
     def collision_message(self, name: str, held: Any) -> str:
-        # "solver NAME '...'": the pre-M10n wording, kept verbatim.
+        # "solver NAME '...'": the older wording, kept verbatim.
         return f"solver name '{name}' already registered by {held.__name__}"
 
 

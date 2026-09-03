@@ -1,8 +1,8 @@
-"""Environment policy (M10i): what machine is this, and can it run GPU work.
+"""Environment policy: what machine is this, and can it run GPU work.
 
 :func:`env_report` is the ONE composition of environment facts — the
 runner's ``run_meta.json`` stamp and a notebook printout call the same
-function, so they cannot disagree. :func:`require_gpu` is D6 made concrete:
+function, so they cannot disagree. :func:`require_gpu` is that policy made concrete:
 caustica never installs anything for you; it names the fix for where you
 actually are (a Colab CPU runtime is fixed in the Runtime menu, not by pip).
 
@@ -69,7 +69,7 @@ def env_report(backend_name: str | None = None) -> dict:
     the runner passes the backend it actually resolved so the stamp
     describes the run, not a hypothetical. The historical stamp keys
     (``caustica``/``python``/``numpy``/``platform`` + the GPU fields) keep
-    their names — M8's Colab gates measure from them; new facts are ADDED.
+    their names — the Colab gates measure from them; new facts are ADDED.
     """
     report: dict = {}
     try:
@@ -85,7 +85,7 @@ def env_report(backend_name: str | None = None) -> dict:
         pass
     # numpy via the imported module, like the historical stamp — it can never
     # be None there, and a gate reading environment["numpy"] may assume str.
-    # The ADDED keys use dist metadata (kept import-free: h5py stays lazy, T6)
+    # The ADDED keys use dist metadata (kept import-free: h5py stays lazy)
     # and may honestly be None on exotic installs.
     try:
         import numpy as np  # noqa: PLC0415
@@ -173,7 +173,7 @@ def _on_colab() -> bool:
 
 
 def require_gpu(reason: str = "") -> Backend:
-    """Return the cupy backend or raise with the fix for THIS machine (D6).
+    """Return the cupy backend or raise with the fix for THIS machine.
 
     Never touches pip. On Colab the real failure is almost always a CPU
     runtime — which no install can fix — so that message points at the

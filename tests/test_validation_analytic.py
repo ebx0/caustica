@@ -664,7 +664,7 @@ def test_the_quick_path_really_solves_grades_and_reports(tmp_path):
     assert (folder / "REPORT.md").is_file() and (folder / "analytic.json").is_file()
 
 
-# ------------------------------------- the absolute-amplitude gate (M30)
+# ------------------------------------- the absolute-amplitude gate
 
 
 def test_the_absolute_gate_catches_a_source_that_does_not_shrink():

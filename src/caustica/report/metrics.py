@@ -1,4 +1,4 @@
-"""Focal metrics — the single source of truth (M10d).
+"""Focal metrics — the single source of truth.
 
 Everything here was extracted from ``apps/focus_study/analysis.py`` so the
 library's ``caustica report`` command and the focus_study app compute the SAME
@@ -307,7 +307,7 @@ def focus_metrics(
             warns.append(a2_edge_warning(edge_vox))
 
     # Always written, even when empty: a reader must be able to tell "nothing
-    # to warn about" from "this file predates the channel" (D31, as plan.json
+    # to warn about" from "this file predates the channel" (as plan.json
     # writes its ppw_warnings unconditionally).
     metrics["warnings"] = warns
     return metrics

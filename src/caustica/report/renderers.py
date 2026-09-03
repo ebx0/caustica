@@ -3,7 +3,7 @@
 ``caustica report <out-dir>`` does not know how to draw anything. It resolves
 a *renderer* by name and calls it; caustica's own matplotlib renderer is
 registered here under the name ``"matplotlib"`` and is reached through the
-same door a third party's renderer would be (M10n/K15 — no private path).
+same door a third party's renderer would be (no private path).
 
 A renderer is any callable::
 
@@ -16,7 +16,7 @@ The return value is the path a reader should open. Renderers should raise a
 plain exception with a readable message when the folder holds nothing they
 can render — the CLI prints it and exits 2.
 
-Import discipline (T6): this module is numpy-free and matplotlib-free, so
+Import discipline: this module is numpy-free and matplotlib-free, so
 ``caustica.report`` can list the available renderers — and the runner can
 write previews — on a machine with neither matplotlib nor h5py installed.
 The core renderer's own imports happen inside its body.
@@ -41,8 +41,8 @@ report_renderers: FactoryRegistry = FactoryRegistry(
 def _matplotlib_renderer(outdir: Path, *, preview_only: bool = False) -> Path:
     """caustica's own renderer: REPORT.md + index.html + PNG figures.
 
-    A thin registered wrapper so the matplotlib import stays inside the call
-    (T6): merely *listing* the renderers must not drag matplotlib in.
+        A thin registered wrapper so the matplotlib import stays inside the call
+    : merely *listing* the renderers must not drag matplotlib in.
     """
     from caustica.report.run_report import report_out_dir  # noqa: PLC0415 (matplotlib lazy)
 

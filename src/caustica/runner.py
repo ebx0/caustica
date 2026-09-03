@@ -1,4 +1,4 @@
-"""The runner (M10c): execute ONE ``caustica-job/1`` file, plan-first and stamped.
+"""The runner: execute ONE ``caustica-job/1`` file, plan-first and stamped.
 
 This is the single entry point the Colab notebook cell calls — and the same
 command runs locally on numpy. Design rule inherited from ``focus_study``:
@@ -14,20 +14,20 @@ Output folder layout (deterministic — resume depends on it)::
       plan.json/.txt    planner verdict, written BEFORE solving
       status.json       heartbeat: {state, step k/N, ETA} — watch it over
                         Drive sync without opening the Colab tab
-      checkpoint.npz    in-run state (M10); removed on success
-      result.h5         caustica-result/1 (M10 store)
-      preview.npz       <=10 MB quick-look package (M10d): peak slices +
+      checkpoint.npz    in-run state; removed on success
+      result.h5         caustica-result/1
+      preview.npz       <=10 MB quick-look package: peak slices +
                         coarse amp volume — `caustica report` renders it
                         without touching result.h5
       metrics.json      focal metrics (caustica.report.metrics — the same
                         definitions focus_study uses)
       run_meta.json     the stamp: env + git + planner vs actual + derived
-                        geometry (M8's two Colab gates measure themselves
+                        geometry (the two Colab gates measure themselves
                         from this file)
-      error.json        why a FAILED run failed (M10l): the structured twin
+      error.json        why a FAILED run failed: the structured twin
                         of the stderr message, written even for failures
                         that happen before solving starts
-      cancel            INPUT, not output (M10l): a caller creates this file
+      cancel            INPUT, not output: a caller creates this file
                         to ask a running solve to stop; see below
 
 Exit codes are DISJOINT so a queue can react without parsing text:
@@ -35,7 +35,7 @@ Exit codes are DISJOINT so a queue can react without parsing text:
 4 solver error · 5 interrupted-but-resumable (``--max-hours``, or a
 ``cancel`` file).
 
-Cancel protocol (M10l — the GUI's "Stop" button, and the reason killing the
+Cancel protocol (the GUI's "Stop" button, and the reason killing the
 process is not the only way out): create an (empty) file named ``cancel`` in
 the output folder. The next PERIOD BOUNDARY sees it — one ``stat`` per
 period, never per step — writes a checkpoint and exits 5. The runner then
@@ -92,7 +92,7 @@ EXIT_OOM = 3
 EXIT_SOLVER = 4
 EXIT_INTERRUPTED = 5
 
-#: Structured failure record (M10l). Every non-zero exit that has an output
+#: Structured failure record. Every non-zero exit that has an output
 #: folder writes one; a successful run writes none and a new attempt deletes
 #: the previous one, so its presence always means "this folder failed".
 ERROR_FORMAT = "caustica-error/1"
@@ -103,7 +103,7 @@ ERROR_KEYS = ("format", "stage", "exit_code", "error_class", "message", "advice"
 #: on it (retry / edit the job / pick a bigger GPU), it does not parse it.
 ERROR_STAGES = ("config", "plan", "gate", "checkpoint", "solve", "store")
 
-#: Cancel request file (M10l). A caller creates it in the output folder; the
+#: Cancel request file. A caller creates it in the output folder; the
 #: solve polls for it ONCE PER PERIOD BOUNDARY and stops resumably (exit 5).
 CANCEL_FILE = "cancel"
 
@@ -130,7 +130,7 @@ def _write_error_json(
     message: str,
     advice: tuple[str, ...] | list[str] = (),
 ) -> None:
-    """Record WHY this run failed, as data instead of stderr prose (M10l).
+    """Record WHY this run failed, as data instead of stderr prose.
 
     Best effort by construction, and deliberately so: this is an ADDITION to
     the existing failure contract, never a replacement. The exit code and the
@@ -273,7 +273,7 @@ def _foreign_result_in(outdir: Path, job: ExplicitJobConfig) -> str | None:
 _git_commit = git_commit
 
 
-# Promoted to caustica.env (M10i) — the runner keeps calling the same
+# Promoted to caustica.env — the runner keeps calling the same
 # function, so the run_meta stamp and a notebook's env_report() cannot
 # disagree. The alias stays because the VRAM block below uses it.
 _gpu_environment = gpu_environment
@@ -311,7 +311,7 @@ class _StepTiming:
     Deliberately conservative: fewer than three boundaries means fewer than
     two intervals to take a median over, and the answer is ``None`` — a stamp
     that says "not measured" beats one that says a number it cannot support.
-    The historical keys are untouched; these are ADDITIONS (M8's Colab gates
+    The historical keys are untouched; these are ADDITIONS (the Colab gates
     and the GUI contract page read the old ones).
     """
 
@@ -354,7 +354,7 @@ class _StepTiming:
 class _Heartbeat:
     """status.json writer: one tick per acoustic period, throttled to disk.
 
-    Since M10j the heartbeat is a CONSUMER of the engine's progress payload
+    The heartbeat is a CONSUMER of the engine's progress payload
     (``__call__``), not a second instrumentation of the same boundary: the
     engine emits one dict per period, this writes the subset ``status.json``
     has always carried. Step counts stay DERIVED (periods * spp) and the ETA
@@ -364,7 +364,7 @@ class _Heartbeat:
     once more just before the record window, so a run that reaches recording
     reports periods_done one higher than the settle count. Status numbers are
     progress telemetry, not provenance — the checkpoint meta and run_meta
-    carry the exact counters, and M8's Colab gates measure themselves from
+    carry the exact counters, and the Colab gates measure themselves from
     this file, so its numbers do not move for cosmetics.
     """
 
@@ -455,7 +455,7 @@ class RunnerOptions:
     stop_after_periods: int | None = None  # deterministic stop (tests/ops)
     allow_slow_cpu: bool = False  # M10i/D20: override the CPU time gate
     preview_only: bool = False  # M10i/D34: skip result.h5, keep the preview
-    #: M10j progress display: None (silent — the library default, so a test
+    #: Progress display: None (silent — the library default, so a test
     #: or an embedding app gets no surprise output), "auto"/"plain", or any
     #: callable taking the payload dict. status.json is written either way:
     #: the heartbeat is always a consumer, this only adds a second one.
@@ -471,7 +471,7 @@ def _cpu_limit_min() -> float:
 
 
 def _cpu_time_estimate(est, grid_shape: tuple[int, ...], opts: RunnerOptions):
-    """CPU wall-time estimate feeding the D20 gate: ``(seconds, source)``.
+    """CPU wall-time estimate feeding the CPU time gate: ``(seconds, source)``.
 
     With the default ``measure=True`` the planner already timed ~20 real
     steps on THIS machine (source ``"measured"``) — trustworthy. With
@@ -576,7 +576,7 @@ def _plan(built: BuiltJob, backend_name: str, opts: RunnerOptions):
         if opts.measure
         else est_gpu
     )
-    # Expected result.h5 size (M10i/D34): the disk cost of a run is a choice
+    # Expected result.h5 size: the disk cost of a run is a choice
     # the user must SEE before a multi-GB file lands on a Drive mount.
     rec = built.record_region
     if rec is None:
@@ -640,7 +640,7 @@ class Refusal:
     skipped them would be the "works on my laptop, dies on Colab" bug the
     plan-first discipline exists to prevent.
 
-    Since M10l the advice is stored as a LIST, not baked into the printed
+    The advice is stored as a LIST, not baked into the printed
     lines: the same strings feed ``error.json``'s ``advice[]``, and a copy
     kept only for the file would drift from the one shown on screen.
     """
@@ -676,7 +676,7 @@ def check_gates(
     gpu_env: dict,
     ck_exists: bool = False,
 ) -> Refusal | None:
-    """The two pre-run gates (M10i): device memory, then CPU wall time.
+    """The two pre-run gates: device memory, then CPU wall time.
 
     Returns ``None`` to proceed. Warnings that do NOT block (an accepted slow
     CPU run, an unjudgeable one, a plain numpy notice) are raised here so both
@@ -686,7 +686,7 @@ def check_gates(
     limit_label = "requested limit (--vram-limit-gib)"
     if limit_gib is None and backend_name == "cupy":
         gpu_name = gpu_env.get("gpu_name", "unknown GPU")
-        # FREE VRAM, not total (M10i): the CUDA context alone eats
+        # FREE VRAM, not total: the CUDA context alone eats
         # 0.8-1.5 GB on Colab — gating on the total says "fits" and then
         # dies OOM mid-run. The message names which limit was used.
         # (gpu_env is the PRE-probe snapshot — see the caller.)
@@ -704,14 +704,14 @@ def check_gates(
                 f"{limit_label} is {limit_gib:.2f} GiB."
             ),
             # The planner's own advice, verbatim — printed AND written to
-            # error.json (M10l), where it is the actionable part for a GUI.
+            # error.json, where it is the actionable part for a GUI.
             advice=tuple(
                 est.advice
                 or ("coarsen dx, shrink the record region, or switch to the linear solver",)
             ),
         )
 
-    # ---- CPU gate (M10i/D20): refuse an hours-long numpy run BEFORE
+    # ---- CPU gate: refuse an hours-long numpy run BEFORE
     # paying for it; the message names its own escapes. Reuses
     # EXIT_CONFIG — the exit-code set is the queue's API (no sixth code).
     if backend_name == "numpy" and opts.resume and ck_exists:
@@ -778,7 +778,7 @@ def check_gates(
 
 
 def _write_preview_package(built: BuiltJob, result, outdir: Path, apex_vox: tuple) -> None:
-    """The M10d preview next to the result: metrics.json + preview.npz.
+    """The preview next to the result: metrics.json + preview.npz.
 
     Called only AFTER the result is safely stored; any failure here must
     never turn a successful run into a failed one — the caller warns.
@@ -833,8 +833,8 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
     # ---- everything before the solve is, by definition, a config problem ----
     try:
         # BEFORE the medium is built: `--backend` used to be an argparse
-        # `choices=`, so a typo was refused instantly. Since M10n opened the
-        # name to the registry, refusing it here keeps that — otherwise a
+        # `choices=`, so a typo was refused instantly. Now that the name
+        # comes from the registry, refusing it here keeps that — otherwise a
         # misspelled backend costs a multi-GB medium build first.
         if opts.backend is not None:
             check_backend_name(opts.backend)
@@ -907,7 +907,7 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
     # plan writes must exit 2, not leak a raw traceback with exit 1.
     native = built.solver in _NATIVE_SOLVERS
     est = plan_payload = None
-    # Low ppw is loud in four places (M10i/D31): plan, status.json,
+    # Low ppw is loud in four places: plan, status.json,
     # run_meta.json and the report head. Ignorable — never a block.
     ppw_warns = _ppw_warnings_for(built)
     # GPU facts are snapshotted BEFORE the plan: the measure probe fills the
@@ -972,7 +972,7 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
         print(f"(planner models the native engine only; '{built.solver}' runs unplanned)")
         # Honest about the gap rather than silently ignoring the file: no
         # checkpoint means no period boundary to stop AT, so a cancel could
-        # only kill the run, which is what the file exists to avoid (M10l).
+        # only kill the run, which is what the file exists to avoid.
         print(f"(no checkpoints for '{built.solver}': a '{CANCEL_FILE}' file has no effect)")
 
     if opts.dry_run:
@@ -982,7 +982,7 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
     # From here a REAL run owns the folder: a failure record and a stop
     # request left by the PREVIOUS attempt are stale by definition. Clearing
     # `cancel` also stops a process killed between "cancel seen" and "cancel
-    # honored" from cancelling every resume that follows, forever (M10l).
+    # honored" from cancelling every resume that follows, forever.
     _clear_stale(error_path)
     _clear_stale(cancel_path)
 
@@ -1044,14 +1044,14 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
     cancelled = False
 
     def stop_when() -> bool:
-        # The heartbeat is no longer ticked HERE (M10j): it consumes the
+        # The heartbeat is no longer ticked HERE: it consumes the
         # engine's progress payload, which the boundary emits just before
         # this poll — same call site, same order, same counters, one
         # instrumentation instead of two.
         nonlocal cancelled
         if opts.stop_after_periods is not None and hb.session_periods >= opts.stop_after_periods:
             return True
-        # The cancel poll (M10l) is ONE stat, at the period boundary, which
+        # The cancel poll is ONE stat, at the period boundary, which
         # is the only place this hook is called from — a per-step poll would
         # put a filesystem round-trip between GPU kernels and is exactly what
         # the period-boundary discipline exists to prevent. It goes through
@@ -1074,7 +1074,7 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
         # backend=, checkpoint= and progress= are NATIVE-engine options; the
         # kwave adapter rejects unknown kwargs by contract, so passing them
         # would crash every kwave job (adversarial review, 2026-08-19; the
-        # same trap catches progress= — T3).
+        # same trap catches progress=).
         run_kwargs["backend"] = backend_name
         # keep_on_success: the checkpoint outlives the solve until the result
         # is SAFELY stored — a Drive failure during save stays resumable from
@@ -1140,7 +1140,7 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
         progress_close(display)  # a live tqdm bar must not outlive the solve
     elapsed_solve = time.perf_counter() - t_solve
 
-    # ---- store (M10 contract) + the stamp ----
+    # ---- store + the stamp ----
     # A store failure here must NOT lose the solve: the checkpoint is still
     # on disk (keep_on_success), so we report a classified failure and the
     # user resumes — redoing only the short record window, not the hours.
@@ -1153,7 +1153,7 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
         # directory in between (v12.3 lesson).
         ensure_dir_verified(outdir)
         if opts.preview_only:
-            # D34 opt-in: the field is deliberately discarded — the preview
+            # Opt-in: the field is deliberately discarded — the preview
             # package IS the output here, so its failure is a real failure
             # (the post-store preview below is best-effort only because
             # result.h5 is already safe). No result.h5 also means no
@@ -1175,7 +1175,7 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
                     "git_commit": git_commit,
                     "runner": f"caustica {caustica.__version__}",
                     # Geometry stamp so `caustica report` can place the field
-                    # in mm-from-apex without the job/medium (M10d).
+                    # in mm-from-apex without the job/medium.
                     "apex_vox": list(apex_vox),
                     "focus_vox": [int(v) for v in built.focus_vox],
                 },
@@ -1208,7 +1208,7 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
         )
         return EXIT_SOLVER
 
-    # ---- preview package (M10d): <=10 MB answer to "did the run work?" ----
+    # ---- preview package: <=10 MB answer to "did the run work?" ----
     # The result is already safe on disk; a preview failure must never turn
     # a successful run into a failed one — warn and move on. (In
     # --preview-only mode the package was already written above, fatally.)
@@ -1227,7 +1227,7 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
         "elapsed_solve_s": round(elapsed_solve, 2),
         "elapsed_total_s": round(time.perf_counter() - t_start, 2),
         "steps_total": result.steps_total,
-        # Kept verbatim: M8's Colab gates and the GUI contract read it. It
+        # Kept verbatim: the Colab gates and the GUI contract read it. It
         # bundles the one-time warmup into a per-step average, which is what
         # the three keys below take apart (fix A2).
         "t_step_measured_s": round(elapsed_solve / max(result.steps_total, 1), 6),
@@ -1246,7 +1246,7 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
         "backend": backend_name,
         "generated": _now_iso(),
         "git_commit": git_commit,
-        # env_report keeps the historical key names (M8's Colab gates read
+        # env_report keeps the historical key names (the Colab gates read
         # them) and only ADDS facts — see caustica.env.
         "environment": env_report(backend_name),
         "ppw_warnings": ppw_warns,  # D31: the report head re-reads these

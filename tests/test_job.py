@@ -1,7 +1,7 @@
-"""M10b gates: the caustica-job/1 contract — round-trip, scene/volume paths,
+"""The caustica-job/1 contract — round-trip, scene/volume paths,
 derived-geometry falsification, and validate's catches.
 
-M10k/W0c: the stored_setup and phantom_dataset cases moved out with the
+The stored_setup and phantom_dataset cases moved out with the
 phantom package; volume-file coverage lives in tests/test_medium_volume.py.
 Tests touching a local dataset npz skip when ``data/phantoms`` is empty (CI).
 """
@@ -141,7 +141,7 @@ def test_wrong_format_tag_refused(tmp_path):
 
 
 def test_scene_job_end_to_end_mini_solve(tmp_path):
-    """The M10b scene gate: SceneConfig -> Medium -> a real (tiny) CPU solve."""
+    """The scene gate: SceneConfig -> Medium -> a real (tiny) CPU solve."""
     p = write_job(tmp_path, scene_job_dict())
     job, base = load_job(p)
     built = build_job(job, base_dir=base)
@@ -221,7 +221,7 @@ def test_spiral_natural_vs_steered_phases(tmp_path):
 
 
 def test_derived_geometry_is_falsifiable(tmp_path):
-    """M6f generalized: recorded derived values are re-derived and checked."""
+    """The alpha rule generalized: recorded derived values are re-derived and checked."""
     d = scene_job_dict()
     job = _ADAPTER.validate_python(d)
     built = build_job(job, base_dir=tmp_path, with_medium=False)
@@ -286,7 +286,7 @@ def test_validate_warns_that_westervelt_on_a_beta_zero_medium_is_a_linear_solve(
     """The UX trap: a nonlinear solver over water() runs linear physics.
 
     beta=0 everywhere means the westervelt engine has no nonlinear term to
-    apply, so the solve is bit-identical to `linear` (the M5 guarantee) — a
+    apply, so the solve is bit-identical to `linear` (the guarantee) — a
     run labelled "westervelt" whose harmonics are numerical residue. Loud,
     but never a block: a linear reference run through the nonlinear engine is
     a legitimate thing to ask for.

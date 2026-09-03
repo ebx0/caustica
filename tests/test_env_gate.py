@@ -1,4 +1,4 @@
-"""M10i gates: the slow-CPU refusal (D5/D20) and its escape hatch.
+"""The slow-CPU refusal and its escape hatch.
 
 The mini job solves in seconds, so the gate is exercised by moving the
 threshold (``CAUSTICA_CPU_LIMIT_MIN``) rather than by hours-long runs; the
@@ -65,7 +65,7 @@ def test_cpu_gate_escape_hatch_overrides(tmp_path, monkeypatch):
 
 
 def test_packaged_example_runs_with_exactly_one_warning(tmp_path, monkeypatch):
-    """The M10i criterion verbatim: the PACKAGED example, below the
+    """The criterion verbatim: the PACKAGED example, below the
     threshold, runs with exactly ONE warning (the CPU notice — its ppw is
     3.75 so no resolution warning joins it)."""
     from caustica import examples
@@ -163,7 +163,7 @@ def test_cli_wires_allow_slow_cpu(tmp_path, monkeypatch):
         )
 
 
-# ------------------------------------------------------- env_report (M10i)
+# ------------------------------------------------------- env_report
 
 
 def test_env_report_returns_dict_and_keeps_the_stamp_keys():
@@ -171,7 +171,7 @@ def test_env_report_returns_dict_and_keeps_the_stamp_keys():
 
     rep = env_report()
     assert isinstance(rep, dict)
-    # historical stamp keys — renaming any of these breaks M8's Colab gates
+    # historical stamp keys — renaming any of these breaks the Colab gates
     for key in ("caustica", "python", "numpy", "platform"):
         assert key in rep, f"stamp key {key!r} disappeared from env_report()"
     assert rep["resolved_backend"] in ("numpy", "cupy")
@@ -352,7 +352,7 @@ def test_preview_only_skips_the_field_but_keeps_the_rest(tmp_path):
 
 
 def test_default_output_unchanged_full_result_plus_preview(tmp_path):
-    """D34: the DEFAULT does not change — full field AND preview."""
+    """The DEFAULT does not change — full field AND preview."""
     out = tmp_path / "out"
     code, _ = run_recording_warnings(mini_job(tmp_path), opts(out=out))
     assert code == EXIT_OK

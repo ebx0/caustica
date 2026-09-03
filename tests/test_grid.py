@@ -1,4 +1,4 @@
-"""M1 gate: Grid geometry and k-space definitions."""
+"""Grid geometry and k-space definitions."""
 
 import numpy as np
 import pytest

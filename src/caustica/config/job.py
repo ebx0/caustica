@@ -1,8 +1,8 @@
 """The job file: ONE JSON that describes a complete solve (``caustica-job/1``).
 
-This is the contract the whole Colab flow rides on (M10b): the user (or,
+This is the contract the whole Colab flow rides on: the user (or,
 later, the GUI) writes a job file, ``python -m caustica validate`` checks it
-without burning GPU time, and the runner (M10c) executes it. Everything a
+without burning GPU time, and the runner executes it. Everything a
 run needs is either IN the file or derived from it — nothing is baked.
 
 One job kind: ``explicit`` — the full tree: medium (medium_volume file |
@@ -12,7 +12,7 @@ policy.
 
 The medium and array kinds are NOT a closed union: both are built from the
 registries in :mod:`caustica.config.kinds`, which the kinds below register
-through — the same door a third-party package uses (M10m/K15). ``caustica
+through — the same door a third-party package uses. ``caustica
 schema`` prints the JSON Schema of whatever is registered right now.
 
 Contract rules (same as every caustica config): pydantic, ``extra="forbid"``
@@ -20,7 +20,7 @@ Contract rules (same as every caustica config): pydantic, ``extra="forbid"``
 kPa, voxel counts are always derived, and every model round-trips through
 JSON losslessly.
 
-History (M10k, 2026-08-22): the ``stored_setup`` job kind and the
+History (2026-08-22): the ``stored_setup`` job kind and the
 ``phantom_dataset`` medium kind were REMOVED — a breaking ``caustica-job/1``
 change, deliberate and recorded (the format number stays; no stability
 guarantee before v1.0). The library carries no phantom-source-specific code;
@@ -116,7 +116,7 @@ class RunConfig(CausticaModel):
 
 
 class OutputConfig(CausticaModel):
-    """Where and how the result lands (consumed by the M10c runner)."""
+    """Where and how the result lands (consumed by the runner)."""
 
     folder: str | None = Field(None, description="Output folder; None -> derived from job name")
     quantize: bool = True
@@ -214,7 +214,7 @@ class MediumVolumeConfig(MediumKindConfig):
     The grid comes FROM the file (shape + dx are the file's); only the PML
     thickness is chosen here, so an explicit job cannot silently run a
     resampled ghost of the data. (Same rule as the dataset kind it
-    generalizes — M10k/D16.)
+    generalizes.)
     """
 
     provides_grid: ClassVar[bool] = True
@@ -264,7 +264,7 @@ class MediumVolumeConfig(MediumKindConfig):
     def prepare(self, drive: DriveConfig) -> MediumPrep:
         """Grid + labels now; the (multi-GB) property volumes behind a callable."""
         vol = self.load_volume()
-        # The M6f protection generalizes: a file whose alpha was baked at a
+        # The alpha-not-baked protection generalizes: a file whose alpha was baked at a
         # frequency refuses to run at another one.
         _check_dataset_f0(
             drive.f0_hz,
@@ -395,7 +395,7 @@ class SpiralArrayConfig(_ElementArrayConfig):
     def derived(self, arr: TransducerArray | None = None) -> dict[str, float]:
         """The numbers a stored job output records so a reload can falsify them.
 
-        Generalization of the M6f "nothing is baked" pattern: element
+        Generalization of the "nothing is baked" pattern: element
         positions are always re-derived; these values exist to detect a
         library change silently producing a different transducer.
         """
@@ -571,7 +571,7 @@ class ElementsArrayConfig(_ElementArrayConfig):
         constraint: mirroring it, rotating it, re-scattering all but the
         outermost element or changing every normal leaves the element count,
         the maximum radius and the shell depth untouched while moving the
-        field by tens of per cent (measured, M10m review). Hence the digest —
+        field by tens of per cent (measured). Hence the digest —
         without it this record would certify nothing.
         """
         arr = arr if arr is not None else self.build()
@@ -584,7 +584,7 @@ class ElementsArrayConfig(_ElementArrayConfig):
         }
         # An all-on-axis table has no f-number. Recording `inf` would put the
         # token `Infinity` in run_meta.json — accepted by Python's json, and
-        # rejected by JSON.parse, jq, Go and serde (review, M10m).
+        # rejected by JSON.parse, jq, Go and serde.
         if r_max_mm > 0.0:
             out["f_number"] = self.roc_mm / (2.0 * r_max_mm)
         out["half_angle_deg"] = float(np.degrees(np.arcsin(min(1.0, r_max_mm / self.roc_mm))))
@@ -601,7 +601,7 @@ class FocusConfig(CausticaModel):
     ``natural`` = the array's own geometric focus (all phases zero).
     ``steered`` = delay-and-sum phases toward ``target_mm`` (grid frame, mm).
     Steering assumes water sound speed on the path (das_phases c0 = 1500);
-    aberration through tissue is a planning problem (M23), not a job knob.
+    aberration through tissue is a planning problem, not a job knob.
     """
 
     mode: Literal["natural", "steered"] = "natural"
@@ -692,7 +692,7 @@ class ArraySourceConfig(CausticaModel):
     def check_derived(self, derived: dict[str, Any], base_dir: Path | None = None) -> None:
         """Falsify recorded derived geometry against a fresh re-derivation.
 
-        The M6f rule generalized: a stored job output that records these
+        The "nothing is baked" rule generalized: a stored job output that records these
         values can prove the library still builds the SAME transducer. Raises
         :class:`JobError` naming the drifted quantity. Pass ``base_dir`` (the
         job file's directory) when the array kind reads a relative file.
@@ -751,7 +751,7 @@ class ExplicitJobConfig(CausticaModel):
     def _known_backend(cls, v: str) -> str:
         """Refuse a backend nobody registered, at validate time.
 
-        Open on purpose (M10n): the field used to be a closed Literal, which
+        Open on purpose: the field used to be a closed Literal, which
         made a third-party backend unreachable from a job file — the same
         dead end `elements` fixed for arrays. The refusal is kept, it just
         asks the registry instead of a hard-coded list.
@@ -774,7 +774,7 @@ class ExplicitJobConfig(CausticaModel):
         return self
 
 
-#: One job kind since M10k (``stored_setup`` removed — see the module
+#: One job kind (``stored_setup`` removed — see the module
 #: docstring); the alias survives so consumers keep one import site.
 JobConfig = ExplicitJobConfig
 
@@ -889,7 +889,7 @@ def _resolve(path_str: str, base_dir: Path | None) -> str:
 
 
 def _check_dataset_f0(job_f0_hz: float, baked_f0_mhz: float | None, what: str) -> None:
-    """The M6f alpha guarantee, on EVERY path that can pair a file with a drive.
+    """The alpha guarantee, on EVERY path that can pair a file with a drive.
 
     A volume file whose absorption (alpha) was baked at one frequency must
     refuse to run at another — anything else silently uses wrong tissue
@@ -1014,7 +1014,7 @@ def low_ppw_warnings(grid, f0: float, harmonics, c_min: float, approx_label: str
     """The low-resolution warnings (< 3 ppw per recorded harmonic), one text.
 
     Single source for validate, the runner's plan/status/run_meta and the
-    report head (M10i/D31): loud in four places, a block in none — the
+    report head: loud in four places, a block in none — the
     production setting is a deliberate 1.88 ppw at 2f0.
     """
     out = []
@@ -1037,7 +1037,7 @@ def linear_medium_warnings(solver: str, medium) -> list[str]:
     """The "westervelt on a beta=0 medium" warning (janitor ticket 08).
 
     ``water()`` is beta=0 by design and the engine is right to drop the
-    nonlinear term for it (M5: westervelt at beta=0 IS linear, bit for bit) —
+    nonlinear term for it (westervelt at beta=0 IS linear, bit for bit) —
     but a job that ASKS for westervelt is asking for nonlinear physics, and a
     ``harmonics: [1, 2]`` run that quietly gets a linear solve back is left
     wondering why its second harmonic is numerical noise.
@@ -1079,7 +1079,7 @@ def validate_job(path: str | Path, fast: bool = False) -> JobReport:
     # volumes are the expensive part by construction — skip them here for the
     # same reason MediumPrep defers them. Asked of the KIND, not of one class,
     # or a third-party grid-providing kind would materialize GBs inside a
-    # command whose whole promise is that it costs nothing (review, M10m).
+    # command whose whole promise is that it costs nothing.
     heavy_medium = type(job.medium).provides_grid
     with_medium = not fast and not heavy_medium
     try:

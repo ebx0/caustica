@@ -1,4 +1,4 @@
-"""M10k/W0a gates: the ``medium_volume`` format — read old bytes, write new.
+"""The ``medium_volume`` format — read old bytes, write new.
 
 The two bit-identity gates of the extraction (R11):
 
@@ -68,7 +68,7 @@ def _tiny_labels() -> np.ndarray:
 
 @needs_dataset
 def test_existing_dataset_file_gives_bit_identical_medium():
-    """T7/R11: same .npz -> medium_volume Medium == PhantomAsset Medium,
+    """Same .npz -> medium_volume Medium == PhantomAsset Medium,
     bitwise, full volume (hashed one medium at a time)."""
     asset_mod = pytest.importorskip(
         "uwcem_phantoms.asset"
@@ -255,7 +255,7 @@ def test_job_focus_in_water_refused_and_escapable(tmp_path):
 
 
 def test_label_refusals_fire_before_the_medium_is_built(tmp_path, monkeypatch):
-    """The speed contract (M10c): every cheap refusal runs BEFORE the GBs.
+    """The speed contract: every cheap refusal runs BEFORE the GBs.
 
     On a full-size volume ``to_medium()`` materializes four property arrays;
     a job whose focus sits in the coupling water must be refused without

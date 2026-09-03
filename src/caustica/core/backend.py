@@ -13,7 +13,7 @@ Design notes
   (logged once at INFO level).
 * A backend is intentionally a thin, frozen value object. Anything stateful
   (FFT plans, memory pools, streams) belongs to the solver that owns the run.
-* Backends are a **registry** (M10n/K15): ``numpy`` and ``cupy`` are two
+* Backends are a **registry**: ``numpy`` and ``cupy`` are two
   registered factories, not two branches of an ``if``. A third party adds one
   through the ``caustica.backends`` entry-point group and names it in a job.
   ``"auto"`` is not a backend but a *policy* over them (cupy if usable, else
@@ -45,7 +45,7 @@ backends: FactoryRegistry = FactoryRegistry("backend", BACKEND_GROUP)
 
 _CUPY_STATE: dict[str, Any] = {"checked": False, "available": False, "module": None}
 
-#: One warning per process for the auto->numpy fallback (D33): visible once,
+#: One warning per process for the auto->numpy fallback: visible once,
 #: noise never. Tests reset this directly.
 _AUTO_FALLBACK_WARNED = False
 
@@ -158,7 +158,7 @@ class Backend:
         and cupyx.scipy.fft both keep float32/complex64. Solvers must use
         ``backend.fft``, never ``numpy.fft``. On CPU the transforms carry a
         default ``workers=`` (see :func:`cpu_fft_workers`) so multi-core
-        machines are not silently single-threaded (D32).
+        machines are not silently single-threaded.
         """
         if self.is_gpu:
             import cupyx.scipy.fft as cufft  # noqa: PLC0415 (lazy on purpose)
@@ -250,7 +250,7 @@ def get_backend(name: str = "auto") -> Backend:
             return _checked("cupy", backends.get("cupy"))
         global _AUTO_FALLBACK_WARNED
         if not _AUTO_FALLBACK_WARNED:
-            # ONCE per process (D33): the old INFO log had no handler and was
+            # ONCE per process: the old INFO log had no handler and was
             # never seen by anyone; a warning is visible in notebooks and CI,
             # and once is signal — per-call would be noise (the suite calls
             # this hundreds of times).
@@ -274,7 +274,7 @@ def _checked(name: str, factory: Any) -> Backend:
     """Call a registered factory and hold it to the contract.
 
     Both checks exist because the closed ``Literal`` used to make them
-    unreachable (M10n review). Everything downstream — the run stamp in
+    unreachable. Everything downstream — the run stamp in
     ``run_meta.json``, the ``backend`` attr in ``result.h5``, the checkpoint
     fingerprint that decides whether a resume is the SAME run — reads
     ``Backend.name``, never the name that was asked for. A factory whose

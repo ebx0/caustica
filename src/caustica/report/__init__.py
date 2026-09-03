@@ -1,4 +1,4 @@
-"""Metrics, preview packages and report rendering (M10d).
+"""Metrics, preview packages and report rendering.
 
 Single source of truth for focal metrics (:mod:`caustica.report.metrics` —
 ``apps/focus_study`` delegates here), the <=10 MB preview package the runner

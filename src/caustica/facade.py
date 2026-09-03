@@ -1,4 +1,4 @@
-"""``caustica.simulate`` — one call for a notebook, the same machinery (M10j / W3).
+"""``caustica.simulate`` — one call for a notebook, the same machinery.
 
 This module adds NO physics and NO second way to build a run. Every accepted
 input is normalised into a ``caustica-job/1`` config and handed to
@@ -28,7 +28,7 @@ module exists to avoid. Drive them through the object API instead::
 Two output modes, one preflight:
 
 * ``out=None`` — nothing is written anywhere. The planner still speaks and
-  both M10i gates (VRAM, the 5-minute CPU limit) still apply: an in-memory
+  both gates (VRAM, the 5-minute CPU limit) still apply: an in-memory
   run that skipped them would be the "fine on my laptop, dies on Colab"
   failure the plan-first discipline exists to prevent.
 * ``out=<path>`` — delegated verbatim to :func:`caustica.runner.run_job_file`,
@@ -342,7 +342,7 @@ def _geometry_of(built: BuiltJob) -> dict:
 def _enable_logging() -> None:
     """Turn caustica's own log records on at the facade's door (PLAN section 8).
 
-    The LIBRARY installs no handler on import (D33); ``simulate()`` is an
+    The LIBRARY installs no handler on import; ``simulate()`` is an
     entry point, like the CLI, and a notebook that never sees "falling back
     to numpy" is the silent-failure case the policy exists to prevent. Scoped
     to the caustica logger, and never added twice.
@@ -412,7 +412,7 @@ def simulate(
     if progress is not _KEEP:
         opts.progress = progress  # includes an explicit progress=None (silence)
     elif opts.progress is None:
-        # D21/K11: the FACADE's default is progress on, while the library-level
+        # The FACADE's default is progress on, while the library-level
         # RunnerOptions default stays silent. An `options=` that names a
         # renderer keeps it.
         opts.progress = "auto"
@@ -515,7 +515,7 @@ def _run_in_memory(
             raise SimulationError(f"{type(exc).__name__}: {exc}", EXIT_CONFIG) from exc
         # Unconditionally, exactly as the runner writes it into plan.json: a
         # consumer must be able to tell "no warnings" from "this plan does not
-        # carry the field" (D31).
+        # carry the field".
         plan_payload["ppw_warnings"] = ppw_warns
         if ppw_warns:
             plan_text += "\n" + "\n".join(f"  ! WARNING: {w}" for w in ppw_warns)
@@ -543,10 +543,10 @@ def _run_in_memory(
     )
     display = None
     if native:
-        # T3, again: backend= and progress= are native-engine options and the
+        # Again: backend= and progress= are native-engine options and the
         # kwave adapter rejects unknown kwargs by contract. No checkpoint —
         # an in-memory run has nowhere to put one, which is exactly the case
-        # trap T1 was about.
+        # the trap was about.
         run_kwargs["backend"] = backend_name
         display = progress_resolve(opts.progress, label=built.name)
         run_kwargs["progress"] = display

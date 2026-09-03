@@ -1,4 +1,4 @@
-"""M4 physics gates on 1-D plane waves: dispersion, absorption, PML, stability.
+"""Physics gates on 1-D plane waves: dispersion, absorption, PML, stability.
 
 All runs use the numpy backend on small 1-D grids — seconds, not minutes —
 and each asserts one isolated physical property.

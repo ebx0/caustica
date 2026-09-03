@@ -1,4 +1,4 @@
-"""M18 gate: Pennes bioheat + CEM43 dose, against closed forms.
+"""Pennes bioheat + CEM43 dose, against closed forms.
 
 Every physics test here carries its analytic solution in the test body, and
 every one of them is measured against the milestone's 2% bar:
@@ -727,7 +727,7 @@ def test_a_real_solve_feeds_a_real_sonication_end_to_end():
     Every other test here builds its Q by hand. This one is the only place
     where ``SolverResult.region``, the acoustic ``Medium``, the material
     table and ``ThermalMedium`` have to agree about shapes, spacing and
-    tissue layout — an interface mistake between the two halves of M18
+    tissue layout — an interface mistake between the two halves
     would show up nowhere else. Two hand-checks pin the physics across the
     join: Q at the focus is 2 alpha I of the recorded phasor, and the
     initial heating rate is Q/(rho C).

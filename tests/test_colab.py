@@ -1,4 +1,4 @@
-"""M10f: the Colab bridge, and the notebook that must never need editing.
+"""The Colab bridge, and the notebook that must never need editing.
 
 Two halves. The first freezes ``notebooks/colab_run.ipynb`` cell by cell: the
 notebook is a *thin* front for :mod:`caustica.colab`, so a logic change has to
@@ -275,14 +275,14 @@ def test_the_shell_lines_do_exactly_one_thing():
 
 
 def test_notebook_never_mounts_anything():
-    """PLAN K12, at the notebook level: no mount, no cloud-drive path."""
+    """At the notebook level: no mount, no cloud-drive path."""
     text = NOTEBOOK.read_text(encoding="utf-8").lower()
     for forbidden in ("drive.mount", "/content/drive", "import google", "from google"):
         assert forbidden not in text, f"the notebook mentions {forbidden!r}"
 
 
 def test_notebook_installs_from_the_public_repo_and_never_a_gpu_extra():
-    """Colab ships cupy; installing a GPU extra there is wasted minutes (K6)."""
+    """Colab ships cupy; installing a GPU extra there is wasted minutes."""
     install = _shell_lines()[0]
     assert install.startswith("!pip install")
     assert "git+https://github.com/ebx0/caustica" in install
@@ -294,14 +294,14 @@ def test_notebook_installs_from_the_public_repo_and_never_a_gpu_extra():
 
 
 def test_the_library_has_no_drive_code_and_never_imports_google_colab():
-    """M10f's grep criterion, encoded.
+    """The grep criterion, encoded.
 
     Two separate rules, because they are two separate risks:
 
     * **Google Drive**: zero matches for ``drive.mount`` and ``/content/drive``
       anywhere under ``src/caustica`` — the mount call and the mount point,
       which is what "the library does not know about Drive" reduces to in
-      code (PLAN K12). It is a pattern match, not a proof of absence: a
+      code. It is a pattern match, not a proof of absence: a
       third-party Drive client under another name would pass it.
     * **``google.colab``**: may be *probed* (is it already in ``sys.modules``?)
       but never imported, and only in the modules that legitimately answer
@@ -406,7 +406,7 @@ def cupy_but_no_device(monkeypatch):
 def test_missing_cupy_and_a_cpu_runtime_are_two_different_messages(
     fake_colab, no_cupy_at_all, monkeypatch
 ):
-    """K6: they have different fixes, so they must not share a sentence."""
+    """They have different fixes, so they must not share a sentence."""
     with pytest.raises(RuntimeError) as missing:
         colab.require_gpu_here()
     monkeypatch.setattr(colab, "_cupy_installed", lambda: True)
@@ -608,7 +608,7 @@ def test_a_url_job_is_downloaded_next_to_the_run(gpu_present, not_colab, tmp_pat
 
 
 def test_an_explicit_out_wins_including_a_folder_the_user_mounted(gpu_present, tmp_path):
-    """K12: persistence is the user's mount plus ``out=``; we only write there."""
+    """Persistence is the user's mount plus ``out=``; we only write there."""
     elsewhere = tmp_path / "somebody_elses_mount" / "runs"
     out = colab.run_job(mini_job(tmp_path), out=elsewhere, measure=False, progress=None)
     assert out == elsewhere and (elsewhere / "result.h5").is_file()

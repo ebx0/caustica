@@ -235,7 +235,7 @@ def spiral_array(knobs: Knobs, n_elements: int = 32, steer_mm: float = 4.0) -> S
 def layered_tissue(knobs: Knobs) -> Setup:
     """Bowl focused through gel -> skin -> fat onto a muscle nodule.
 
-    Exercises the M6b geometry system (CSG scene -> label map -> Medium
+    Exercises the geometry system (CSG scene -> label map -> Medium
     via the breast MaterialDB) and shows what heterogeneity does to the
     focus: attenuation, speed-of-sound shift, focal displacement.
     """

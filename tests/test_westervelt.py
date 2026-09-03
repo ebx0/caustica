@@ -1,4 +1,4 @@
-"""M5 gates: Westervelt nonlinearity vs Fubini + linear-limit equivalence.
+"""Westervelt nonlinearity vs Fubini + linear-limit equivalence.
 
 Resolution note (calibrated empirically, 2026-08-10):
 harmonic-cascade accuracy needs headroom above f0 — at 8 ppw the 3rd

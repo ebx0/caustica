@@ -1,4 +1,4 @@
-"""M2 gate: material DB — notebook TISSUE_PROPS parity is a hard contract."""
+"""Material DB — notebook TISSUE_PROPS parity is a hard contract."""
 
 import pytest
 from pydantic import ValidationError
@@ -47,11 +47,11 @@ def test_db_json_roundtrip_preserves_int_keys():
     assert 2 in again and again[2].name == "Fat"
 
 
-# ---------------------------------------- literature tissue library (W0b/D17)
+# ---------------------------------------- literature tissue library
 
 
 def test_tissue_library_values_pinned_to_the_digit():
-    """M10k/W0b acceptance: the values MOVED from the uwcem tissue table are
+    """The values MOVED from the uwcem tissue table are
     unchanged to the digit. These literals are frozen on purpose — a drifted
     number silently redefines what every exported phantom means."""
     from caustica.materials import DB_CM_TO_NP_M, TISSUE_LIBRARY

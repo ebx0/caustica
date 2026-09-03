@@ -1,4 +1,4 @@
-"""M18 gate: the independent-implementation cross-check, < 5%.
+"""The independent-implementation cross-check, < 5%.
 
 The milestone asks for a second implementation to disagree with, and the
 adapted (user-ratified, 2026-08-23) partner is ``tests/_thermal_reference.py``

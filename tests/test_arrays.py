@@ -1,4 +1,4 @@
-"""M6 gates: spiral geometry regression, DAS focusing, voxelization, phase maps."""
+"""Spiral geometry regression, DAS focusing, voxelization, phase maps."""
 
 import numpy as np
 import pytest

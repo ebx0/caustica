@@ -1,4 +1,4 @@
-"""M3 gate: O'Neil closed form vs numerical Rayleigh integral (cross-check).
+"""O'Neil closed form vs numerical Rayleigh integral (cross-check).
 
 The two implementations are independent (closed-form algebra vs point-cloud
 quadrature), so agreement validates BOTH: geometry conventions, the

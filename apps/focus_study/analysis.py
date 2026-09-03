@@ -1,6 +1,6 @@
 """Post-processing: focal metrics, profiles and the analytic cross-check.
 
-Since M10d the metric DEFINITIONS live in :mod:`caustica.report.metrics`
+The metric DEFINITIONS live in :mod:`caustica.report.metrics`
 (single source of truth — the runner's ``caustica report`` uses the same
 functions); this module keeps only the focus_study-specific parts: the
 ``Setup``-flavoured wrappers and the O'Neil analytic cross-check, which

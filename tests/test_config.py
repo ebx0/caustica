@@ -1,4 +1,4 @@
-"""M1 gate: config contract — strict fields, JSON round-trip, one-way derivation."""
+"""Config contract — strict fields, JSON round-trip, one-way derivation."""
 
 import pytest
 from pydantic import ValidationError

@@ -46,7 +46,7 @@ The honest cost of the choice: explicit stepping is conditionally stable, so
 ADI scheme, which trades a linear solve per step for unconditional
 stability. One lives in ``tests/_thermal_reference.py`` — an assembled
 backward-Euler scipy.sparse solver that exists ONLY to cross-check this one
-(M18's independent-implementation criterion), deliberately not shipped as a
+(the independent-implementation criterion), deliberately not shipped as a
 second library solver.
 
 Discretization

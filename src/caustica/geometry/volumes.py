@@ -247,6 +247,6 @@ def load_labels_txt(
 
 
 # ``breast_phantom_mapping`` / ``load_breast_phantom`` moved to the phantom
-# repository (M10k/W0c): they hardcoded ONE source's production shape and
+# repository: they hardcoded ONE source's production shape and
 # value->tissue rule. ``load_labels_txt`` above is the generic machinery —
 # the ``mapping`` callable is where a source's specifics belong.

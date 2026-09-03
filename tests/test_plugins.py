@@ -1,4 +1,4 @@
-"""M10m/M10n/K15 gate: every extensible axis is a registry, not a closed list.
+"""Every extensible axis is a registry, not a closed list.
 
 The load-bearing test is the plugin one: ONE fake *installed* distribution
 declares an extension for all FIVE entry-point groups — solver, medium kind,
@@ -244,7 +244,7 @@ def plugin_on_path(root: Path, modules: tuple[str, ...]):
     # Discover NOW rather than at the first question a test happens to ask:
     # re-arming `_loaded` alone leaves `_JOB_ADAPTER` built from the old kind
     # set, so a test that ran a job before touching `available()` died with
-    # `union_tag_invalid` (M10n verification). A real install is discovered at
+    # `union_tag_invalid`. A real install is discovered at
     # job.py import time; the fixture has to match that, not the test order.
     for registry, _ in PLUGIN_NAMES:
         registry.discover()
@@ -300,7 +300,7 @@ def core_kinds(registry) -> tuple[str, ...]:
     """The kinds caustica itself ships, ignoring any installed plugin.
 
     A third-party kind in the same environment is the whole point of the
-    registry — it must not turn caustica's own suite red (found by the M10m
+    registry — it must not turn caustica's own suite red (found by the
     skeptical review: installing a plugin failed six tests that asserted the
     registry's exact contents).
     """
@@ -335,7 +335,7 @@ def test_unknown_kind_lists_what_is_registered():
 
 
 def test_unknown_kind_in_a_job_file_names_the_expected_tags(tmp_path):
-    """The schema-level error keeps its M10b wording (registration order)."""
+    """The schema-level error keeps its original wording (registration order)."""
     from pydantic import ValidationError
 
     d = plugin_job_dict()
@@ -475,7 +475,7 @@ def test_reloading_the_job_module_still_works():
 
 
 def test_entry_point_plugin_adds_a_medium_and_an_array_kind(tmp_path):
-    """The M10m acceptance: a stranger's package extends the job schema."""
+    """The acceptance: a stranger's package extends the job schema."""
     with five_axis_plugin(tmp_path):
         assert "test_gel" in medium_kinds.available()
         assert "test_ring" in array_kinds.available()
@@ -510,7 +510,7 @@ def test_entry_point_plugin_adds_a_medium_and_an_array_kind(tmp_path):
 
 
 def test_entry_point_plugin_extends_all_five_axes(tmp_path):
-    """The M10n acceptance: ONE outside package, all five seams, end to end.
+    """The acceptance: ONE outside package, all five seams, end to end.
 
     Registration -> discovery -> execution for each axis, from a job file:
 
@@ -521,8 +521,8 @@ def test_entry_point_plugin_extends_all_five_axes(tmp_path):
 
     Run B uses caustica's own solver on purpose. The runner only forwards
     ``backend=`` to the solvers in ``runner._NATIVE_SOLVERS`` (the kwave
-    adapter rejects unknown kwargs by contract, trap T3), so a THIRD-PARTY
-    solver silently solves on the default backend today — see the M10n
+    adapter rejects unknown kwargs by contract), so a THIRD-PARTY
+    solver silently solves on the default backend today — see the
     review notes. Splitting run A and run B keeps this test honest about
     what each one proves rather than asserting a stamp nothing produced.
     """
@@ -657,7 +657,7 @@ def test_entry_point_group_names_are_frozen():
 
 
 def test_core_implementations_come_from_the_registries():
-    """No private path on the two axes M10n added (PLAN rule 6).
+    """No private path on the two axes the registries added.
 
     ``get_backend`` and ``caustica report`` must reach caustica's own
     implementations the same way they reach a plugin's — otherwise the seam
@@ -678,7 +678,7 @@ def test_core_implementations_come_from_the_registries():
 
 
 def test_listing_renderers_does_not_import_matplotlib():
-    """T6: preview-writing (and now renderer discovery) stays matplotlib-free."""
+    """Preview-writing (and now renderer discovery) stays matplotlib-free."""
     code = (
         "import sys\n"
         "from caustica.report import report_renderers, write_preview\n"
@@ -795,7 +795,7 @@ def test_the_cli_parser_stays_free_of_the_report_package():
 
     It reads one string; `caustica.report.__init__` eagerly imports the
     metrics and preview modules, so doing it at parser-build time doubled
-    startup for EVERY command, `--help` included (M10n review).
+    startup for EVERY command, `--help` included.
     """
     code = (
         "import sys\n"

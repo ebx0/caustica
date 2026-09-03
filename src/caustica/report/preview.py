@@ -1,4 +1,4 @@
-"""The preview package (M10d): a <=10 MB answer to "did the run work?".
+"""The preview package: a <=10 MB answer to "did the run work?".
 
 A full-field ``result.h5`` from a Colab session is 0.5-0.8 GB on Drive;
 waiting for it to sync just to learn the focus missed is absurd. The runner
@@ -7,7 +7,7 @@ therefore writes, NEXT to the result:
 * ``preview.npz``  — peak slices along the 3 axes for every recorded
   harmonic and ``p_max``, a block-mean coarsened fundamental amplitude
   volume, mm axes, and the convergence history. Slices/volume are stored
-  with the M10 dynamic-float16 contract (measured error <= 1e-3 * peak,
+  with the dynamic-float16 contract (measured error <= 1e-3 * peak,
   float32 fallback), each array next to its ``*_scale``.
 * ``metrics.json`` — every number :func:`caustica.report.metrics.focus_metrics`
   produces, machine-readable (a future GUI's result tab reads exactly this).

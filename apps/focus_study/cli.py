@@ -158,7 +158,7 @@ def plan(setup: Setup, gpu: str, measure: bool) -> tuple[dict, str]:
 
 
 def save_fields(outdir: Path, setup: Setup, result) -> Path:
-    """Raw arrays as .npz — the library has no HDF5 contract yet (M10)."""
+    """Raw arrays as .npz — the library has no HDF5 contract yet."""
     org = analysis.region_origin(result)
     dx, apex = setup.grid.dx, setup.apex_vox
     arrays = {

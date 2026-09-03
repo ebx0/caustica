@@ -20,7 +20,7 @@ The core implementations register through these same doors — there is no
 private path. That is the seam's continuous proof: if registration breaks,
 caustica's own solvers, kinds, backends and reports break first.
 
-Entry-point group names are **frozen** (M10n): they are part of the public
+Entry-point group names are **frozen**: they are part of the public
 contract, so a plugin written against caustica 0.1 keeps loading. A package
 declares them in its ``pyproject.toml``::
 
@@ -56,7 +56,7 @@ BACKEND_GROUP = "caustica.backends"
 #: Entry-point group for third-party report renderers.
 REPORT_RENDERER_GROUP = "caustica.report_renderers"
 
-#: The five frozen groups, in the order M10n fixed them. A test asserts this
+#: The five frozen groups, in the order they were frozen. A test asserts this
 #: tuple verbatim — renaming a group breaks every plugin already installed.
 ENTRY_POINT_GROUPS = (
     SOLVER_GROUP,
@@ -98,7 +98,7 @@ def same_definition(a: Any, b: Any) -> bool:
 
     ``<lambda>`` is refused: two unrelated module-level lambdas share both
     parts of that identity, so a factory registry would let one silently
-    replace the other under the same name (M10n review). An anonymous
+    replace the other under the same name. An anonymous
     function cannot claim to be a redefinition of anything.
     """
     missing = object()
@@ -188,7 +188,7 @@ class PluginRegistry(Generic[T]):
         # Imported here, not at module scope. Not for the import cost:
         # pydantic pulls `importlib.metadata` in (via pydantic.plugin._loader)
         # as soon as a model class is built, which `import caustica` does, so
-        # there is nothing to save (measured, M10n review). It is here so that
+        # there is nothing to save (measured). It is here so that
         # `caustica.core.backend` — which owns a registry and IS on the
         # `import caustica` path — states this dependency where it uses it.
         from importlib import metadata  # noqa: PLC0415

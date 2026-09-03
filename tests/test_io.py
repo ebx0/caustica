@@ -1,4 +1,4 @@
-"""M10 gates: quantization contract, atomic writes, result contract, resume.
+"""Quantization contract, atomic writes, result contract, resume.
 
 Criteria encoded here:
 - float16 round-trip max norm error <= 1e-3, verified; fallback to float32
@@ -109,7 +109,7 @@ with atomic_write(target) as tmp:
 
 
 def test_killed_writer_leaves_no_visible_file(tmp_path):
-    """The M10 kill gate, with a REAL hard kill (no Python cleanup runs)."""
+    """The kill gate, with a REAL hard kill (no Python cleanup runs)."""
     script = tmp_path / "writer.py"
     script.write_text(_KILL_SCRIPT, encoding="utf-8")
     target, flag = tmp_path / "result.h5", tmp_path / "flag"
@@ -183,7 +183,7 @@ def test_save_load_roundtrip_within_quantization_contract(tmp_path, mini_run):
 
 
 def test_required_contract_attrs_present_in_every_file(tmp_path, mini_run):
-    """The M10 downstream-contract gate: nothing may have to guess these."""
+    """The downstream-contract gate: nothing may have to guess these."""
     import h5py
 
     path = _save(tmp_path, mini_run, extra_attrs={"job": "test-job"})
@@ -278,9 +278,9 @@ def test_load_result_with_geometry_opens_the_file_once(tmp_path, mini_run, monke
 
 
 def test_result_geometry_falls_back_when_the_apex_stamp_is_absent(tmp_path, mini_run):
-    """A pre-M10d file carries no apex/focus stamp: origin, and say so.
+    """An older file carries no apex/focus stamp: origin, and say so.
 
-    Every output folder written before M10d is exactly this shape, and the
+    Every output folder written before that stamp is exactly this shape, and the
     report's "mm from the apex" caveat is driven by ``apex_known`` — so the
     fallback is contract, not convenience.
     """
@@ -325,7 +325,7 @@ def test_store_init_sweeps_temp_debris(tmp_path):
 
 
 def test_resume_skip_guard_regenerates_only_the_missing_id(tmp_path, mini_run):
-    """The M10 resume gate: 10 files, delete a middle one, only IT comes back."""
+    """The resume gate: 10 files, delete a middle one, only IT comes back."""
     grid, src, res = mini_run
     store = ResultStore(tmp_path / "mini")
     names = [f"sample_{i:05d}" for i in range(10)]

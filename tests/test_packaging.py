@@ -1,9 +1,9 @@
-"""M10h gates: the wheel is complete and the packaged example is safe.
+"""The wheel is complete and the packaged example is safe.
 
 Wheel content is pinned by test because a missing package-data entry is
 invisible from inside a checkout (the CWD masks it — exactly how the
 ``gpu_db.json`` bug survived until a real ``pip install``). The example
-tests encode the other M10h rule: packaged jobs are *copied out* before
+tests encode the other packaging rule: packaged jobs are *copied out* before
 running, so nothing ever tries to write into the install directory.
 """
 
@@ -126,7 +126,7 @@ def test_wheel_ships_no_repo_side_packages(wheel):
 
 def test_wheel_ships_no_file_absent_from_src(wheel):
     """Every packaged file must exist in ``src/`` — a stale build artifact
-    must not resurrect deleted modules (matters for the M10k removals).
+    must not resurrect deleted modules (matters for the removals).
 
     ``_build_info.py`` is the one exemption: the build GENERATES it (fix A1),
     it is git-ignored, and a checkout that has never been built does not have
@@ -324,7 +324,7 @@ def test_example_copy_refuses_overwrite(tmp_path):
 
 
 def test_packaged_example_validates_clean():
-    """The shipped JSON passes ``caustica validate`` as-is (W1/D13) with ZERO
+    """The shipped JSON passes ``caustica validate`` as-is with ZERO
     warnings — the quickstart's first-contact output must not open with an
     ignored warning, and the example sits at ppw 3.0 where the low-ppw
     warning (< 3.0) is one dx edit away."""

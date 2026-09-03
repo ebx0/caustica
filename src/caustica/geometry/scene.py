@@ -4,7 +4,7 @@ COMSOL-like construction flow: start from a background label, add objects
 in paint order (later assignments override earlier ones, like drawing),
 then rasterize onto a grid at YOUR dx. Supports 2-D, 3-D and 2-D
 axisymmetric (the (r, z) half-plane convention: axis 0 is the radius,
-r >= 0; the future axisymmetric solver (M15) consumes the same scenes).
+r >= 0; the future axisymmetric solver consumes the same scenes).
 
 Edge quality: ``supersample=s`` evaluates s^ndim sub-points per voxel and
 takes the majority label — the standard cure for staircased interfaces on

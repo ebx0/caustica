@@ -1,4 +1,4 @@
-"""``medium_volume`` — the ONE door for volume media (M10k/W0a, D16/D28).
+"""``medium_volume`` — the ONE door for volume media.
 
 A single ``.npz`` that a simulation eats directly, owned by caustica. Every
 phantom source — whoever produced it — enters the library through this
@@ -30,7 +30,7 @@ Compatibility: this is the pre-split phantom exporter's layout promoted
 into the library — the reader accepts the pre-split tags
 (``caustica-phantom/1`` and the pre-rename ``hifusim-phantom/1``) so the
 existing multi-GB local datasets load unchanged, byte for byte, with no
-rebuild (T7). The writer is public (D28): ``write_medium_volume(...)`` is
+rebuild. The writer is public: ``write_medium_volume(...)`` is
 the single source of the format, and external phantom tooling calls it
 instead of carrying its own.
 """
@@ -189,7 +189,7 @@ def write_medium_volume(
     meta: dict | None = None,
     compresslevel: int = 1,
 ) -> Path:
-    """Write a ``medium_volume`` file from plain numpy arrays (D28).
+    """Write a ``medium_volume`` file from plain numpy arrays.
 
     Give ``labels`` + ``materials`` (label mode), ``properties`` (a dict with
     ``alpha``/``rho``/``c``/``beta`` float32 volumes, continuous mode), or

@@ -1,6 +1,6 @@
 """An independent Pennes solver, assembled and implicit — TEST-ONLY on purpose.
 
-M18's criterion is an *independent-implementation* cross-check under 5%. The
+The criterion is an *independent-implementation* cross-check under 5%. The
 milestone originally named MATLAB k-Wave's ``kWaveDiffusion``; it does not
 exist in ``k-wave-python`` 0.6.2 (verified in the installed environment), so
 the ratified replacement is this: a second solver that shares as little

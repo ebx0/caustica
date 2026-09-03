@@ -1,4 +1,4 @@
-"""M6b gates: CSG primitives/algebra, scenes, axisymmetric, import, resample."""
+"""CSG primitives/algebra, scenes, axisymmetric, import, resample."""
 
 import numpy as np
 import pytest
@@ -187,7 +187,7 @@ def test_label_volume_validation():
 
 def _txt_mapping(values):
     # An arbitrary value->label rule for the GENERIC text-import tests (the
-    # production phantom's own rule moved out with its package at M10k/W0c).
+    # production phantom's own rule moved out with its package).
     labels = np.full(values.shape, 4, dtype=np.uint8)
     labels[values == -2] = 1
     labels[values > 0] = 2

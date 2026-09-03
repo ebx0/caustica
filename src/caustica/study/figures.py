@@ -11,7 +11,7 @@ and degrades to a note when it is missing.
 Captions travel WITH the figures: :func:`sweep_figures` returns
 ``{filename: caption}``, and the report renders both the image list and the
 caption list from that one mapping. A caption cannot drift from the figure it
-describes if there is only one place that states it (the M10d rule).
+describes if there is only one place that states it.
 """
 
 from __future__ import annotations

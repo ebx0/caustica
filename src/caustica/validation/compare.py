@@ -1,7 +1,7 @@
 """M11's multi-engine box: ONE job, N registered solvers, one stamped table.
 
 The library has three registered solvers today (``linear``, ``westervelt``,
-``kwave``) and the plan adds more (M25/M26). Every cross-check between them
+``kwave``) and the plan adds more. Every cross-check between them
 so far has lived inside a single pytest function:
 ``tests/test_kwave_adapter.py::test_kwave_vs_linear_2d_water`` builds one 2-D
 scene, runs two engines, correlates the normalized fields and asserts

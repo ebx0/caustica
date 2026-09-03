@@ -1,4 +1,4 @@
-"""M4 headline gate: 3-D focused bowl in water vs O'Neil / Rayleigh.
+"""3-D focused bowl in water vs O'Neil / Rayleigh.
 
 Pressure-injected PSTD sources have no closed-form absolute amplitude, so
 the comparison is on NORMALIZED field shapes (the notebook's validated

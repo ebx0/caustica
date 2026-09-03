@@ -1,4 +1,4 @@
-"""M3 gate: plane-wave references — attenuation exact, Fubini limits."""
+"""Plane-wave references — attenuation exact, Fubini limits."""
 
 import numpy as np
 import pytest

@@ -1,4 +1,4 @@
-"""M10c gates: the runner — plan-first, disjoint exit codes, stamp, resume.
+"""The runner — plan-first, disjoint exit codes, stamp, resume.
 
 Everything runs on numpy with a seconds-scale mini job; the CPU path and the
 Colab path are the same code (`run_job_file`), only the backend differs.
@@ -116,7 +116,7 @@ def test_mini_job_end_to_end_with_full_stamp(tmp_path):
     out = tmp_path / "out"
     code = run_job_file(mini_job(tmp_path), opts(out=out))
     assert code == EXIT_OK
-    # Result passes the M10 contract and carries the runner stamp.
+    # Result passes the contract and carries the runner stamp.
     rp = out / "result.h5"
     assert validate_result_file(rp)
     with h5py.File(rp, "r") as hf:
@@ -231,7 +231,7 @@ def test_interrupt_resume_matches_uninterrupted(tmp_path):
     assert run_job_file(job, opts(out=out_b)) == EXIT_CONFIG
 
     # With --resume it completes, cleans up, and reproduces the baseline
-    # bitwise (documented M10 band: rel < 1e-6; identical here).
+    # bitwise (documented band: rel < 1e-6; identical here).
     assert run_job_file(job, opts(out=out_b, resume=True)) == EXIT_OK
     assert not (out_b / "checkpoint.npz").exists()
     a, b = load_result(out_a / "result.h5"), load_result(out_b / "result.h5")
@@ -356,7 +356,7 @@ def test_output_folder_resolves_against_the_job_file(tmp_path):
 
 
 def test_preview_failure_does_not_fail_the_run(tmp_path, monkeypatch, caplog):
-    """M10d contract: the preview is a bonus — its crash NEVER fails the run.
+    """By contract the preview is a bonus — its crash NEVER fails the run.
 
     The result must stay stored and valid, the stamp written, and the
     checkpoint cleaned up exactly as on a preview-less success.
@@ -378,7 +378,7 @@ def test_preview_failure_does_not_fail_the_run(tmp_path, monkeypatch, caplog):
     assert any("preview package failed" in r.message for r in caplog.records)
 
 
-# --------------------------------------------------------- M10l: cancel file
+# --------------------------------------------------------- cancel file
 
 
 def test_cancel_file_stops_at_period_boundary_and_resume_is_bitwise_identical(tmp_path):
@@ -557,7 +557,7 @@ def test_a_non_native_solver_says_cancel_does_nothing(tmp_path, monkeypatch, cap
     assert f"a '{CANCEL_FILE}' file has no effect" in capsys.readouterr().out
 
 
-# ---------------------------------------------------------- M10l: error.json
+# ---------------------------------------------------------- error.json
 
 
 def _bad_schema(tmp_path, monkeypatch):
@@ -622,7 +622,7 @@ def _store_crash(tmp_path, monkeypatch):
 
 
 #: (scenario, stage, exit code, error_class, wants_advice) — the failure
-#: classes a GUI must be able to route on WITHOUT parsing stderr (M10l). Ten
+#: classes a GUI must be able to route on WITHOUT parsing stderr. Ten
 #: of them, seven distinct classes; the table is asserted, not just enumerated.
 #: ``wants_advice`` is the measured truth per class, not an aspiration: only a
 #: solver crash with no checkpoint on disk has nothing actionable to say.
@@ -692,7 +692,7 @@ def test_a_refusal_prints_the_same_advice_it_writes(tmp_path, monkeypatch, capsy
 
 
 def test_the_error_table_covers_at_least_seven_distinct_classes():
-    """M10l's own criterion, asserted rather than counted by hand."""
+    """Its own criterion, asserted rather than counted by hand."""
     assert len({row[3] for row in ERROR_SCENARIOS}) >= 7
     assert {row[1] for row in ERROR_SCENARIOS} == set(ERROR_STAGES)
 
@@ -752,7 +752,7 @@ def test_a_cancel_directory_cannot_livelock_the_folder(tmp_path):
     assert (out / CANCEL_FILE).is_dir()  # untouched: it was never a request
 
 
-# ------------------------------------------------ M10l: --dry-run is a PROBE
+# ------------------------------------------------ --dry-run is a PROBE
 
 
 def test_dry_run_never_touches_the_failure_record_or_the_cancel_file(tmp_path):
@@ -845,7 +845,7 @@ def test_the_stamp_separates_warmup_from_the_steady_step_cost(tmp_path):
 
     Fix A2: on the first Colab session ``t_step_measured_s`` read 25.9x the
     planner's per-step probe because a ~2.7 s one-time cost was averaged over
-    104 steps. The bundled number stays (M8's gates and the GUI contract read
+    104 steps. The bundled number stays (the gates and the GUI contract read
     it); what is new is the ability to see what it bundles.
     """
     out = tmp_path / "out"

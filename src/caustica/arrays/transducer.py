@@ -88,7 +88,7 @@ class TransducerArray:
         Elements are collapsed to points carrying their full piston area —
         accurate away from the aperture (>= a few element radii), which is
         exactly the array-design use case. This is the future GUI's live
-        beam preview and the KZK initial-plane projector (M9).
+        beam preview and the KZK initial-plane projector.
         """
         ph = np.zeros(self.n_elements) if phases is None else np.asarray(phases)
         v_n = u0 * np.exp(1j * ph.astype(np.float64))
@@ -157,7 +157,7 @@ class TransducerArray:
             # z is sheared onto the element plane afterwards, so a tilted
             # element's patch has area ~pi r^2 / cos(tilt) (~14% extra at the
             # production rim, ~28 deg). Kept for dataset parity; an
-            # in-plane-projected test is the M12 candidate fix.
+            # in-plane-projected test is the candidate fix.
             for ox in range(-r_vox, r_vox + 1):
                 for oy in range(-r_vox, r_vox + 1):
                     if (ox * dx_mm) ** 2 + (oy * dx_mm) ** 2 <= (self.elem_radius * 1e3) ** 2:

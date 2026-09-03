@@ -1,4 +1,4 @@
-"""M1 gate: backend dispatch — numpy always, cupy optional, auto falls back."""
+"""Backend dispatch — numpy always, cupy optional, auto falls back."""
 
 import numpy as np
 import pytest
@@ -40,7 +40,7 @@ def test_roundtrip_to_numpy():
     np.testing.assert_array_equal(back, [1.0, 2.0])
 
 
-# ---------------------------------------------------- CPU FFT workers (M10i)
+# ---------------------------------------------------- CPU FFT workers
 
 
 def _run_mini(workers: int, nonlinear: bool = False):
@@ -123,7 +123,7 @@ def test_workers_one_returns_raw_scipy_module():
 
 def test_fields_bit_identical_across_worker_counts():
     """pocketfft distributes 1-D lines over threads without reordering the
-    sums, so the solve must be BIT-identical for any worker count — the D32
+    sums, so the solve must be BIT-identical for any worker count — the
     gate is strict equality, not a tolerance."""
     np.testing.assert_array_equal(_run_mini(1), _run_mini(-1))
     np.testing.assert_array_equal(_run_mini(1, nonlinear=True), _run_mini(-1, nonlinear=True))

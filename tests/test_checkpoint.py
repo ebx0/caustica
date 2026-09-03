@@ -1,4 +1,4 @@
-"""M10 gates: in-run checkpoints — interrupt, resume, and trajectory identity.
+"""In-run checkpoints — interrupt, resume, and trajectory identity.
 
 The headline criterion: a run killed at period k and resumed
 reproduces the uninterrupted run's phasor to rel < 1e-6. On one backend the
@@ -52,7 +52,7 @@ def _assert_identical(a, b):
     assert a.converged_period == b.converged_period
     assert a.settle_capped == b.settle_capped
     assert a.convergence_history == b.convergence_history
-    # The documented M10 band, kept as an explicit (weaker) assertion so the
+    # The documented band, kept as an explicit (weaker) assertion so the
     # criterion stays visible even if the bitwise one is ever relaxed:
     rel = np.abs(a.phasor - b.phasor).max() / max(np.abs(a.phasor).max(), 1e-30)
     assert rel < 1e-6

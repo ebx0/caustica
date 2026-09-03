@@ -166,7 +166,7 @@ ShapeConfig = Annotated[
 class VolumeImportConfig(CausticaModel):
     """File REFERENCE to an imported label volume (heterogeneous phantom).
 
-    M10k/W0c removed the ``breast_phantom_txt`` format (a one-source special
+    The phantom split removed the ``breast_phantom_txt`` format (a one-source special
     case): text volumes are converted to ``.npz`` by the source's own tooling
     — ``load_labels_txt`` with a source-specific ``mapping`` — and imported
     here as ``npz``.

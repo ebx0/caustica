@@ -1,4 +1,4 @@
-"""M10m gate: bring your own transducer — the ``elements`` array kind.
+"""Bring your own transducer — the ``elements`` array kind.
 
 The acceptance question is a stranger's: *my* element table, from *my* file,
 runs end to end and the reload can still falsify the geometry. Everything
@@ -151,7 +151,7 @@ def test_unit_mistake_is_refused_not_run():
 
 
 def test_elements_job_from_npz_runs_end_to_end(tmp_path):
-    """The M10m headline: my element table, my file, a real solve."""
+    """The headline: my element table, my file, a real solve."""
     np.savez(tmp_path / "ring.npz", positions=ring_positions_mm())
     d = elements_job_dict(
         {
@@ -259,7 +259,7 @@ def test_the_summary_numbers_alone_would_not_catch_these():
     [
         # Every one of these leaves n_elements, r_max_mm and shell_depth_mm
         # untouched — and moves the radiated field by tens of per cent
-        # (measured in the M10m review, 48-59% relative L2).
+        # (measured in the review, 48-59% relative L2).
         ("mirror x", lambda t: t * [-1.0, 1.0, 1.0]),
         (
             "rotate 37 deg",

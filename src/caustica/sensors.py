@@ -1,4 +1,4 @@
-"""Sensors: physical quantities derived from a solved acoustic field (M18).
+"""Sensors: physical quantities derived from a solved acoustic field.
 
 ``sensors/`` did not exist in v1 on purpose (PLAN section 3): recording was
 what ``run()``'s ``record_region``/``harmonics`` arguments and
@@ -51,7 +51,7 @@ given, :meth:`HeatingSource.from_result` REFUSES. Silently using only the
 fundamental would under-report the heating (the harmonics are exactly the
 part of the spectrum tissue absorbs hardest), and a dose map that is quietly
 too small is the one failure mode this module must not have. The real fix is
-M16 (power-law absorption with Kramers-Kronig dispersion in the solver
+a future release (power-law absorption with Kramers-Kronig dispersion in the solver
 itself); until then the exponent is the caller's declared assumption.
 
 Like :class:`~caustica.medium.Medium`, a :class:`HeatingSource` lives in HOST
@@ -387,7 +387,7 @@ def _resolve_harmonic_alpha(
             f"thermoviscous water; soft tissue is nearer y~1.1)\n"
             f"  - alpha_at_harmonics={{n: alpha_np_m}}  -> your own numbers, verbatim\n"
             f"  - harmonics=(1,)  -> fundamental only, said out loud\n"
-            f"The real fix is M16 (power-law absorption inside the solver)."
+            f"The real fix is a future release (power-law absorption inside the solver)."
         )
 
     if alpha_power_law_y is not None:

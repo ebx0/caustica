@@ -1,4 +1,4 @@
-"""Report rendering: REPORT.md + a self-contained index.html (M10d).
+"""Report rendering: REPORT.md + a self-contained index.html.
 
 Extracted from ``apps/focus_study/report.py`` so the runner's ``caustica
 report`` and the focus_study app share one renderer and one set of

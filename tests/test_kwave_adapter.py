@@ -1,9 +1,9 @@
-"""M4b gates: unit conversions (always run) + live k-Wave cross-check (auto-skip).
+"""Unit conversions (always run) + live k-Wave cross-check (auto-skip).
 
 The live test is the FIRST k-Wave cross-validation of the native solver:
 same grid, same medium, same voxel source -> normalized focal patterns must
 agree. It is skipped, with a visible reason, when k-wave-python or its
-binary is unavailable — the suite stays green without it (M4b criterion).
+binary is unavailable — the suite stays green without it.
 """
 
 import contextlib

@@ -1,11 +1,11 @@
-"""On-device calibration for the M8 planner (~20 timed engine steps).
+"""On-device calibration for the planner (~20 timed engine steps).
 
 :func:`measure_step_time` replays ``run_cw_kspace_pstd``'s step composition
 op-for-op with synthetic data (timing/memory only, no physics claim), so the
 measured per-step cost pays exactly the FFT mix and elementwise passes of a
 real solve. :func:`calibrate` measures >= 2 grid sizes and persists them to
 ``~/.caustica/calibration.json`` keyed by device name; estimates targeting a
-matching device are then labeled ``"calibrated"`` (the M8 ±25% gate applies
+matching device are then labeled ``"calibrated"`` (the ±25% gate applies
 to this path, on-device).
 
 BOTH halves of the wall-time model — the per-step cost and the one-time
@@ -25,7 +25,7 @@ but on a real device neither is a law. On an RTX PRO 6000 Blackwell
   clamps it to zero, and misses its own smallest sample by 108% — and
   over-predicted a real 192^3 run's warmup by 2x.
 
-M8.time failed that session on the warmup half, not the per-step half.
+The time gate failed that session on the warmup half, not the per-step half.
 
 Works on the numpy backend too (device key ``"cpu"``) — that is how the
 mechanics are tested locally before the Colab session.
@@ -137,7 +137,7 @@ def default_probe_shapes(
     of free VRAM, so a bigger card is probed with bigger grids and the fit
     is made where the device is throughput-bound rather than latency-bound.
     On numpy the probe stays deliberately small: the CPU path exists to
-    exercise the mechanics, and M8's +/-25% gate is about a GPU.
+    exercise the mechanics, and the +/-25% gate is about a GPU.
     """
     b = get_backend(backend)
     if b.name != "cupy":

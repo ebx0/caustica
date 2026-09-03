@@ -3,7 +3,7 @@
 The acoustic property set matches the production notebook exactly:
 ``alpha`` [Np/m] (frequency-independent exponential absorption in v1),
 ``rho`` [kg/m^3], ``c`` [m/s], ``beta`` [-] (nonlinearity coefficient,
-beta = 1 + B/2A). Thermal fields are declared now (optional) so the M18
+beta = 1 + B/2A). Thermal fields are declared now (optional) so the
 thermal module will not need a schema migration, but nothing reads them yet.
 
 ``breast_default()`` is a verbatim port of the notebook's TISSUE_PROPS table
@@ -28,7 +28,7 @@ class Material(CausticaModel):
     rho: float = Field(..., gt=0.0, description="Density [kg/m^3]")
     c: float = Field(..., gt=0.0, description="Sound speed [m/s]")
     beta: float = Field(..., ge=0.0, description="Nonlinearity coefficient (1 + B/2A)")
-    # --- M18 thermal hooks (declared, unused in v1) ---
+    # --- thermal hooks (declared, unused in v1) ---
     thermal_conductivity: float | None = Field(None, description="[W/m/K] (M18)")
     specific_heat: float | None = Field(None, description="[J/kg/K] (M18)")
     perfusion_rate: float | None = Field(None, description="[1/s] (M18)")
@@ -86,7 +86,7 @@ PML_ID = 0
 
 
 # --------------------------------------------------------------------------
-# Literature acoustic tissue values (M10k/W0b, D17). MOVED verbatim from the
+# Literature acoustic tissue values. MOVED verbatim from the
 # phantom package's tissue table — these numbers are generic soft-tissue
 # literature, not that source's (an electromagnetic repository shipping no
 # acoustic values). The source's media-number -> tissue-class mapping and

@@ -106,7 +106,7 @@ def save_result(
     ``dx``/``grid_shape``/``pml_vox`` are recorded so the file is
     self-describing (a reader can place ``result.region`` in space without
     the original Grid object). ``extra_attrs`` land on the root group —
-    the runner (M10c) stamps job/commit/environment through it.
+    the runner stamps job/commit/environment through it.
     """
     path = Path(path)
     with atomic_write(path) as tmp:
@@ -197,8 +197,8 @@ def _geometry(hf: h5py.File) -> dict:
     and open the file a SECOND time to run it — which is exactly how a
     schema and its reader drift apart (janitor ticket 02).
 
-    Missing optional stamps degrade the way a reader needs them to: a
-    pre-M10d file has no ``apex_vox``, so positions fall back to the grid
+    Missing optional stamps degrade the way a reader needs them to: an
+    older file has no ``apex_vox``, so positions fall back to the grid
     origin and ``apex_known`` says so instead of the caller guessing.
     """
     a = hf.attrs

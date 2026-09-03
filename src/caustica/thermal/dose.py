@@ -48,7 +48,7 @@ CEM43_R_BELOW = 0.25
 #: ITRUSST consensus thermal-safety limits, in CEM43 equivalent minutes, by
 #: tissue. Source: ITRUSST consensus on biophysical safety for transcranial
 #: ultrasound stimulation, Brain Stimulation 2025 — brain <= 2, bone <= 16,
-#: skin <= 21 CEM43. These are the numbers the M18 report table will quote;
+#: skin <= 21 CEM43. These are the numbers the report table will quote;
 #: they are recorded here so exactly one copy of them exists in the library.
 ITRUSST_CEM43_LIMITS: dict[str, float] = {"brain": 2.0, "bone": 16.0, "skin": 21.0}
 
@@ -63,7 +63,7 @@ ITRUSST_SOURCE = (
     "<= 21 (skin); dT <= 2 C as the non-thermal criterion."
 )
 
-#: Research-use note that travels with every dose number (M18 criterion).
+#: Research-use note that travels with every dose number.
 MEDICAL_DISCLAIMER = (
     "Research use only. caustica computes a modelled thermal dose from a "
     "modelled acoustic field; it is not a clinical decision tool and has no "
