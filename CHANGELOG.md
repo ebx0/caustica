@@ -13,6 +13,46 @@ measured, and how, is [documented here](https://ebx0.github.io/caustica/validati
 
 ### Changed
 
+- **The planner times the engine's own step, not a copy of it.** The
+  calibration probe kept a hand-written replica of the k-space step, and when
+  the engine fused its two damping passes into one the replica went on paying
+  for both. Both now build the same closure from one factory. Measured on an
+  RTX 5050 against the closure a real solve ran, timed in alternating rounds
+  in a single process: the replica read 9.4 % high at 128^3 and 10.5 % high at
+  192^3, the shared closure reads within 1.8 % and 0.5 %. The probe also
+  stops allocating a damping volume the engine does not have. Solver output is
+  bit-identical, linear and Westervelt, so the numerics scheme stays
+  `cw-kspace-pstd/4`.
+- **`cupy_available()` compiles a kernel before it answers yes.** Counting a
+  CUDA device only proves the driver answers; every kernel caustica launches is
+  compiled at run time, so a machine with a broken NVRTC used to be told a GPU
+  was ready and crashed minutes into a solve. The probe now compiles, launches
+  and reads back a 16-element add, caches the failure text, and classifies the
+  fault as a missing cupy, a zero-device count or a device that will not run a
+  kernel. `env_report()` carries the reason as `gpu_unavailable_reason`, the
+  Colab environment line prints it, and `require_gpu()` withholds the
+  `pip install cupy-cuda12x` advice for the one fault no install can fix.
+  Measured on an RTX 5050 with a genuine compile error: the old logic answered
+  True, the new probe answers False. First call costs 0.30 s with a warm kernel
+  cache and 0.57 s with an empty one; later calls in the same process are
+  cached.
+- **An axisymmetric scene is refused by every Cartesian solver.** A
+  `Medium` now carries the geometry it was sampled on (`cartesian` or
+  `axisymmetric`), `SolverCaps.geometry` declares what a solver integrates,
+  and a job whose scene sets `axisymmetric: true` is refused at build time
+  with a message naming the planned `kspace-as` solver, instead of being
+  solved on the (r, z) half-plane as a two-dimensional line source.
+- **One damping volume in the k-space engine.** Absorption and the sponge
+  were two multiplicative passes per field per step; they are now one
+  float32 product formed at setup. Measured on an RTX 5050 at 192^3: the
+  linear step is 8.6 % faster and one padded float32 volume of device
+  memory is freed; the O'Neil focal peak is unchanged in lossless water and
+  moves by 1.1e-7 relative in absorbing water, so the numerics scheme stays
+  `cw-kspace-pstd/4`. The planner inventory names the `damping volume` line
+  that replaces `sponge`.
+- **The two k-Wave adapter tests above 20 s carry the `slow` marker**, so
+  `pytest -m "not slow"` runs the rest of the suite in about 70 s on a
+  laptop; the full CPU pass is about 190 s.
 - **The validation gates lost their milestone prefixes.** `M4.planewave` is now
   `planewave`, `M8.vram` is `vram`, `M21.PH1-SC1` is `PH1-SC1`, and so on for
   every gate the analytic, compare, gpu-gates and ITRUSST suites write. The
