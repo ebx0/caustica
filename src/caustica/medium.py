@@ -6,6 +6,12 @@ Moving them to the GPU is the solver's job at init time (one transfer per
 run), mirroring the notebook design where the property maps were uploaded
 once and reused for the whole session.
 
+A Medium also carries the ``geometry`` it was sampled on, ``"cartesian"``
+(the default, and what every solver in the tree integrates) or
+``"axisymmetric"`` (the 2-D (r, z) half-plane). The attribute exists so a
+Cartesian solver can refuse an axisymmetric setup instead of solving it as a
+line source; :meth:`caustica.geometry.scene.Scene.to_medium` sets it.
+
 Two constructors cover the current use cases:
 * ``Medium.homogeneous(shape, material)`` — validation media (water).
 * ``Medium.from_id_map(id_map, db)`` — phantom media; every voxel id must
@@ -19,6 +25,12 @@ import numpy as np
 
 from caustica.materials import Material, MaterialDB
 
+#: Grid geometries a medium can be sampled on. ``"cartesian"`` is the plain
+#: 1/2/3-D grid every solver here integrates; ``"axisymmetric"`` is the 2-D
+#: (r, z) half-plane, where axis 0 is the radius (r >= 0) and the physics is
+#: that of a revolved 3-D body, NOT of a 2-D Cartesian line source.
+GEOMETRIES = ("cartesian", "axisymmetric")
+
 
 class Medium:
     def __init__(
@@ -28,7 +40,11 @@ class Medium:
         c: np.ndarray,
         beta: np.ndarray,
         id_map: np.ndarray | None = None,
+        geometry: str = "cartesian",
     ):
+        if geometry not in GEOMETRIES:
+            raise ValueError(f"geometry must be one of {GEOMETRIES}, got {geometry!r}")
+        self.geometry = geometry
         vols = {"alpha": alpha, "rho": rho, "c": c, "beta": beta}
         shapes = {name: v.shape for name, v in vols.items()}
         if len(set(shapes.values())) != 1:
@@ -43,7 +59,9 @@ class Medium:
     # ---------- constructors ----------
 
     @classmethod
-    def homogeneous(cls, shape: tuple[int, ...], material: Material) -> Medium:
+    def homogeneous(
+        cls, shape: tuple[int, ...], material: Material, geometry: str = "cartesian"
+    ) -> Medium:
         """Uniform medium of one material (validation runs, water tanks)."""
         full = np.full(shape, 1.0, dtype=np.float32)
         return cls(
@@ -51,10 +69,11 @@ class Medium:
             rho=full * material.rho,
             c=full * material.c,
             beta=full * material.beta,
+            geometry=geometry,
         )
 
     @classmethod
-    def from_id_map(cls, id_map: np.ndarray, db: MaterialDB) -> Medium:
+    def from_id_map(cls, id_map: np.ndarray, db: MaterialDB, geometry: str = "cartesian") -> Medium:
         """Dense property volumes from an integer tissue-id map."""
         id_map = np.asarray(id_map)
         if not np.issubdtype(id_map.dtype, np.integer):
@@ -78,7 +97,7 @@ class Medium:
             rho[mask] = m.rho
             c[mask] = m.c
             beta[mask] = m.beta
-        return cls(alpha=alpha, rho=rho, c=c, beta=beta, id_map=id_map)
+        return cls(alpha=alpha, rho=rho, c=c, beta=beta, id_map=id_map, geometry=geometry)
 
     # ---------- diagnostics ----------
 
@@ -102,5 +121,5 @@ class Medium:
     def __repr__(self) -> str:  # pragma: no cover - cosmetic
         return (
             f"Medium(shape={self.shape}, c=[{self.c_min:.0f},{self.c_max:.0f}] m/s, "
-            f"linear={self.is_linear})"
+            f"linear={self.is_linear}, geometry={self.geometry})"
         )

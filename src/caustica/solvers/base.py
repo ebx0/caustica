@@ -50,6 +50,10 @@ class SolverCaps:
     drive: frozenset[str]  # e.g. {"cw"}
     backends: frozenset[str]  # e.g. {"numpy", "cupy"} or {"external"}
     absorption: frozenset[str] = frozenset({"exponential"})
+    #: Grid geometries the solver integrates (see :data:`caustica.medium.GEOMETRIES`).
+    #: Everything in the tree today is Cartesian; the (r, z) half-plane needs
+    #: its own operator, so it is opt-in and never a default.
+    geometry: frozenset[str] = frozenset({"cartesian"})
 
 
 class CWRunSpec(CausticaModel):
@@ -190,6 +194,30 @@ def check_source_clears_pml(grid: Grid, source: CWSource) -> None:
     )
 
 
+#: The solver name that will own the (r, z) half-plane (not implemented yet).
+AXISYMMETRIC_SOLVER = "kspace-as"
+
+
+def geometry_refusal(name: str, supported: frozenset[str], geometry: str) -> str:
+    """Message for a setup whose grid geometry the solver does not integrate.
+
+    Single source for :meth:`SolverBase.validate` and the job validator, so
+    ``caustica validate`` and a run refuse with the same words.
+    """
+    extra = ""
+    if geometry == "axisymmetric":
+        extra = (
+            f" An axisymmetric scene is the (r, z) half-plane of a revolved body; solving "
+            f"it on a Cartesian 2-D grid integrates a LINE source instead of a ring, which "
+            f"converges quietly on the wrong field. Use the '{AXISYMMETRIC_SOLVER}' solver "
+            f"once it lands, or build the scene as a 3-D Cartesian one."
+        )
+    return (
+        f"solver '{name}' supports {sorted(supported)} grid geometry, but this setup is "
+        f"'{geometry}'.{extra}"
+    )
+
+
 class SolverBase(ABC):
     """Abstract solver. Subclasses declare ``name`` + ``caps`` and implement run()."""
 
@@ -206,6 +234,10 @@ class SolverBase(ABC):
             raise SolverCapabilityError(
                 f"solver '{self.name}' supports {sorted(self.caps.ndim)}-D grids, "
                 f"got {grid.ndim}-D."
+            )
+        if medium.geometry not in self.caps.geometry:
+            raise SolverCapabilityError(
+                geometry_refusal(self.name, self.caps.geometry, medium.geometry)
             )
         if medium.shape != grid.shape:
             raise ValueError(f"medium shape {medium.shape} != grid shape {grid.shape}")

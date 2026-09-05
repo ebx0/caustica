@@ -54,7 +54,12 @@ from caustica.core.pml import PMLSpec
 from caustica.geometry.configs import SceneConfig, VolumeImportConfig
 from caustica.materials import Material, MaterialDB, breast_default, water
 from caustica.medium import Medium
-from caustica.solvers.base import CWRunSpec, check_source_clears_pml
+from caustica.solvers.base import (
+    CWRunSpec,
+    SolverCapabilityError,
+    check_source_clears_pml,
+    geometry_refusal,
+)
 from caustica.sources import CWSource, bowl_cw_source
 
 JOB_FORMAT = "caustica-job/1"
@@ -907,9 +912,56 @@ def _check_dataset_f0(job_f0_hz: float, baked_f0_mhz: float | None, what: str) -
         )
 
 
+def medium_geometry(cfg: MediumKindConfig) -> str:
+    """The grid geometry a medium kind will paint, WITHOUT building it.
+
+    Returns ``"cartesian"`` or ``"axisymmetric"`` (see
+    :data:`caustica.medium.GEOMETRIES`). Only a scene-backed kind can be
+    axisymmetric, and the flag lives in its ``SceneConfig``; every other kind
+    paints a Cartesian grid.
+
+    The flag counts only on a 2-D scene, because an axisymmetric scene IS the
+    (r, z) half-plane. A 3-D scene carrying the flag is not a half-plane at
+    all, so it keeps ``Scene.__init__``'s own message ("axisymmetric scenes
+    are 2-D") instead of being told to reach for a half-plane solver.
+    """
+    scene = getattr(cfg, "scene", None)
+    if scene is None or not getattr(scene, "axisymmetric", False):
+        return "cartesian"
+    return "axisymmetric" if int(getattr(scene, "ndim", 2)) == 2 else "cartesian"
+
+
+def check_solver_geometry(solver: str, medium_cfg: MediumKindConfig) -> None:
+    """Refuse a job whose grid geometry the chosen solver does not integrate.
+
+    Runs on the config alone, before the grid, the source or the property
+    volumes exist: an axisymmetric job must be refused for BEING
+    axisymmetric, not for whatever a Cartesian-only builder happens to trip
+    over first. A Cartesian job asks nothing of the registry here; the full
+    capability check (a solver that refuses Cartesian) belongs to
+    :meth:`SolverBase.validate` and to :func:`validate_job`, which run once
+    the medium exists.
+
+    Raises :class:`~caustica.solvers.base.SolverCapabilityError`, or
+    :class:`~caustica.registry.UnknownPluginError` when the solver name is not
+    registered at all (that message names the available solvers, which is the
+    more useful one to a user who mistyped).
+    """
+    geometry = medium_geometry(medium_cfg)
+    if geometry == "cartesian":
+        return
+    import caustica.solvers as solvers  # noqa: PLC0415 (keep the import light)
+
+    caps = solvers.get(solver).caps
+    if geometry not in caps.geometry:
+        raise SolverCapabilityError(geometry_refusal(solver, caps.geometry, geometry))
+
+
 def _build_explicit(job: ExplicitJobConfig, base_dir: Path | None, with_medium: bool) -> BuiltJob:
     medium_cfg = job.medium.resolve_paths(base_dir)
     source_cfg = job.source.resolve_paths(base_dir)
+
+    check_solver_geometry(job.solver, medium_cfg)
 
     # The medium build is the EXPENSIVE part (GBs for a full-size volume), so
     # every refusal that only needs geometry/labels runs first.

@@ -209,8 +209,18 @@ class Scene:
     # ---------------- conveniences ----------------
 
     def to_medium(self, grid: Grid, db, origin=None, supersample: int = 1):
-        """Rasterize and map to a :class:`~caustica.medium.Medium` via ``db``."""
+        """Rasterize and map to a :class:`~caustica.medium.Medium` via ``db``.
+
+        The medium carries this scene's geometry (``"axisymmetric"`` for an
+        (r, z) half-plane scene, ``"cartesian"`` otherwise), so a Cartesian
+        solver refuses the setup instead of solving the half-plane as a
+        2-D line source.
+        """
         from caustica.medium import Medium
 
         vol = self.rasterize(grid, origin=origin, supersample=supersample)
-        return Medium.from_id_map(vol.labels.astype(np.int64), db)
+        return Medium.from_id_map(
+            vol.labels.astype(np.int64),
+            db,
+            geometry="axisymmetric" if self.axisymmetric else "cartesian",
+        )
