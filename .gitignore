@@ -63,3 +63,12 @@ src/caustica/_build_info.py
 # superseded evidence runs. Kept on disk because the history in them is real,
 # out of git because a live library repository is not a filing cabinet.
 archive/
+
+# Local planning and research (user decision 2026-09-03: never committed)
+planning/
+gemini_answers/
+
+# Local orchestration tooling for the AI sessions (saved workflows, skills);
+# same rule as planning/: never committed.
+.claude/workflows/
+.claude/skills/
