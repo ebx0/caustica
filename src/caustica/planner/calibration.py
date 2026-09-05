@@ -1,9 +1,15 @@
 """On-device calibration for the planner (~20 timed engine steps).
 
-:func:`measure_step_time` replays ``run_cw_kspace_pstd``'s step composition
-op-for-op with synthetic data (timing/memory only, no physics claim), so the
-measured per-step cost pays exactly the FFT mix and elementwise passes of a
-real solve. :func:`calibrate` measures >= 2 grid sizes and persists them to
+:func:`measure_step_time` builds ``run_cw_kspace_pstd``'s OWN per-step
+closure over synthetic data (timing and memory only, no physics claim), so
+the measured per-step cost pays exactly the FFT mix and elementwise passes of
+a real solve. It is the same object the solver calls, not a copy. A copy is
+what this module used to keep, and when the engine fused its two damping
+passes into one, the copy went on paying for both: measured on an RTX 5050
+against the closure a real solve ran, it read 9.4% high at 128^3 and 10.5%
+high at 192^3, where the shared closure reads within 1.8% and 0.5%.
+
+:func:`calibrate` measures >= 2 grid sizes and persists them to
 ``~/.caustica/calibration.json`` keyed by device name; estimates targeting a
 matching device are then labeled ``"calibrated"`` (the ±25% gate applies
 to this path, on-device).
@@ -47,6 +53,7 @@ import numpy as np
 from caustica.core.backend import get_backend
 from caustica.planner.model import fft_sizes, step_time
 from caustica.solvers.kspace import operators as ops
+from caustica.solvers.kspace.engine import make_propagation_step
 
 
 def default_calibration_path() -> Path:
@@ -193,8 +200,11 @@ def measure_step_time(
     coef = 1e-4
     dt_over_rho = xp.full(padded, coef, dtype=xp.float32)
     rhoc2_dt = xp.full(padded, coef, dtype=xp.float32)
-    absorb = xp.full(padded, 0.999, dtype=xp.float32)
-    sponge = xp.full(padded, 0.999, dtype=xp.float32)
+    # ONE damping volume, because the engine carries one: absorption and the
+    # sponge are a single float32 product formed at setup. 0.999 * 0.999 is
+    # what the two separate factors used to multiply to, so the arithmetic the
+    # probe drives is unchanged and only the pass count is.
+    damp = xp.full(padded, 0.999 * 0.999, dtype=xp.float32)
     beta2_dt = xp.full(padded, coef, dtype=xp.float32) if nonlinear else None
     ks = ops.k_vectors(padded, 1e-3, xp)
     kappa = ops.kappa_sinc(ks, c_ref=1500.0, dt=1e-7, xp=xp)
@@ -213,26 +223,22 @@ def measure_step_time(
 
             cp.cuda.get_current_stream().synchronize()
 
-    def one_step() -> None:
-        # Mirror of engine.step() — keep in lockstep with engine.py.
-        pk = fft.rfftn(p)
-        for i in range(nd):
-            grad_i = fft.irfftn(deriv[i] * pk, s=padded)
-            u[i] -= dt_over_rho * grad_i
-            u[i] *= absorb
-            u[i] *= sponge
-        acc = None
-        for i in range(nd):
-            term = deriv[i] * fft.rfftn(u[i])
-            acc = term if acc is None else acc + term
-        divu = fft.irfftn(acc, s=padded)
-        p_local = p
-        if beta2_dt is None:
-            p_local -= rhoc2_dt * divu
-        else:
-            p_local -= (rhoc2_dt + beta2_dt * p_local) * divu
-        p_local *= absorb
-        p_local *= sponge
+    # The engine's own per-step closure, not a copy of it. What is timed here
+    # is therefore exactly what a solve pays per step, minus the source
+    # injection, which is source-sized rather than grid-sized and so cannot
+    # belong to a model fitted against the element count.
+    one_step = make_propagation_step(
+        xp=xp,
+        fft=fft,
+        padded=padded,
+        p=p,
+        u=u,
+        deriv=deriv,
+        damp=damp,
+        dt_over_rho=dt_over_rho,
+        rhoc2_dt=rhoc2_dt,
+        beta2_dt=beta2_dt,
+    )
 
     for _ in range(warmup):
         one_step()
@@ -647,13 +653,13 @@ def record_warmup(
 ) -> dict | None:
     """Teach the calibration what a REAL run's warmup cost on this device.
 
-    The probe in :func:`measure_step_time` replays the step composition, not
-    a whole solve: it never builds the medium's property maps, never touches
-    the source scatter, and so it under-counts the one-time cost of a real
-    run. ``caustica.validation``'s GPU-gate suite measures that number from
-    an actual stamped run and calls this to write it back — which is what
-    "the warmup is measured on the device and stored in the calibration"
-    means in practice (fix A2).
+    The probe in :func:`measure_step_time` runs the engine's step composition
+    over synthetic arrays, not a whole solve: it never builds the medium's
+    property maps, never touches the source scatter, and so it under-counts
+    the one-time cost of a real run. ``caustica.validation``'s GPU-gate suite
+    measures that number from an actual stamped run and calls this to write it
+    back, which is what "the warmup is measured on the device and stored in
+    the calibration" means in practice (fix A2).
 
     Returns the updated entry, or None when the device has no calibration
     yet (there is nothing to attach to, and inventing one would let the

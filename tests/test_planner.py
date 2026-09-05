@@ -388,9 +388,10 @@ def test_the_cpu_target_is_recognised_by_the_same_rule_the_store_matches_on(tmp_
 
 
 def test_record_warmup_writes_back_what_a_real_run_paid(tmp_path):
-    """The probe replays the step composition, not a whole solve: it never
-    builds the property maps or the source scatter, so it under-counts. The
-    validation suite measures the real thing and writes it back here."""
+    """The probe runs the engine's step over synthetic arrays, not a whole
+    solve: it never builds the property maps or the source scatter, so it
+    under-counts. The validation suite measures the real thing and writes it
+    back here."""
     calfile = tmp_path / "calibration.json"
     planner.calibrate(shapes=((16, 16), (24, 24)), backend="numpy", n_steps=4, path=calfile)
 

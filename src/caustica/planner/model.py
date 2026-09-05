@@ -118,7 +118,11 @@ def kspace_memory(
 
 def n_ffts_per_step(nd: int) -> int:
     """FFT invocations per engine step: rfftn(p), nd gradient irfftn,
-    nd rfftn(u_i), one divergence irfftn."""
+    nd rfftn(u_i), one divergence irfftn.
+
+    Counted from ``make_propagation_step``, which is the one definition of a
+    step that both the solver and the calibration probe run.
+    """
     return 2 + 2 * nd
 
 
@@ -126,7 +130,8 @@ def pointwise_bytes_per_elem(nd: int, nonlinear: bool) -> float:
     """Approximate bytes moved per padded-volume element per step by the
     elementwise (non-FFT) work.
 
-    Counted from engine.step(): per velocity axis ~7 float32 passes
+    Counted from the engine's own step, ``make_propagation_step`` in
+    ``solvers/kspace/engine.py``: per velocity axis ~7 float32 passes
     (update, then the fused damping multiply), ~7 for the pressure update
     (+6 nonlinear), and the k-space multiplies (~6 complex passes per axis
     on the half-spectrum, R/P ~= 0.5).

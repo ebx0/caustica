@@ -39,6 +39,7 @@ import warnings
 from collections.abc import Callable
 from itertools import product
 from math import ceil, floor, isfinite
+from typing import Any
 
 import numpy as np
 
@@ -70,13 +71,13 @@ log = logging.getLogger("caustica")
 #: per-voxel drive weights (2026-08-24); /4 made settling wait for the
 #: requested harmonics and not only for the peak (2026-08-25), which moves
 #: every harmonic a run records.
-NUMERICS_SCHEME = "cw-kspace-pstd/4"
 #: A pure reassociation that stays below the validation parity gate does not
 #: bump it: fusing absorption and the sponge into one damping volume
 #: (2026-09-04) leaves the O'Neil focal peak bit-identical in lossless water
 #: and moves it by 1.1e-07 relative in absorbing water, the last float32 bit,
 #: against a 1e-05 gate, so a checkpoint written by the two-pass form resumes
 #: on a trajectory that is the same to within that bound.
+NUMERICS_SCHEME = "cw-kspace-pstd/4"
 
 #: How many voxels the harmonic convergence probe may carry. Big enough that
 #: the subsample still resolves where a harmonic peaks, small enough that two
@@ -184,6 +185,89 @@ def _guard_finite(peak: float, *, where: str, solver_name: str) -> None:
         f"sound speed or density, or a source sitting in or against the PML "
         f"band, where it is driven and damped at once."
     )
+
+
+def make_propagation_step(
+    *,
+    xp: Any,
+    fft: Any,
+    padded: tuple[int, ...],
+    p: Any,
+    u: list[Any],
+    deriv: list[Any],
+    damp: Any,
+    dt_over_rho: Any,
+    rhoc2_dt: Any,
+    beta2_dt: Any | None,
+) -> Callable[[], None]:
+    """Build the closure that advances ``p`` and ``u`` by one time step.
+
+    This is the whole grid-sized cost of the scheme: one forward transform of
+    the pressure, ``nd`` inverse transforms for the gradient, ``nd`` forward
+    transforms of the velocity, one inverse for the divergence, and the
+    elementwise passes between them. It is everything a step does EXCEPT
+    inject the source, which is source-sized rather than grid-sized and stays
+    at the call site.
+
+    It exists as a factory, and not as a closure written where it is used,
+    because two callers need the same definition: the solve itself and the
+    planner's calibration probe, which times this cost to predict what a run
+    will take. The probe used to carry a hand-copied replica, and after the
+    two damping passes became one, the copy went on paying for both and
+    over-predicted GPU step time by about 8.6 % at 192^3. One definition
+    cannot drift from itself.
+
+    Every argument is state the closure mutates in place or reads every step;
+    none of it is copied. ``p`` and each ``u[i]`` are updated in place, so the
+    caller keeps its own references and sees the new field.
+
+    Arguments
+    ---------
+    xp, fft
+        Array module and dtype-preserving FFT interface of the backend.
+    padded
+        Shape of the FFT domain, which is the shape of every array here.
+    p, u
+        Pressure and the ``nd`` velocity components, mutated in place.
+    deriv
+        Per-axis spectral derivative factors, ``i k_n kappa`` on the
+        half-spectrum.
+    damp
+        The single per-voxel damping volume: absorption times the sponge.
+    dt_over_rho, rhoc2_dt
+        ``dt / rho`` and ``rho c^2 dt`` maps on the padded grid.
+    beta2_dt
+        ``2 beta dt`` for the Westervelt term, or ``None`` for a linear run.
+    """
+    nd = len(padded)
+    # numpy 2 deprecates `s` without `axes` and warns that a future release
+    # will read them pairwise; spelling the axes out keeps today's meaning
+    # (transform every axis) the one a later numpy will also read.
+    fft_axes = tuple(range(nd))
+
+    def propagate() -> None:
+        pk = fft.rfftn(p)
+        for i in range(nd):
+            grad_i = fft.irfftn(deriv[i] * pk, s=padded, axes=fft_axes)
+            u[i] -= dt_over_rho * grad_i
+            u[i] *= damp
+        acc = None
+        for i in range(nd):
+            term = deriv[i] * fft.rfftn(u[i])
+            acc = term if acc is None else acc + term
+        divu = fft.irfftn(acc, s=padded, axes=fft_axes)
+        # Alias, not a copy: an augmented assignment to the closed-over name
+        # would make it local and raise UnboundLocalError. Every operation
+        # below is in place, so the caller's `p` carries the new field.
+        p_local = p
+        if beta2_dt is None:
+            p_local -= rhoc2_dt * divu
+        else:
+            # Westervelt: dp = -(rho c^2 dt) div u - 2 beta dt p div u
+            p_local -= (rhoc2_dt + beta2_dt * p_local) * divu
+        p_local *= damp
+
+    return propagate
 
 
 def run_cw_kspace_pstd(
@@ -409,6 +493,10 @@ def run_cw_kspace_pstd(
         if state is not None:
             # float32 state through uncompressed npz is bit-exact, so the
             # resumed trajectory is the SAME one, not a nearby one.
+            # This REBINDS p and u, and make_propagation_step below captures
+            # the array objects rather than the names, so the rebinding has to
+            # happen first. It does, and the bit-exact resume test would fail
+            # if a later edit moved it after.
             p = xp.asarray(state["fields"]["p"])
             u = [xp.asarray(state["fields"][f"u{i}"]) for i in range(nd)]
             n = state["n"]
@@ -513,34 +601,30 @@ def run_cw_kspace_pstd(
         if stop:
             raise RunInterrupted(checkpoint.path, "settle", periods_done, n)
 
-    # numpy 2 deprecates `s` without `axes` and warns that a future release
-    # will read them pairwise; spelling the axes out keeps today's meaning
-    # (transform every axis) the one a later numpy will also read.
-    fft_axes = tuple(range(nd))
+    # The grid-sized half of a step is built by the shared factory, so the
+    # planner's calibration probe times this exact composition instead of a
+    # copy of it. The source-sized half stays here.
+    # p and u must already hold their final array objects at this point: the
+    # factory captures them, not the names. The checkpoint resume above is the
+    # only place that rebinds either, and it runs first.
+    propagate = make_propagation_step(
+        xp=xp,
+        fft=fft,
+        padded=padded,
+        p=p,
+        u=u,
+        deriv=deriv,
+        damp=damp,
+        dt_over_rho=dt_over_rho,
+        rhoc2_dt=rhoc2_dt,
+        beta2_dt=beta2_dt,
+    )
 
     def step(n: int) -> None:
-        pk = fft.rfftn(p)
-        for i in range(nd):
-            grad_i = fft.irfftn(deriv[i] * pk, s=padded, axes=fft_axes)
-            u[i] -= dt_over_rho * grad_i
-            u[i] *= damp
-        acc = None
-        for i in range(nd):
-            term = deriv[i] * fft.rfftn(u[i])
-            acc = term if acc is None else acc + term
-        divu = fft.irfftn(acc, s=padded, axes=fft_axes)
-        p_local = p
-        if beta2_dt is None:
-            p_local -= rhoc2_dt * divu
-        else:
-            # Westervelt: dp = -(rho c^2 dt) div u - 2 beta dt p div u
-            p_local -= (rhoc2_dt + beta2_dt * p_local) * divu
-        p_local *= damp
+        propagate()
         t = n * dt
         env = ramp_envelope(t, period, source.ramp_periods)
-        p_local[src_idx] += (xp.float32(amp * env) * src_scale) * xp.sin(
-            xp.float32(omega * t) - src_ph
-        )
+        p[src_idx] += (xp.float32(amp * env) * src_scale) * xp.sin(xp.float32(omega * t) - src_ph)
 
     # ---- settle until the per-period peak stops moving ----
     if converged_period is None:
