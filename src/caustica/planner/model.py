@@ -92,11 +92,12 @@ def kspace_memory(
     """Byte-level inventory of ``run_cw_kspace_pstd`` for ``active_shape``.
 
     Mirrors engine.py line by line: state (p + nd velocity components),
-    property maps (dt_over_rho, rhoc2_dt, absorb, + beta2_dt when
-    nonlinear), the sponge volume, per-axis spectral factors, record
-    buffers (one complex64 per harmonic + float32 pmax over the record
-    region), the step-loop temporaries that coexist at the peak, and an
-    FFT workspace share (in+out complex copies).
+    property maps (dt_over_rho, rhoc2_dt, + beta2_dt when nonlinear), the
+    fused damping volume (absorption times sponge, built once at setup),
+    per-axis spectral factors, record buffers (one complex64 per harmonic
+    + float32 pmax over the record region), the step-loop temporaries that
+    coexist at the peak, and an FFT workspace share (in+out complex
+    copies).
     """
     padded, p_elems, r_elems = fft_sizes(active_shape)
     nd = len(padded)
@@ -104,8 +105,8 @@ def kspace_memory(
 
     breakdown = {
         "state (p + u)": (1 + nd) * _F32 * p_elems,
-        "property maps": (3 + (1 if nonlinear else 0)) * _F32 * p_elems,
-        "sponge": _F32 * p_elems,
+        "property maps": (2 + (1 if nonlinear else 0)) * _F32 * p_elems,
+        "damping volume": _F32 * p_elems,
         "spectral factors (i*k*kappa)": nd * _C64 * r_elems,
         "record buffers": rec * (_C64 * n_harmonics + _F32),
         "step temporaries": 3 * _C64 * r_elems + (2 + (2 if nonlinear else 0)) * _F32 * p_elems,
@@ -125,12 +126,12 @@ def pointwise_bytes_per_elem(nd: int, nonlinear: bool) -> float:
     """Approximate bytes moved per padded-volume element per step by the
     elementwise (non-FFT) work.
 
-    Counted from engine.step(): per velocity axis ~10 float32 passes
-    (update, absorb, sponge), ~10 for the pressure update (+6 nonlinear),
-    and the k-space multiplies (~6 complex passes per axis on the
-    half-spectrum, R/P ~= 0.5).
+    Counted from engine.step(): per velocity axis ~7 float32 passes
+    (update, then the fused damping multiply), ~7 for the pressure update
+    (+6 nonlinear), and the k-space multiplies (~6 complex passes per axis
+    on the half-spectrum, R/P ~= 0.5).
     """
-    f32_passes = 10.0 * (nd + 1) + (6.0 if nonlinear else 0.0)
+    f32_passes = 7.0 * (nd + 1) + (6.0 if nonlinear else 0.0)
     kspace_bytes = 6.0 * nd * _C64 * 0.5
     return _F32 * f32_passes + kspace_bytes
 

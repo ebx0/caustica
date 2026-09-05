@@ -8,10 +8,12 @@ future GPU work a single surface to optimize.
 
 Scheme per time step (dt), all states float32 on the chosen backend:
 
-    u_i <- (u_i - dt/rho * IFFT{ i k_i kappa FFT{p} }) * e^{-alpha c dt} * sponge
+    u_i <- (u_i - dt/rho * IFFT{ i k_i kappa FFT{p} }) * damp
     p   <- (p - (rho c^2 dt + 2 beta dt p) * IFFT{ kappa sum_i i k_i FFT{u_i} })
-           * e^{-alpha c dt} * sponge
+           * damp
     p[src] += (2 c dt / dx) * p0 * ramp(t) * sin(omega t - phase)
+
+    damp = e^{-alpha c dt} * sponge      (one volume, built once at setup)
 
 The (2 c dt / dx) factor is the k-Wave-style mass-source normalization: the
 realized plane amplitude is ~p0 (few-% residual), independent of grid,
@@ -69,6 +71,12 @@ log = logging.getLogger("caustica")
 #: requested harmonics and not only for the peak (2026-08-25), which moves
 #: every harmonic a run records.
 NUMERICS_SCHEME = "cw-kspace-pstd/4"
+#: A pure reassociation that stays below the validation parity gate does not
+#: bump it: fusing absorption and the sponge into one damping volume
+#: (2026-09-04) leaves the O'Neil focal peak bit-identical in lossless water
+#: and moves it by 1.1e-07 relative in absorbing water, the last float32 bit,
+#: against a 1e-05 gate, so a checkpoint written by the two-pass form resumes
+#: on a trajectory that is the same to within that bound.
 
 #: How many voxels the harmonic convergence probe may carry. Big enough that
 #: the subsample still resolves where a harmonic peaks, small enough that two
@@ -274,7 +282,14 @@ def run_cw_kspace_pstd(
             "producing standing-wave interference. Attach a PMLSpec to the Grid "
             "unless periodic boundaries are intended."
         )
-    sponge = ops.sponge_volume(padded, grid.pml_vox, pml_edge, xp)
+    # Absorption and the sponge are both per-voxel multipliers of p and of
+    # every velocity component, so their float32 product is formed once here
+    # and applied once per field per step instead of twice. The product is
+    # accumulated in place: the two factors never coexist with the result,
+    # so the engine carries one damping volume rather than two.
+    damp = ops.sponge_volume(padded, grid.pml_vox, pml_edge, xp)
+    damp *= absorb
+    del absorb
 
     p = xp.zeros(padded, dtype=xp.float32)
     u = [xp.zeros(padded, dtype=xp.float32) for _ in range(nd)]
@@ -508,8 +523,7 @@ def run_cw_kspace_pstd(
         for i in range(nd):
             grad_i = fft.irfftn(deriv[i] * pk, s=padded, axes=fft_axes)
             u[i] -= dt_over_rho * grad_i
-            u[i] *= absorb
-            u[i] *= sponge
+            u[i] *= damp
         acc = None
         for i in range(nd):
             term = deriv[i] * fft.rfftn(u[i])
@@ -521,8 +535,7 @@ def run_cw_kspace_pstd(
         else:
             # Westervelt: dp = -(rho c^2 dt) div u - 2 beta dt p div u
             p_local -= (rhoc2_dt + beta2_dt * p_local) * divu
-        p_local *= absorb
-        p_local *= sponge
+        p_local *= damp
         t = n * dt
         env = ramp_envelope(t, period, source.ramp_periods)
         p_local[src_idx] += (xp.float32(amp * env) * src_scale) * xp.sin(

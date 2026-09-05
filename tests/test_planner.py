@@ -46,8 +46,10 @@ def test_memory_inventory_matches_hand_count():
     r = 60 * 50 * (40 // 2 + 1)
     b = mm.breakdown
     assert b["state (p + u)"] == (1 + 3) * 4 * p
-    assert b["property maps"] == (3 + 1) * 4 * p
-    assert b["sponge"] == 4 * p
+    # dt_over_rho, rhoc2_dt, beta2_dt: absorption is no longer a map of its
+    # own, it is folded into the single damping volume below.
+    assert b["property maps"] == (2 + 1) * 4 * p
+    assert b["damping volume"] == 4 * p
     assert b["spectral factors (i*k*kappa)"] == 3 * 8 * r
     assert b["record buffers"] == 1000 * (8 * 2 + 4)
     assert b["step temporaries"] == 3 * 8 * r + (2 + 2) * 4 * p
