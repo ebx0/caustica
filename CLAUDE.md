@@ -61,11 +61,11 @@ old ledger under `archive/` is not a planning input (D-001).
 
 The user's standing arrangement: Fable directs, Opus subagents do the work.
 The procedure is the local skill `.claude/skills/caustica-orchestrate/SKILL.md`
-(invoke `/caustica-orchestrate`); implementation tasks go through the saved
-workflow `.claude/workflows/caustica-tasks.js` (`Workflow({name:
-"caustica-tasks", args: {phase, tasks}})`); a dead run is recovered with
-`planning/tools/harvest.py <run-id>`. All three are git-ignored, like
-`planning/`.
+(invoke `/caustica-orchestrate`). Implementation tasks go through the saved
+workflow `.claude/workflows/caustica-tasks.js`, launched by `scriptPath`
+with `args: {phase, tasks}` (the name route fails on this host). A dead run
+is recovered with `planning/tools/harvest.py <run-id>`. All three are
+git-ignored, like `planning/`.
 
 ## Working rules for agents
 
