@@ -32,8 +32,11 @@ is set in the user's global git config; do not override it per-commit.
 
 ## Committing
 
-The agent does not commit or push on its own. Stage nothing and leave the
-working tree for the user unless they explicitly ask for a commit.
+Worker agents never stage, commit or push. The orchestrating session
+commits and pushes `develop` with the user's standing permission
+(given 2026-09-05), one task per commit, splitting overlapping files by
+hunk when two tasks touched one, and only at a moment when no worker is
+writing to the tree. Never `git add -A`.
 
 ## Planning documents
 
