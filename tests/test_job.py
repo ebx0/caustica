@@ -279,7 +279,7 @@ def test_validate_fast_defers_medium_checks(tmp_path):
     assert any("deferred" in w for w in rep.warnings)
 
 
-# ------------------------- janitor ticket 08 (2026-08-23): the beta=0 trap
+# ------------------------------------------- the beta=0 trap (2026-08-23)
 
 
 def test_validate_warns_that_westervelt_on_a_beta_zero_medium_is_a_linear_solve(tmp_path):

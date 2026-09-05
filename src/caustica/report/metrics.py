@@ -28,7 +28,7 @@ HALF_PRESSURE = 0.5  # -6 dB in pressure
 #: DFT leaves a residue against the absorber that can beat the real focal
 #: second harmonic outright in a weakly nonlinear run — 6.5% of the
 #: fundamental, 4 voxels from the edge, in the beta=0 sweep that found this
-#: (janitor ticket 09). The value stays as measured; only the caveat is new.
+#: The value stays as measured; only the caveat is new.
 A2_PML_MARGIN_WARN_VOX = 8
 
 
@@ -41,7 +41,7 @@ class FieldFrame:
     through every metric, preview and figure signature; ``focus_metrics``
     alone reached eight parameters and every caller had to re-spell the same
     quartet. One frozen object instead: adding a member (an origin, say) is
-    one field, not six signatures (janitor ticket 03).
+    one field, not six signatures.
 
     ``apex_vox`` is the voxel that mm positions are measured FROM (the
     transducer apex; the grid origin when a result file predates the stamp),

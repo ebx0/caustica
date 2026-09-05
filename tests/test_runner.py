@@ -881,7 +881,7 @@ def test_the_plan_reports_warmup_separately_from_the_per_step_cost(tmp_path):
     )
 
 
-# ------------------------- janitor ticket 08 (2026-08-23): the beta=0 trap
+# ------------------------------------------- the beta=0 trap (2026-08-23)
 
 
 def _beta_zero_warnings(job: Path, out: Path) -> list[str]:

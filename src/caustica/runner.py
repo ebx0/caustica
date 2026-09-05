@@ -944,7 +944,7 @@ def run_job_file(job_path: str | Path, opts: RunnerOptions | None = None) -> int
             stacklevel=2,
         )
     # The other silent-expectation trap, in the same phase and from the same
-    # single source `caustica validate` reads (janitor ticket 08).
+    # single source `caustica validate` reads.
     for warn_text in _linear_solve_warnings_for(built):
         warnings.warn(warn_text, CausticaWarning, stacklevel=2)
 

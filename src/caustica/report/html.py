@@ -135,7 +135,7 @@ def harmonics_rows(m: dict) -> list[Row]:
     h = m["harmonics"]
     # The A2 MAXIMUM is a whole-interior argmax, so it can land on the PML's
     # own harmonic residue. The number is never edited (contract stability) —
-    # the row says where it sits instead (janitor ticket 09). Absent in a
+    # the row says where it sits instead. Absent in a
     # metrics.json written before that field existed: no distance, no caveat.
     edge = h.get("a2_peak_distance_to_pml_vox")
     caveat = (

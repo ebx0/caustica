@@ -238,7 +238,7 @@ def test_quantize_false_stores_float32_verbatim(tmp_path, mini_run):
 
 
 def test_load_result_with_geometry_opens_the_file_once(tmp_path, mini_run, monkeypatch):
-    """Fields AND the self-description out of a SINGLE open (janitor 02).
+    """Fields AND the self-description out of a SINGLE open.
 
     ``caustica report`` used to call ``load_result`` and then re-open
     result.h5 to parse the same attrs from a second copy of the schema kept

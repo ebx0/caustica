@@ -121,7 +121,7 @@ def test_analyze_keeps_the_pre_refactor_shape(water_setup_result):
         "focal_spot",
         "run",
         "harmonics",
-        "warnings",  # janitor ticket 09: the metrics' own caveat channel
+        "warnings",  # the metrics' own caveat channel
         "vs_oneill",
     ]
     assert m["peak"]["gain_vs_source"] is not None
@@ -308,7 +308,7 @@ def test_coarse_step_formula_targets_the_budget():
     assert _coarse_step((32, 32, 32), budget) == 1  # small grids stay exact
 
 
-# ------------------------------------------- janitor round (2026-08-21)
+# --------------------------------------------- report hygiene (2026-08-21)
 
 
 def test_report_on_an_unstamped_result_without_apex_attrs(runner_outdir, tmp_path):
@@ -437,7 +437,7 @@ def test_render_html_with_no_rows_emits_no_stray_table_close(tmp_path):
     assert "</table>" not in html and "<table>" not in html
 
 
-# ------------------------------- janitor ticket 01 (2026-08-23): the gaps left
+# --------------------------------------------- the gaps left (2026-08-23)
 
 
 def test_preview_report_without_metrics_json(runner_outdir, tmp_path):
@@ -625,7 +625,7 @@ def test_record_region_entirely_inside_the_pml_is_refused():
         )
 
 
-# ------------------------ janitor ticket 09 (2026-08-23): the a2 edge caveat
+# ------------------------------------------ the a2 edge caveat (2026-08-23)
 
 
 def _result_with_a2_spike_at(shape: tuple[int, int, int], spike: tuple[int, int, int]):

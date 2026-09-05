@@ -123,7 +123,7 @@ def _full_report(outdir: Path, result_path: Path, metrics: dict | None, meta: di
     from caustica.report import figures as hfig  # noqa: PLC0415 (matplotlib lazy)
 
     # ONE open for the fields and the geometry: the parsing of the result
-    # attrs belongs to the module that writes them (janitor ticket 02).
+    # attrs belongs to the module that writes them.
     result, geo = load_result(result_path, with_geometry=True)
     frame = FieldFrame.from_geometry(geo)
     name = geo["job_name"] or (metrics or {}).get("job") or outdir.name

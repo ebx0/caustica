@@ -1086,7 +1086,7 @@ _NONLINEAR_SOLVER = "westervelt"
 
 
 def linear_medium_warnings(solver: str, medium) -> list[str]:
-    """The "westervelt on a beta=0 medium" warning (janitor ticket 08).
+    """The "westervelt on a beta=0 medium" warning.
 
     ``water()`` is beta=0 by design and the engine is right to drop the
     nonlinear term for it (westervelt at beta=0 IS linear, bit for bit) —

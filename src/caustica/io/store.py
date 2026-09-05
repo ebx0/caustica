@@ -195,7 +195,7 @@ def _geometry(hf: h5py.File) -> dict:
     Parsed HERE, beside the :func:`save_result` that writes these attrs.
     ``caustica report`` used to keep its own copy of this parsing —
     and open the file a SECOND time to run it — which is exactly how a
-    schema and its reader drift apart (janitor ticket 02).
+    schema and its reader drift apart.
 
     Missing optional stamps degrade the way a reader needs them to: an
     older file has no ``apex_vox``, so positions fall back to the grid
