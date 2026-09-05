@@ -166,6 +166,7 @@ def test_the_adapter_asks_kwave_for_the_absorption_law_the_engine_implements():
     np.testing.assert_allclose(seen["sound_speed"], C0)
 
 
+@pytest.mark.slow
 def test_asking_kwave_for_a_harmonic_at_the_default_settle_is_flagged():
     """A fixed schedule cannot know when a harmonic has stopped moving.
 

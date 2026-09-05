@@ -42,11 +42,13 @@ matching change there.
 ## Before you open a pull request
 
 ```bash
-pytest              # the whole suite; some tests skip without a GPU or k-Wave
-ruff check .        # lint; the tree is kept clean, not almost clean
+pytest                # the whole suite; some tests skip without a GPU or k-Wave
+pytest -m "not slow"  # the fast pass: 72 s here, against 4 to 5 min for the whole suite
+ruff check .          # lint; the tree is kept clean, not almost clean
 ```
 
-Both run in CI on Linux and Windows across Python 3.10–3.13, plus a
+Lint and the suite run in CI on Linux and Windows across Python 3.10 to 3.13
+(CI takes the suite as `pytest -m "not kwave and not network"`), plus a
 clean-environment leg that installs the built wheel and runs an example job
 from it — so packaging breakage is caught before a release, not after.
 
