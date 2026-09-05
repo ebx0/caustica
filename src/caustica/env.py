@@ -20,7 +20,13 @@ import subprocess
 import sys
 from pathlib import Path
 
-from caustica.core.backend import Backend, cupy_available, get_backend
+from caustica.core.backend import (
+    Backend,
+    cupy_available,
+    cupy_unavailable_kind,
+    cupy_unavailable_reason,
+    get_backend,
+)
 
 __all__ = ["build_info", "env_report", "git_commit", "gpu_environment", "require_gpu"]
 
@@ -99,6 +105,13 @@ def env_report(backend_name: str | None = None) -> dict:
         if backend_name is None:
             backend_name = get_backend("auto").name
         report["resolved_backend"] = backend_name
+        # WHY there is no GPU, when the probe has already answered: "no
+        # device", "cupy not installed" and "kernels do not compile here"
+        # are three different fixes and the stamp should not blur them.
+        # Reading the cache never probes, so a numpy run stays CUDA-free.
+        reason = cupy_unavailable_reason()
+        if reason is not None:
+            report["gpu_unavailable_reason"] = reason
         report.update(gpu_environment(backend_name))
     except Exception as exc:  # even a broken CUDA stack must not raise here
         report["resolved_backend"] = f"probe_error: {type(exc).__name__}"
@@ -176,22 +189,38 @@ def require_gpu(reason: str = "") -> Backend:
     """Return the cupy backend or raise with the fix for THIS machine.
 
     Never touches pip. On Colab the real failure is almost always a CPU
-    runtime — which no install can fix — so that message points at the
+    runtime, which no install can fix, so that message points at the
     Runtime menu; elsewhere it names the install command for the user to
     run themselves.
+
+    When the probe knows WHY, that text is appended. The install advice is
+    withheld for the one kind it cannot answer: a device that answered and
+    still would not run a kernel, where cupy is already installed and the
+    fault is the driver, the toolkit or the device's state. It survives for
+    a missing cupy and for a zero-device count, since the usual cause of the
+    latter is a cupy wheel built for a different CUDA than the driver.
     """
     if cupy_available():
         return get_backend("cupy")
     why = f" ({reason})" if reason else ""
+    probe = cupy_unavailable_reason()
+    said = f" The CUDA probe said: {probe}" if probe else ""
     if _on_colab():
         raise RuntimeError(
             f"A GPU is required{why}, but this Colab runtime has no CUDA device. "
             f"Fix: Runtime -> Change runtime type -> Hardware accelerator: GPU, then "
             f"reconnect. (No pip install can fix a CPU runtime; Colab GPU runtimes "
-            f"already ship cupy.)"
+            f"already ship cupy.){said}"
+        )
+    if cupy_unavailable_kind() == "unusable":
+        raise RuntimeError(
+            f"A GPU is required{why}, but the CUDA device on this machine will not run "
+            f"a kernel.{said} cupy is installed and a device answered, so this is the "
+            f"driver, the CUDA toolkit or the device's state, not a missing package: "
+            f"reinstalling cupy will not change it."
         )
     raise RuntimeError(
         f"A GPU is required{why}, but no usable CUDA device was found on this machine. "
         f"If it has an NVIDIA GPU with CUDA 12: pip install cupy-cuda12x (the "
-        f"caustica[gpu] extra). caustica never installs it for you."
+        f"caustica[gpu] extra). caustica never installs it for you.{said}"
     )

@@ -223,7 +223,9 @@ def require_gpu_here(reason: str = "caustica.colab.run_job") -> None:
         raise RuntimeError(
             f"cupy is not installed on this machine, so {reason} cannot start. {INSTALL_ADVICE}"
         )
-    require_gpu(reason)  # cupy imports fine -> the DEVICE is what is missing
+    # cupy imports fine, so the fault is the device, the driver or the kernel
+    # compile; require_gpu reads the probe's cached reason and says which.
+    require_gpu(reason)
 
 
 def env_summary(report: dict | None = None) -> str:
@@ -247,6 +249,11 @@ def env_summary(report: dict | None = None) -> str:
         )
     elif r.get("gpu_probe_error"):
         lines.append(f"GPU probe failed: {r.get('gpu_probe_error')}")
+    elif r.get("gpu_unavailable_reason"):
+        # The one place a user reads this machine as prose. Without this line
+        # a broken CUDA stack shows only "backend numpy" and reads as "no card
+        # here", which is the wrong thing to go and fix.
+        lines.append(f"no usable GPU: {r.get('gpu_unavailable_reason')}")
     lines.append(f"platform {r.get('platform')}")
     return "\n".join(lines)
 
