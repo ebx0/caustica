@@ -25,10 +25,14 @@ from caustica.geometry import Ball, Box, Cylinder, Ellipsoid, Scene
 MM = 1e-3
 
 
-def bowl_voxels(dx: float, aperture: float, roc: float, spacing: float | None = None):
-    """The library's own bowl digitization, in voxels about the apex."""
-    ds = dx / 2.0 if spacing is None else spacing
-    points, _n, _a = spherical_cap_points(aperture, roc, ds)
+def bowl_voxels(dx: float, aperture: float, roc: float):
+    """The cap point cloud rounded to voxels, about the apex.
+
+    Not a source model: the voxel-shell source was removed at v0.1 (decision
+    D-022). Rounding the cloud is still the sharpest way to ask where the
+    sampled surface actually lies relative to the sphere that was ordered.
+    """
+    points, _n, _a = spherical_cap_points(aperture, roc, dx / 2.0)
     return np.unique(np.round(points / dx).astype(np.int64), axis=0)
 
 
@@ -43,7 +47,7 @@ def rasterize(shape, grid: Grid, origin) -> np.ndarray:
 def test_the_bowl_shell_sits_on_the_sphere_that_was_ordered(dx_mm):
     """The number that matters is the distance to the KNOWN surface.
 
-    Not the radius a curve fit infers from the voxels — a cap this shallow
+    Not the radius a curve fit infers from the voxels: a cap this shallow
     does not determine its own curvature from a voxel shell, and an
     algebraic sphere fit reads 19 % short at dx = 0.5 mm while every one of
     those voxels is within three quarters of a voxel of the sphere it was
@@ -65,7 +69,7 @@ def test_the_apex_is_a_flat_disc_of_the_size_the_curvature_implies(dx_mm):
 
     A cap sags by r^2/2R, so every point out to r = sqrt(R dx) is within half
     a voxel of the apex plane and rounds into it. At R = 12 mm and
-    dx = 0.25 mm that is 1.73 mm, seven voxels across — which is the shape a
+    dx = 0.25 mm that is 1.73 mm, seven voxels across, which is the shape a
     digitized shallow bowl has, not a defect. Worth pinning, because a
     reader who expects the apex to be a single voxel will misread every
     near-field plot the library draws.
@@ -83,54 +87,6 @@ def test_the_bowls_aperture_does_not_exceed_the_one_requested_by_more_than_a_vox
     p = bowl_voxels(dx, aperture, roc).astype(float) * dx
     rim = float(np.linalg.norm(p[:, :2], axis=1).max())
     assert aperture - dx <= rim <= aperture + dx
-
-
-def test_the_binary_cap_sampling_leaves_holes_in_the_shell():
-    """Why ``discretization="binary"`` is legacy and not merely an option.
-
-    The binary path samples the cap at dx/2 and rounds to voxels. Sampling
-    the same cap sixteen times finer reaches voxels that spacing never does —
-    measured 2026-08-24 as 10.4 % to 12.1 % of the shell across dx from
-    0.5 mm to 0.05 mm, roughly independent of dx because it is a property of
-    the sampling ratio and not of the grid. Those voxels are undriven, so a
-    binary bowl radiates from a porous shell.
-
-    Pinned rather than repaired: closing the holes alone makes the answer
-    WORSE, because it raises the voxel count further above the cap's own area
-    (see the staircase test below). The default path fixes both at once by
-    not being a shell at all.
-    """
-    dx, aperture, roc = 0.25 * MM, 5.0 * MM, 12.0 * MM
-    shipped = {tuple(v) for v in bowl_voxels(dx, aperture, roc)}
-    fine = {tuple(v) for v in bowl_voxels(dx, aperture, roc, spacing=dx / 16.0)}
-
-    missing = len(fine - shipped) / len(fine)
-    assert 0.08 < missing < 0.15, f"the hole fraction moved to {missing:.3f}; re-measure and say so"
-    assert not shipped - fine, "the shipped sampling reached a voxel the dense one did not"
-
-
-@pytest.mark.parametrize("denom,low,high", [(2, 1.10, 1.25), (16, 1.28, 1.40)])
-def test_a_digitized_cap_carries_more_voxels_than_its_area(denom, low, high):
-    """The staircase factor: the reason a binary bowl over-drives.
-
-    A flat source has exactly one voxel per dx^2 of aperture. A tilted
-    surface crosses more, and the engine drives every source voxel with the
-    same normalized amplitude — so a binary bowl radiates in proportion to
-    its voxel count, not to its area. Measured 2026-08-24 on an f/1.2 cap:
-    1.18 voxels per dx^2 at dx/2 sampling and 1.33 at dx/16, with the focal
-    pressure at 1.15x and 1.25x O'Neil's closed form respectively. The excess
-    tracked the ratio and did NOT fall as dx shrank, because digitizing a
-    tilted surface is not a discretization error.
-
-    Kept as the standing measurement of what the legacy path does, and of
-    what the default path had to overcome: see
-    ``test_the_offgrid_bowl_carries_the_caps_own_area``.
-    """
-    dx, aperture, roc = 0.25 * MM, 5.0 * MM, 12.0 * MM
-    n = len(bowl_voxels(dx, aperture, roc, spacing=dx / denom))
-    cap_area = 2.0 * np.pi * roc**2 * (1.0 - np.sqrt(1.0 - (aperture / roc) ** 2))
-
-    assert low < n * dx**2 / cap_area < high
 
 
 # ------------------------------------------------------------ the cap cloud
@@ -183,7 +139,7 @@ def test_a_curved_primitive_rasterizes_to_its_closed_form_volume(name, shape, ex
     A voxel is in or out by its centre, so the error is a boundary term.
     Measured 2026-08-24 at dx = 0.25 mm: 0.03 % to 0.96 % depending on how
     the grid happens to fall against the surface, with no misclassified voxel
-    anywhere against a 9x9x9 occupancy truth — the residual is the volume a
+    anywhere against a 9x9x9 occupancy truth. The residual is the volume a
     binary approximation simply cannot represent, not a rasterizer error.
     """
     dx, half = 0.25 * MM, 6.0 * MM
@@ -214,7 +170,7 @@ def test_the_boolean_algebra_agrees_with_the_rasterizer_voxel_for_voxel():
     """Set operations get no discretization excuse.
 
     On a fixed grid, the rasterization of ``A | B`` has to be exactly the
-    union of the two rasterizations — every voxel, no tolerance. Anything
+    union of the two rasterizations, every voxel, no tolerance. Anything
     less would mean the algebra and the rasterizer disagree about what a
     shape is, and every scene built from more than one primitive inherits it.
     """
@@ -361,7 +317,7 @@ def test_the_bowl_a_job_orders_is_the_bowl_the_builder_makes(dx_mm, d_outer_mm, 
     assert list(built.focus_vox) == [int(v) for v in focus_expected]
 
     # The default source is a weighted halo, not a shell, so "every voxel is
-    # on the sphere" is no longer the question — the drive's own first moment
+    # on the sphere" is no longer the question; the drive's own first moment
     # is. It has to sit on the axis, and at the radius that was ordered.
     com = (idx * w[:, None]).sum(axis=0) / w.sum()
     assert com[0] == pytest.approx(apex_expected[0], abs=0.05)

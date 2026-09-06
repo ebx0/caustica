@@ -55,7 +55,7 @@ def test_das_phases_steer_by_the_commanded_displacement(small_array):
     A finite-aperture focus peaks PROXIMAL of the phase target (classic
     focal shift), so "peak == target" is the wrong gate. The right one:
     the peak DISPLACEMENT between uniform phasing and DAS phasing must
-    equal the commanded displacement within lambda/2 — the systematic
+    equal the commanded displacement within lambda/2, so the systematic
     focal-shift bias cancels in the difference.
     """
     arr = small_array
@@ -91,36 +91,47 @@ def test_das_phases_steer_by_the_commanded_displacement(small_array):
     assert at_target > 3.0 * at_target_uniform
 
 
-def test_binary_voxelization_invariants(small_array):
-    """The legacy shell: one voxel thick, curved, inside the aperture."""
+def test_the_removed_binary_voxelizer_says_what_happened_to_it(small_array):
+    """The voxel shell is gone, and asking for it gets an answer that names D-022.
+
+    An interpreter-level "unexpected keyword argument" would tell a caller only
+    that the name is unknown, not that the model was removed and why, so
+    ``voxelize`` keeps the argument for one release exactly as
+    ``bowl_cw_source`` and ``disc_cw_source`` do: to refuse the removed value.
+    """
     grid = Grid(shape=(96, 96, 96), dx=0.5e-3, pml=PMLSpec(thickness=5e-3))
-    asrc = small_array.voxelize(
-        grid, apex_vox=(48, 48, 12), f0=F0, amplitude=1e5, discretization="binary"
-    )
-    assert asrc.n_elements_represented == small_array.n_elements  # 32/32 present
-    assert asrc.source.n_points == asrc.element_of_voxel.size
-    assert asrc.source.weights is None  # a binary mask drives every voxel alike
-    # Curved shell: z-span roughly the cap depth, radial extent inside aperture.
-    idx = asrc.source.indices
-    r_mm = np.hypot(idx[:, 0] - 48, idx[:, 1] - 48) * 0.5
-    assert r_mm.max() <= (0.030 / 2) * 1e3 + 1.0
-    # Curved shell: z must actually follow the bowl depth (cap height),
-    # not sit in a flat plane (review finding: z geometry was unasserted).
-    h_vox = (0.030 - np.sqrt(0.030**2 - 0.015**2)) / 0.5e-3
-    z_span = idx[:, 2].max() - idx[:, 2].min()
-    assert 0.5 * h_vox <= z_span <= h_vox + 2
-    asrc.source.check_inside(grid)
+    with pytest.raises(ValueError, match="D-022"):
+        small_array.voxelize(
+            grid, apex_vox=(48, 48, 12), f0=F0, amplitude=1e5, discretization="binary"
+        )
+    with pytest.raises(ValueError, match="must be 'offgrid'"):
+        small_array.voxelize(
+            grid, apex_vox=(48, 48, 12), f0=F0, amplitude=1e5, discretization="shell"
+        )
 
 
-def test_binary_voxelization_phase_passthrough(small_array):
+def test_voxelize_apodizes_by_scaling_each_elements_own_deposit(small_array):
+    """Per-element amplitude is a linear weight on that element's drive.
+
+    The gate that makes apodization trustworthy: switching one element off
+    must remove exactly its own area from the deposit and touch nothing else.
+    """
     grid = Grid(shape=(96, 96, 96), dx=0.5e-3, pml=PMLSpec(thickness=5e-3))
-    phases = np.linspace(0, 2 * np.pi, small_array.n_elements, endpoint=False).astype(np.float32)
-    asrc = small_array.voxelize(
-        grid, (48, 48, 12), f0=F0, amplitude=1e5, phases=phases, discretization="binary"
-    )
-    # Every voxel carries exactly its owning element's phase — which is also
-    # the defect: a voxel two elements both reached keeps only the first one.
-    np.testing.assert_array_equal(asrc.source.phases, phases[asrc.element_of_voxel])
+    full = small_array.voxelize(grid, (48, 48, 12), f0=F0, amplitude=1e5)
+    amps = np.ones(small_array.n_elements)
+    amps[3] = 0.0
+    off = small_array.voxelize(grid, (48, 48, 12), f0=F0, amplitude=1e5, amplitudes=amps)
+
+    area_grid = np.pi * (small_array.elem_radius / grid.dx) ** 2
+
+    def drive(asrc):
+        return asrc.source.drive_weights.astype(np.float64) * np.exp(
+            -1j * asrc.source.phases.astype(np.float64)
+        )
+
+    total_full = np.abs(drive(full).sum())
+    total_off = np.abs(drive(off).sum())
+    assert total_full - total_off == pytest.approx(area_grid, rel=2e-3)
 
 
 def test_the_offgrid_array_carries_every_elements_area_and_phase(small_array):
@@ -130,7 +141,7 @@ def test_the_offgrid_array_carries_every_elements_area_and_phase(small_array):
     its own drive phase, and overlapping elements superpose as phasors rather
     than one of them being discarded. So summing the source's complex drive
     over every voxel has to give back the sum of the elements' areas times
-    their phasors — area, phase and superposition in one equality.
+    their phasors: area, phase and superposition in one equality.
     """
     grid = Grid(shape=(96, 96, 96), dx=0.5e-3, pml=PMLSpec(thickness=5e-3))
     # Deliberately NOT evenly spaced around the circle: a full set of roots of

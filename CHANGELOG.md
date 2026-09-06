@@ -13,6 +13,32 @@ measured, and how, is [documented here](https://ebx0.github.io/caustica/validati
 
 ### Changed
 
+- **Transducer model v2.** `caustica.transducers` gives an element four
+  shapes (disc, rectangle, ring sector, spherical segment), per-element
+  amplitude, phase and delay, an equal-area quadrature per shape and one
+  band-limited deposit, plus the Rayleigh integral over the same surfaces.
+  Deposited weights carry the element's closed-form area to 1.2e-16
+  relative at any orientation. `caustica.arrays` re-exports it for one
+  release. An element apodized to zero is left out of the source entirely
+  rather than deposited with zero weight, so `n_points` and the
+  represented-element count describe what actually radiates. Measured
+  against the pre-v2 path in one process, the deposit is unchanged: a
+  128-element spiral gives an identical index set and identical drives, and
+  a focused bowl agrees to 1.9e-8 of its peak voxel. V-11's focal peak ratio
+  now holds for disc, rectangle and spherical segment (1.0100, 1.0118,
+  1.0144 against 1.00 plus or minus 0.02) and is a known failure for a flat
+  annular array at 1.0253; the cause is the engine's absolute amplitude for
+  a flat source lying in one grid plane, not the element model, since a
+  plain disc source containing no element model reads 1.0340 on the same
+  grid and the annular array sits below it at both resolutions.
+- **Removed the `binary` source discretization** (decision D-022):
+  `source.array.discretization` is gone from the job schema and a job that
+  still carries it is refused by name; `bowl_cw_source`, `disc_cw_source`
+  and `TransducerArray.voxelize` keep a `discretization` argument for one
+  release only, to refuse the removed value and say why. `bowl_cw_source`
+  also lost its unused `spacing` argument. Result files keep their
+  `source_discretization` stamp and stay readable.
+
 - **README and `pyproject` claim only what a report or a test backs.** The
   Quickstart said GPU support was "not yet verified on real hardware" while an
   A100 session had already graded the analytic and ITRUSST suites from cupy. It

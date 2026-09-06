@@ -1,7 +1,7 @@
 """Explicit element tables: bring your own transducer geometry.
 
-:class:`~caustica.arrays.transducer.TransducerArray` has always accepted an
-arbitrary ``(n, 3)`` set of element centers and normals — the only thing
+:class:`~caustica.transducers.TransducerArray` has always accepted an
+arbitrary ``(n, 3)`` set of element centers and normals; the only thing
 missing was a door for people whose layout is neither an Archimedean spiral
 nor a bowl (a manufacturer's element table, a CAD export, an optimizer's
 output). This module is that door: a tiny reader for ``.npz`` / ``.csv``
@@ -11,7 +11,7 @@ element tables, plus the builder that turns a table into a
 Units follow the layer they belong to: this module is L0/L1 and speaks
 **metres**, like every other caustica geometry API. The ``elements`` *job*
 kind (:mod:`caustica.config.job`) speaks **millimetres**, like every other
-job field — including inside the referenced file. The file itself carries no
+job field, including inside the referenced file. The file itself carries no
 unit tag, so the schema fixes it: an element table read by a job is in mm.
 """
 
@@ -22,12 +22,12 @@ from pathlib import Path
 
 import numpy as np
 
-from caustica.arrays.transducer import TransducerArray
+from caustica.transducers.model import TransducerArray
 
 __all__ = ["element_table_digest", "elements_array", "read_element_file"]
 
 #: Rounding applied before hashing an element table [m]. 1 pm is ~1e-10 of a
-#: therapy aperture — far below anything physical, far above float64 noise —
+#: therapy aperture (far below anything physical, far above float64 noise),
 #: so the digest is stable across the inline and file paths.
 _DIGEST_DECIMALS = 12
 
@@ -43,14 +43,14 @@ def read_element_file(path: str | Path) -> tuple[np.ndarray, np.ndarray | None]:
     Two formats, chosen by suffix:
 
     ``.npz``
-        ``positions`` — ``(n, 3)``, required; ``normals`` — ``(n, 3)``,
+        ``positions``: ``(n, 3)``, required; ``normals``: ``(n, 3)``,
         optional. Any other array in the file is ignored.
     ``.csv``
         3 or 6 numeric columns (``x,y,z`` or ``x,y,z,nx,ny,nz``),
         comma- or whitespace-separated. One optional header line, plus
         ``#`` comment lines, are skipped.
 
-    Values are returned exactly as stored — this reader assigns no units.
+    Values are returned exactly as stored: this reader assigns no units.
     """
     path = Path(path)
     if not path.exists():
@@ -78,7 +78,7 @@ def read_element_file(path: str | Path) -> tuple[np.ndarray, np.ndarray | None]:
             try:
                 rows.append([float(p) for p in parts])
             except ValueError:
-                # The first non-numeric line before any data is the header —
+                # The first non-numeric line before any data is the header,
                 # however many comment/blank lines preceded it.
                 if not rows and not header_used:
                     header_used = True
@@ -104,8 +104,8 @@ def read_element_file(path: str | Path) -> tuple[np.ndarray, np.ndarray | None]:
 def element_table_digest(array: TransducerArray) -> str:
     """A short content hash of an array's element table (positions + normals).
 
-    Summary statistics cannot falsify an element table. Aperture numbers —
-    element count, maximum radius, shell depth — are order statistics: they
+    Summary statistics cannot falsify an element table. Aperture numbers
+    (element count, maximum radius, shell depth) are order statistics: they
     survive mirroring the array, rotating it, re-scattering every element but
     the outermost, swapping two elements' radii, or changing every normal.
     Each of those changes the radiated field by tens of per cent while every
@@ -133,8 +133,8 @@ def elements_array(
     """Build a :class:`TransducerArray` from explicit element centers [m].
 
     ``normals=None`` points every element at the geometric focus
-    ``(0, 0, focal_length)`` — the apex-frame convention shared with
-    :func:`~caustica.arrays.transducer.archimedean_spiral` and
+    ``(0, 0, focal_length)``, the apex-frame convention shared with
+    :func:`~caustica.transducers.archimedean_spiral` and
     :mod:`caustica.analytic`. Supplied normals are normalized here, so a
     table of un-normalized direction vectors is accepted as-is.
     """
@@ -148,7 +148,7 @@ def elements_array(
     r_max = float(np.linalg.norm(pos[:, :2], axis=1).max())
     if r_max > _MAX_APERTURE_R:
         raise ValueError(
-            f"elements sit up to {r_max:.4g} m from the beam axis — that is not a "
+            f"elements sit up to {r_max:.4g} m from the beam axis; that is not a "
             f"transducer, it is a unit mistake. caustica geometry APIs take METRES; "
             f"a job file's element table takes MILLIMETRES."
         )

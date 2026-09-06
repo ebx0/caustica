@@ -19,7 +19,6 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from caustica.analytic.geometry import spherical_cap_points
 from caustica.core.backend import CausticaWarning
 from caustica.core.grid import Grid
 
@@ -51,14 +50,17 @@ class CWSource:
         so its weights are all 1.0 and ``None`` is the honest spelling of
         that; a curved one crosses more voxels per unit area than a flat one
         and needs the weights to say so (see
-        :mod:`caustica.geometry.offgrid`). Weights may be negative — a
+        :mod:`caustica.geometry.offgrid`). Weights may be negative: a
         band-limited interpolant has side-lobes.
     discretization:
         How the continuous geometry became these voxels, for the record. It
         travels into ``result.h5`` so a stored pressure says which generation
-        of the source model produced it — the difference is 13-18 % of an
-        absolute amplitude, which is not something a reader should have to
-        infer from a commit date.
+        of the source model produced it: the pre-2026-08-24 ``binary`` voxel
+        shells and today's band-limited ``offgrid`` deposit differ by 13 to
+        18 % of an absolute amplitude, which is not something a reader of an
+        old result file should have to infer from a commit date. The library
+        only produces ``offgrid`` now (decision D-022); the stamp stays so
+        those files remain readable.
     """
 
     indices: np.ndarray
@@ -102,7 +104,7 @@ class CWSource:
 
     @property
     def drive_weights(self) -> np.ndarray:
-        """Per-voxel weights, materialized — ones when the drive is uniform."""
+        """Per-voxel weights, materialized; ones when the drive is uniform."""
         if self.weights is None:
             return np.ones(self.n_points, dtype=np.float32)
         return self.weights
@@ -173,6 +175,28 @@ def plane_cw_source(
     )
 
 
+#: The pre-2026-08-24 voxel-shell source model. It over-drove a bowl by 13 to
+#: 25 %, left a tenth of the shell undriven and rounded element centres onto
+#: the lattice; it was removed at v0.1 (decision D-022) and the argument
+#: survives only until `caustica.validation.itrusst` stops threading it.
+_REMOVED_DISCRETIZATIONS = ("binary",)
+
+
+def _check_discretization(value: str) -> None:
+    """Refuse a source model this library no longer produces."""
+    if value == "offgrid":
+        return
+    if value in _REMOVED_DISCRETIZATIONS:
+        raise ValueError(
+            f"discretization={value!r} was removed at v0.1 (decision D-022): the "
+            f"voxel-shell source over-drove a bowl by 13 to 25 % and rounded element "
+            f"centres onto the lattice, so results computed with it are not "
+            f"reproducible here. Drop the argument to get the band-limited source; "
+            f"an old result file keeps its own source_discretization stamp."
+        )
+    raise ValueError(f"discretization must be 'offgrid', got {value!r}")
+
+
 def disc_cw_source(
     grid: Grid,
     f0: float,
@@ -187,7 +211,7 @@ def disc_cw_source(
 ) -> CWSource:
     """Flat circular piston: the other source condition the benchmarks use.
 
-    A disc lying in a grid plane has no staircase to speak of — its area is
+    A disc lying in a grid plane has no staircase to speak of: its area is
     ``pi r^2`` and a voxel mask gets that right to the boundary layer. What a
     mask still cannot do is put the disc at a position between voxels, or
     give it exactly its own area rather than a lattice count, so this goes
@@ -202,33 +226,8 @@ def disc_cw_source(
         raise ValueError(f"center_vox must have 3 entries, got {center_vox}")
     if radius <= 0:
         raise ValueError(f"radius must be > 0, got {radius}")
-    if discretization not in ("offgrid", "binary"):
-        raise ValueError(f"discretization must be 'offgrid' or 'binary', got {discretization!r}")
+    _check_discretization(discretization)
     label = f"disc(r={radius * 1e3:.1f}mm)"
-
-    if discretization == "binary":
-        r_vox = int(np.ceil(radius / grid.dx))
-        span = np.arange(-r_vox, r_vox + 1)
-        ox, oy = np.meshgrid(span, span, indexing="ij")
-        keep = (ox * grid.dx) ** 2 + (oy * grid.dx) ** 2 <= radius**2
-        idx = np.stack(
-            [
-                ox[keep] + center_vox[0],
-                oy[keep] + center_vox[1],
-                np.full(int(keep.sum()), center_vox[2]),
-            ],
-            axis=1,
-        ).astype(np.int64)
-        src = CWSource(
-            indices=idx,
-            phases=np.zeros(len(idx), np.float32),
-            amplitude=amplitude,
-            f0=f0,
-            label=label + " binary",
-            discretization="binary",
-        )
-        src.check_inside(grid)
-        return src
 
     from caustica.geometry.offgrid import band_limited_weights, disc_points  # noqa: PLC0415
 
@@ -268,7 +267,6 @@ def bowl_cw_source(
     aperture_radius: float,
     roc: float,
     apex_vox: tuple[int, ...],
-    spacing: float | None = None,
     *,
     discretization: str = "offgrid",
     bli_tolerance: float = 0.2,
@@ -280,48 +278,18 @@ def bowl_cw_source(
     bowl apex and the geometric focus lands at ``apex_vox + roc/dx`` along z.
     Phase is uniform (natural geometric focusing).
 
-    ``discretization`` chooses how the continuous cap becomes grid quantities:
-
-    ``"offgrid"`` (default)
-        Weighted, band-limited: the cap's closed-form area is divided over
-        equal-area quadrature points and each is deposited through a
-        band-limited interpolant, so the grid weights sum to the area in
-        grid squares. This is what makes the realized amplitude match the
-        request for a *curved* source; ``spacing`` is ignored and
-        ``upsampling`` sets the quadrature density instead. See
-        :mod:`caustica.geometry.offgrid`.
-
-    ``"binary"``
-        The pre-2026-08-24 behaviour: sample the cap at ``spacing``
-        (default dx/2), round to voxels, deduplicate, drive each equally.
-        Kept because it is what every result before that date was computed
-        with, and reproducing one needs it. It over-drives a bowl by 13-25 %
-        and leaves 10 % of the shell undriven; both are measured in
-        ``benchmarks/reports/geometry/``.
+    The cap's closed-form area is divided over equal-area quadrature points and
+    each is deposited through a band-limited interpolant, so the grid weights
+    sum to the area in grid squares. That is what makes the realized amplitude
+    match the request for a *curved* source; ``upsampling`` sets the
+    quadrature density. See :mod:`caustica.geometry.offgrid`.
     """
     if grid.ndim != 3:
         raise ValueError("bowl_cw_source requires a 3-D grid")
     if len(apex_vox) != 3:
         raise ValueError(f"apex_vox must have 3 entries, got {apex_vox}")
-    if discretization not in ("offgrid", "binary"):
-        raise ValueError(f"discretization must be 'offgrid' or 'binary', got {discretization!r}")
+    _check_discretization(discretization)
     label = f"bowl(a={aperture_radius * 1e3:.1f}mm, roc={roc * 1e3:.1f}mm)"
-
-    if discretization == "binary":
-        ds = grid.dx / 2.0 if spacing is None else float(spacing)
-        points, _normals, _areas = spherical_cap_points(aperture_radius, roc, ds)
-        idx = np.round(points / grid.dx).astype(np.int64) + np.asarray(apex_vox, np.int64)
-        idx = np.unique(idx, axis=0)
-        src = CWSource(
-            indices=idx,
-            phases=np.zeros(idx.shape[0], np.float32),
-            amplitude=amplitude,
-            f0=f0,
-            label=label + " binary",
-            discretization="binary",
-        )
-        src.check_inside(grid)
-        return src
 
     from caustica.geometry.offgrid import spherical_cap_deposit  # noqa: PLC0415
 

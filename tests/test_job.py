@@ -1,4 +1,4 @@
-"""The caustica-job/1 contract — round-trip, scene/volume paths,
+"""The caustica-job/1 contract: round-trip, scene/volume paths,
 derived-geometry falsification, and validate's catches.
 
 The stored_setup and phantom_dataset cases moved out with the
@@ -220,6 +220,41 @@ def test_spiral_natural_vs_steered_phases(tmp_path):
     np.testing.assert_array_equal(built2.source.indices, built.source.indices)
 
 
+def test_a_job_that_still_names_a_discretization_is_told_what_happened_to_it(tmp_path):
+    """Decision D-022: ``source.array.discretization`` left the schema at v0.1.
+
+    ``extra="forbid"`` would already refuse the key, but with "Extra inputs
+    are not permitted", which reads like a typo. The key was not a typo for
+    two years, so both array families answer it by name, and the field is
+    gone from the generated schema rather than merely ignored.
+    """
+    from caustica.config.job import job_schema
+
+    for kind, value in (
+        ({"kind": "bowl", "d_outer_mm": 10.0, "roc_mm": 12.0}, "binary"),
+        ({"kind": "bowl", "d_outer_mm": 10.0, "roc_mm": 12.0}, "offgrid"),
+        (
+            {
+                "kind": "archimedean_spiral",
+                "n_elements": 16,
+                "d_outer_mm": 10.0,
+                "d_inner_mm": 4.0,
+                "roc_mm": 12.0,
+            },
+            "binary",
+        ),
+    ):
+        d = scene_job_dict()
+        d["source"]["array"] = {**kind, "discretization": value}
+        with pytest.raises(ValidationError, match="D-022"):
+            _ADAPTER.validate_python(d)
+
+    schema = json.dumps(job_schema())
+    assert "discretization" not in schema
+    for name in ("BowlArrayConfig", "SpiralArrayConfig"):
+        assert "discretization" not in json.dumps(job_schema()["$defs"][name]["properties"])
+
+
 def test_derived_geometry_is_falsifiable(tmp_path):
     """The alpha rule generalized: recorded derived values are re-derived and checked."""
     d = scene_job_dict()
@@ -286,7 +321,7 @@ def test_validate_warns_that_westervelt_on_a_beta_zero_medium_is_a_linear_solve(
     """The UX trap: a nonlinear solver over water() runs linear physics.
 
     beta=0 everywhere means the westervelt engine has no nonlinear term to
-    apply, so the solve is bit-identical to `linear` (the guarantee) — a
+    apply, so the solve is bit-identical to `linear` (the guarantee): a
     run labelled "westervelt" whose harmonics are numerical residue. Loud,
     but never a block: a linear reference run through the nonlinear engine is
     a legitimate thing to ask for.

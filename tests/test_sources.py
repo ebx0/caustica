@@ -4,7 +4,13 @@ import numpy as np
 import pytest
 
 from caustica import Grid, PMLSpec
-from caustica.sources import CWSource, bowl_cw_source, plane_cw_source, ramp_envelope
+from caustica.sources import (
+    CWSource,
+    bowl_cw_source,
+    disc_cw_source,
+    plane_cw_source,
+    ramp_envelope,
+)
 
 
 def test_cwsource_validation():
@@ -53,39 +59,46 @@ def test_plane_source_1d_is_single_voxel():
     assert src.indices.tolist() == [[20]]
 
 
-def test_bowl_source_voxelization_invariants():
-    """The binary shell: one voxel thick, apex on its voxel, inside the aperture."""
+def test_the_removed_binary_source_says_what_happened_to_it():
+    """A caller who still asks for the voxel shell gets an answer, not a typo."""
     g = Grid(shape=(64, 64, 80), dx=0.5e-3)
-    a, roc = 6e-3, 15e-3  # 12 and 30 voxels
-    apex = (32, 32, 10)
-    src = bowl_cw_source(
-        g,
-        f0=1e6,
-        amplitude=1e5,
-        aperture_radius=a,
-        roc=roc,
-        apex_vox=apex,
-        discretization="binary",
-    )
-    assert src.n_points > 100
-    assert src.weights is None  # a binary shell drives every voxel alike
-    # Unique voxels only (CWSource enforces), all inside the grid.
-    src.check_inside(g)
-    # Depth span ~ bowl depth h; transverse extent within the aperture.
-    h_vox = (roc - np.sqrt(roc**2 - a**2)) / g.dx
-    assert src.indices[:, 2].min() == apex[2]
-    assert src.indices[:, 2].max() <= apex[2] + int(np.ceil(h_vox)) + 1
-    r_trans = np.hypot(src.indices[:, 0] - 32, src.indices[:, 1] - 32) * g.dx
-    assert r_trans.max() <= a + g.dx
+    with pytest.raises(ValueError, match="removed at v0.1"):
+        bowl_cw_source(
+            g,
+            f0=1e6,
+            amplitude=1e5,
+            aperture_radius=6e-3,
+            roc=15e-3,
+            apex_vox=(32, 32, 10),
+            discretization="binary",
+        )
+    with pytest.raises(ValueError, match="removed at v0.1"):
+        disc_cw_source(
+            g,
+            f0=1e6,
+            amplitude=1e5,
+            radius=4e-3,
+            center_vox=(32, 32, 10),
+            discretization="binary",
+        )
+    with pytest.raises(ValueError, match="must be 'offgrid'"):
+        disc_cw_source(
+            g,
+            f0=1e6,
+            amplitude=1e5,
+            radius=4e-3,
+            center_vox=(32, 32, 10),
+            discretization="nonsense",
+        )
 
 
 def test_the_offgrid_bowl_carries_the_caps_own_area():
     """The default discretization, and the property that makes it worth having.
 
-    A binary shell's strength is its voxel count, which for a curved surface
-    is 13-25 % more than its area and does not converge as dx shrinks. The
+    The voxel shell this replaced counted voxels, which for a curved surface
+    is 13 to 25 % more than its area and does not converge as dx shrinks. The
     off-grid source carries the closed-form area instead, so the sum of its
-    weights IS that area in grid squares — the quantity O'Neil integrates
+    weights IS that area in grid squares, the quantity O'Neil integrates
     over. Everything downstream follows from that one identity.
     """
     g = Grid(shape=(64, 64, 80), dx=0.5e-3)
@@ -97,17 +110,10 @@ def test_the_offgrid_bowl_carries_the_caps_own_area():
     assert src.weights is not None
     assert float(src.drive_weights.sum()) == pytest.approx(area / g.dx**2, rel=1e-3)
     src.check_inside(g)
-    # It is a halo, not a shell: several times the points, and signed.
-    shell = bowl_cw_source(
-        g,
-        f0=1e6,
-        amplitude=1e5,
-        aperture_radius=a,
-        roc=roc,
-        apex_vox=apex,
-        discretization="binary",
-    )
-    assert src.n_points > 3 * shell.n_points
+    # It is a halo, not a shell: it reaches well past the cap's own voxels,
+    # and it is signed.
+    cap_voxels = int(np.ceil(area / g.dx**2))
+    assert src.n_points > 3 * cap_voxels
     assert src.drive_weights.min() < 0.0  # the interpolant's side-lobes
     # ...and it still sits where the bowl was ordered: the drive's centre of
     # mass is on the axis, at the depth the cap's own centroid has.

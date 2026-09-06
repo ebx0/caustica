@@ -40,7 +40,6 @@ import numpy as np
 from pydantic import Field, TypeAdapter, field_validator, model_validator
 
 from caustica.arrays.elements import element_table_digest, elements_array, read_element_file
-from caustica.arrays.transducer import TransducerArray, archimedean_spiral
 from caustica.config.kinds import (
     ArrayKindConfig,
     MediumKindConfig,
@@ -67,6 +66,7 @@ from caustica.solvers.base import (
     geometry_refusal,
 )
 from caustica.sources import CWSource, bowl_cw_source
+from caustica.transducers import TransducerArray, archimedean_spiral
 
 JOB_FORMAT = "caustica-job/1"
 
@@ -348,6 +348,24 @@ MediumConfig = medium_kinds.annotation()
 # ---------------------------------------------------------------- array kinds
 
 
+def _refuse_discretization(data: Any) -> Any:
+    """Refuse a job that still carries ``source.array.discretization``.
+
+    ``extra="forbid"`` would already reject the key, but with "Extra inputs are
+    not permitted", which reads like a typo. This key was not a typo for two
+    years, so it gets an answer that says what happened to it.
+    """
+    if isinstance(data, dict) and "discretization" in data:
+        raise ValueError(
+            "source.array.discretization was removed at v0.1 (decision D-022). The "
+            "band-limited off-grid source is the only one now: delete the key. The "
+            "old 'binary' voxel shell over-drove a bowl by 13 to 25 % and rounded "
+            "element centres onto the lattice; results computed with it keep their "
+            "own source_discretization stamp in result.h5 and stay readable."
+        )
+    return data
+
+
 class _ElementArrayConfig(ArrayKindConfig):
     """Shared behaviour of every kind that resolves to a multi-element array.
 
@@ -356,15 +374,10 @@ class _ElementArrayConfig(ArrayKindConfig):
     record are identical, so they live here once.
     """
 
-    discretization: Literal["offgrid", "binary"] = Field(
-        "offgrid",
-        description=(
-            "How elements become grid quantities. 'offgrid' (default) places each "
-            "element at its own position and deposits its area through a band-limited "
-            "interpolant; 'binary' is the pre-2026-08-24 voxelizer, kept for "
-            "reproducing older results, and rounds element centres onto the lattice"
-        ),
-    )
+    @model_validator(mode="before")
+    @classmethod
+    def _refuse_removed_discretization(cls, data: Any) -> Any:
+        return _refuse_discretization(data)
 
     def build(self) -> TransducerArray:
         """The transducer this recipe describes (always re-derived, never baked)."""
@@ -419,12 +432,10 @@ class _ElementArrayConfig(ArrayKindConfig):
             f0=drive.f0_hz,
             amplitude=drive.amplitude_pa,
             phases=phases,
-            discretization=self.discretization,
         )
         extra.update(self.derived(arr))
         extra["source_voxels"] = int(asrc.source.n_points)
         extra["elements_represented"] = asrc.n_elements_represented
-        extra["discretization"] = self.discretization
         return asrc.source, extra
 
 
@@ -475,16 +486,11 @@ class BowlArrayConfig(ArrayKindConfig):
     kind: Literal["bowl"] = "bowl"
     d_outer_mm: float = Field(..., gt=0.0)
     roc_mm: float = Field(..., gt=0.0)
-    discretization: Literal["offgrid", "binary"] = Field(
-        "offgrid",
-        description=(
-            "How the continuous cap becomes grid quantities. 'offgrid' (default) "
-            "spreads the cap's closed-form area over band-limited weights, so the "
-            "realized amplitude matches the request; 'binary' is the pre-2026-08-24 "
-            "one-voxel-thick shell, kept for reproducing older results, and "
-            "over-drives a bowl by 13-25%"
-        ),
-    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _refuse_removed_discretization(cls, data: Any) -> Any:
+        return _refuse_discretization(data)
 
     @model_validator(mode="after")
     def _check(self) -> BowlArrayConfig:
@@ -528,11 +534,9 @@ class BowlArrayConfig(ArrayKindConfig):
             aperture_radius=self.d_outer_mm / 2.0 * _MM,
             roc=self.roc_mm * _MM,
             apex_vox=apex_vox,
-            discretization=self.discretization,
         )
         extra: dict[str, Any] = dict(self.derived())
         extra["source_voxels"] = int(src.n_points)
-        extra["discretization"] = self.discretization
         extra["drive_area_grid_squares"] = float(src.drive_weights.sum())
         return src, extra
 
@@ -933,8 +937,8 @@ class BuiltJob:
     derived: dict[str, Any] = field(default_factory=dict)
     #: Where THIS job's relative paths resolve (the job file's folder, or None
     #: for a job that was never a file). ``job`` above keeps the ORIGINAL,
-    #: unresolved config -- resolution happens into local copies during the
-    #: build -- so without this field the base directory is simply lost, and
+    #: unresolved config (resolution happens into local copies during the
+    #: build), so without this field the base directory is simply lost, and
     #: anyone rebuilding or re-dumping the job silently resolves against the
     #: wrong place (adversarial review, 2026-08-22: `simulate(BuiltJob,
     #: out=<path>)` resolved a medium file against a temp directory).

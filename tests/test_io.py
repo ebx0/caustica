@@ -56,7 +56,7 @@ def test_float16_roundtrip_within_contract():
 def test_float16_falls_back_to_float32_when_contract_exceeded():
     rng = np.random.default_rng(1)
     arr = (rng.standard_normal(1000) * 1e6).astype(np.float32)
-    # float16 carries ~4.9e-4 relative mantissa precision near peak — a 1e-5
+    # float16 carries ~4.9e-4 relative mantissa precision near peak, so a 1e-5
     # contract is unmeetable, so the field must stay float32, verbatim.
     q = try_float16(arr, max_norm_err=1e-5)
     assert q.dtype_name == "float32"
@@ -242,7 +242,7 @@ def test_load_result_with_geometry_opens_the_file_once(tmp_path, mini_run, monke
 
     ``caustica report`` used to call ``load_result`` and then re-open
     result.h5 to parse the same attrs from a second copy of the schema kept
-    in the report module — a copy that could drift from the writer without
+    in the report module, a copy that could drift from the writer without
     anything noticing. The copy is gone; counting the opens keeps it gone.
     """
     import h5py
@@ -281,7 +281,7 @@ def test_result_geometry_falls_back_when_the_apex_stamp_is_absent(tmp_path, mini
     """An older file carries no apex/focus stamp: origin, and say so.
 
     Every output folder written before that stamp is exactly this shape, and the
-    report's "mm from the apex" caveat is driven by ``apex_known`` — so the
+    report's "mm from the apex" caveat is driven by ``apex_known``, so the
     fallback is contract, not convenience.
     """
     path = _save(tmp_path, mini_run, name="pre_m10d")
@@ -356,7 +356,7 @@ def test_torn_file_near_highwater_is_detected_and_regenerated(tmp_path, mini_run
     for name in names:
         store.save(name, res, src, dx=grid.dx, grid_shape=grid.shape, pml_vox=grid.pml_vox)
     # Corrupt the newest file (inside the high-water validation zone). This
-    # cannot happen through the atomic writer — it models external damage.
+    # cannot happen through the atomic writer; it models external damage.
     store.path("s3").write_bytes(b"garbage that is not HDF5")
     assert not validate_result_file(store.path("s3"))
     assert store.missing(names) == ["s3"]
@@ -435,8 +435,12 @@ def test_a_result_says_which_numerics_and_which_source_made_it(tmp_path):
     the Nyquist wavenumber, and giving sources their own area instead of
     their voxel count. There is no backward compatibility to keep before
     v0.1, but a stored MPa still has to say which side of those it came
-    from — inferring it from a commit date is not provenance.
+    from; inferring it from a commit date is not provenance. The voxel-shell
+    source itself was removed at v0.1 (decision D-022), so the stamp exists
+    now to keep the files it produced readable, not to label new ones.
     """
+    from dataclasses import replace
+
     import h5py
 
     from caustica.solvers.kspace.engine import NUMERICS_SCHEME
@@ -445,22 +449,34 @@ def test_a_result_says_which_numerics_and_which_source_made_it(tmp_path):
     grid = Grid(shape=(40, 40, 56), dx=0.5e-3, pml=PMLSpec(thickness=3e-3))
     medium = Medium.homogeneous(grid.shape, water())
     spec = CWRunSpec(min_settle_periods=2, max_settle_periods=6, n_record_periods=2)
-    for mode in ("offgrid", "binary"):
-        src = bowl_cw_source(grid, 1e6, 1e5, 4e-3, 10e-3, (20, 20, 8), discretization=mode)
-        res = solvers.get("linear")().run(
-            grid, medium, src, spec, backend="numpy", reference_point=(20, 20, 28)
-        )
-        path = save_result(
-            tmp_path / f"{mode}.h5",
-            res,
-            src,
-            dx=grid.dx,
-            grid_shape=grid.shape,
-            pml_vox=grid.pml_vox,
-        )
-        with h5py.File(path, "r") as hf:
-            assert hf.attrs["numerics_scheme"] == NUMERICS_SCHEME
-            assert hf.attrs["source_discretization"] == mode
+    src = bowl_cw_source(grid, 1e6, 1e5, 4e-3, 10e-3, (20, 20, 8))
+    res = solvers.get("linear")().run(
+        grid, medium, src, spec, backend="numpy", reference_point=(20, 20, 28)
+    )
+    path = save_result(
+        tmp_path / "offgrid.h5",
+        res,
+        src,
+        dx=grid.dx,
+        grid_shape=grid.shape,
+        pml_vox=grid.pml_vox,
+    )
+    with h5py.File(path, "r") as hf:
+        assert hf.attrs["numerics_scheme"] == NUMERICS_SCHEME
+        assert hf.attrs["source_discretization"] == "offgrid"
+
+    # A file written before the removal still reads back its own stamp.
+    legacy = replace(src, discretization="binary")
+    path = save_result(
+        tmp_path / "legacy.h5",
+        res,
+        legacy,
+        dx=grid.dx,
+        grid_shape=grid.shape,
+        pml_vox=grid.pml_vox,
+    )
+    with h5py.File(path, "r") as hf:
+        assert hf.attrs["source_discretization"] == "binary"
 
 
 def test_every_harmonic_is_stored_as_real_and_imaginary(tmp_path):
