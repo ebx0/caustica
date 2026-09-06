@@ -67,6 +67,21 @@ measured, and how, is [documented here](https://ebx0.github.io/caustica/validati
 
 ### Added
 
+- **Power-law absorption in the material schema.** `Material` carries
+  `alpha0_db_cm_mhz_y` and `y` beside the legacy single-frequency
+  `alpha_np_m`, plus thermal conductivity, specific heat, perfusion and a
+  source string. `MaterialDB.y()` returns the table's common exponent or
+  refuses a mixed table naming every offender; jobs gained an `absorption`
+  section (`single_frequency` or `power_law`, `y: null` reads the exponent
+  off the table) resolved at build time, so `caustica validate` refuses a
+  mixed table before anything is built. The law is evaluated at the drive
+  frequency where that frequency is known, in the job builder and in
+  `MediumVolume.to_medium(f0_hz=...)`. `TISSUE_LIBRARY` carries IT'IS V4.2
+  thermal values for water, skin, fat, muscle, fibroglandular, liver, brain
+  and blood, the last three new rows. The solvers still apply one `alpha`
+  at every frequency, and say so in a warning on every power-law job, until
+  the engine's absorption model lands. No trajectory moves.
+
 - **Solvers.** A shared k-space PSTD CW engine behind two registered solvers,
   `linear` and `westervelt`, differing only in whether the nonlinear term
   enters the pressure update. Exact-period time step under a CFL limit,

@@ -1,4 +1,4 @@
-"""Material DB — notebook TISSUE_PROPS parity is a hard contract."""
+"""Material DB: notebook TISSUE_PROPS parity is a hard contract."""
 
 import pytest
 from pydantic import ValidationError
@@ -52,7 +52,7 @@ def test_db_json_roundtrip_preserves_int_keys():
 
 def test_tissue_library_values_pinned_to_the_digit():
     """The values MOVED from the uwcem tissue table are
-    unchanged to the digit. These literals are frozen on purpose — a drifted
+    unchanged to the digit. These literals are frozen on purpose, because a drifted
     number silently redefines what every exported phantom means."""
     from caustica.materials import DB_CM_TO_NP_M, TISSUE_LIBRARY
 
@@ -90,6 +90,33 @@ def test_tissue_library_values_pinned_to_the_digit():
             (0.40, 0.60),
             1.1,
             (9.6, 11.3),
+        ),
+        # The three organ rows are IT'IS V4.2 throughout; their attenuation
+        # prefactor is the database's alpha0 [Np/m/MHz^b] in dB/(cm MHz^b),
+        # so this pins the raw number AND the conversion.
+        "liver": (
+            "Liver",
+            (1541.5, 1611.0),
+            (1050.0, 1158.0),
+            (6.915 / DB_CM_TO_NP_M,) * 2,
+            1.0,
+            (6.54, 8.72),
+        ),
+        "brain": (
+            "Brain (average)",
+            (1506.0, 1565.0),
+            (1041.0, 1050.0),
+            (6.8032 / DB_CM_TO_NP_M,) * 2,
+            1.3,
+            (6.55, 7.05),
+        ),
+        "blood": (
+            "Blood",
+            (1559.2, 1590.0),
+            (1025.0, 1060.0),
+            (2.3676 / DB_CM_TO_NP_M,) * 2,
+            1.0498,
+            (6.0, 6.3),
         ),
     }
     assert set(TISSUE_LIBRARY) == set(expected)

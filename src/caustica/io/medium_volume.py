@@ -1,7 +1,7 @@
-"""``medium_volume`` — the ONE door for volume media.
+"""``medium_volume``: the ONE door for volume media.
 
 A single ``.npz`` that a simulation eats directly, owned by caustica. Every
-phantom source — whoever produced it — enters the library through this
+phantom source, whoever produced it, enters the library through this
 format; nothing source-specific lives here.
 
 Layout (a single ``.npz``)::
@@ -16,9 +16,9 @@ Layout (a single ``.npz``)::
 
 Two honest modes, recorded in the file itself:
 
-* **label mode** — ``labels`` + ``materials`` reconstruct the medium exactly
+* **label mode**: ``labels`` + ``materials`` reconstruct the medium exactly
   (piecewise-constant tissue);
-* **continuous mode** — the four dense volumes are stored because they carry
+* **continuous mode**: the four dense volumes are stored because they carry
   information the labels cannot (measured per-voxel heterogeneity, noise);
   ``labels`` stays as the id map for tissue-wise analysis.
 
@@ -26,8 +26,15 @@ The grid belongs to the file: shape and dx are read, never chosen, so a job
 cannot silently run a resampled ghost of the data (the ``medium_volume`` job
 kind rejects an explicit ``grid`` section).
 
+The ``materials`` member is whatever a :class:`~caustica.materials.MaterialDB`
+serializes to, so a table written today can carry the power-law absorption
+fields (``alpha0_db_cm_mhz_y``, ``y``) and the thermal fields. A file written
+before those existed carries ``alpha_np_m`` alone and loads as the legacy,
+frequency-independent form, unchanged. A power-law table has no alpha volume
+until a frequency is named, so :meth:`MediumVolume.to_medium` takes ``f0_hz``.
+
 Compatibility: this is the pre-split phantom exporter's layout promoted
-into the library — the reader accepts the pre-split tags
+into the library, and the reader accepts the pre-split tags
 (``caustica-phantom/1`` and the pre-rename ``hifusim-phantom/1``) so the
 existing multi-GB local datasets load unchanged, byte for byte, with no
 rebuild. The writer is public: ``write_medium_volume(...)`` is
@@ -53,9 +60,9 @@ from caustica.medium import Medium
 MEDIUM_VOLUME_FORMAT = "caustica-medium-volume/1"
 #: Tags written by the pre-split phantom exporter (and its pre-rename
 #: spelling). Readers accept them so the existing local datasets
-#: — hours of CPU work — never need a rebuild just to restamp a string.
+#: (hours of CPU work) never need a rebuild just to restamp a string.
 LEGACY_FORMAT_TAGS = frozenset({"caustica-phantom/1", "hifusim-phantom/1"})
-#: What the reader accepts — retire aliases by shrinking THIS set only.
+#: What the reader accepts; retire aliases by shrinking THIS set only.
 ACCEPTED_FORMAT_TAGS = frozenset({MEDIUM_VOLUME_FORMAT}) | LEGACY_FORMAT_TAGS
 
 #: The four dense volumes a :class:`~caustica.medium.Medium` is built from,
@@ -68,7 +75,7 @@ class MediumVolumeError(RuntimeError):
 
 
 def _label_histogram(labels: np.ndarray, n: int) -> np.ndarray:
-    """Counts per id in ``[0, n)``, chunked — no full-volume sort/copy."""
+    """Counts per id in ``[0, n)``, chunked: no full-volume sort/copy."""
     counts = np.zeros(n, dtype=np.int64)
     flat = labels.ravel()
     step = 16_000_000
@@ -153,18 +160,32 @@ class MediumVolume:
 
     # ------------------------------------------------------------- medium
 
-    def to_medium(self, linear: bool = False) -> Medium:
+    def to_medium(self, linear: bool = False, f0_hz: float | None = None) -> Medium:
         """Build the :class:`~caustica.medium.Medium` the solvers consume.
 
         Continuous mode passes the stored volumes straight through (keeping
         the labels as ``id_map``); label mode goes through
         :meth:`Medium.from_id_map`, which validates every id against the
         MaterialDB. ``linear=True`` zeroes ``beta`` (a cheap linear pass
-        before committing to Westervelt — hand-zeroing volumes at call sites
+        before committing to Westervelt; hand-zeroing volumes at call sites
         is how someone eventually zeroes the wrong one).
+
+        ``f0_hz`` is required only when the file's material table declares
+        power-law absorption: an alpha volume in Np/m does not exist until a
+        frequency is named. A legacy table (``alpha_np_m``) ignores it.
         """
         if self.properties is None:
-            medium = Medium.from_id_map(self.labels.astype(np.int64), self.materials)
+            db = self.materials
+            if db.has_power_law:
+                if f0_hz is None:
+                    raise MediumVolumeError(
+                        "this volume's material table declares power-law absorption "
+                        "(alpha0_db_cm_mhz_y with y), so its alpha [Np/m] is not defined "
+                        "until a frequency is named. Call to_medium(f0_hz=...) with the "
+                        "drive frequency; the job path passes drive.f0_mhz for you."
+                    )
+                db = db.at_frequency(f0_hz)
+            medium = Medium.from_id_map(self.labels.astype(np.int64), db)
         else:
             p = self.properties
             medium = Medium(
@@ -194,7 +215,7 @@ def write_medium_volume(
     Give ``labels`` + ``materials`` (label mode), ``properties`` (a dict with
     ``alpha``/``rho``/``c``/``beta`` float32 volumes, continuous mode), or
     both. With properties only, ``labels`` defaults to all-zeros and
-    ``materials`` to a single water entry — bookkeeping the format requires;
+    ``materials`` to a single water entry, bookkeeping the format requires;
     the medium is built from the dense volumes regardless.
 
     ``compresslevel`` is the zip deflate level: numpy's ``savez_compressed``
@@ -246,7 +267,7 @@ def write_medium_volume(
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".npz.part")
     # Hand-rolled npz (zip of .npy members, identical layout to
-    # np.savez_compressed) so `compresslevel` is honoured — numpy exposes no
+    # np.savez_compressed) so `compresslevel` is honoured; numpy exposes no
     # way to set it. Streamed member-by-member; the temp name + replace keeps
     # the write atomic.
     with open(tmp, "wb") as fh:
@@ -258,6 +279,23 @@ def write_medium_volume(
                     np.lib.format.write_array(member, np.asanyarray(arr), allow_pickle=False)
     tmp.replace(path)
     return path
+
+
+def read_material_db(path: str | Path) -> MaterialDB:
+    """The material table of a medium-volume file, without its volumes.
+
+    One small JSON member off the zip: cheap enough to run inside a config
+    check on a multi-GB file, which is what the job's absorption-exponent
+    resolution needs.
+    """
+    path = Path(path)
+    with np.load(path, allow_pickle=False) as data:
+        if "materials" not in set(data.files):
+            raise MediumVolumeError(
+                f"{path} is not a caustica medium volume (missing 'materials'); "
+                f"it holds {sorted(data.files)}"
+            )
+        return MaterialDB.model_validate_json(str(data["materials"]))
 
 
 def load_medium_volume(path: str | Path) -> MediumVolume:

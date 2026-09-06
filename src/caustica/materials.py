@@ -1,37 +1,180 @@
 """Acoustic material definitions and the id -> material database.
 
-The acoustic property set matches the production notebook exactly:
-``alpha`` [Np/m] (frequency-independent exponential absorption in v1),
-``rho`` [kg/m^3], ``c`` [m/s], ``beta`` [-] (nonlinearity coefficient,
-beta = 1 + B/2A). Thermal fields are declared now (optional) so the
-thermal module will not need a schema migration, but nothing reads them yet.
+A :class:`Material` declares its absorption in ONE of two forms:
+
+* **power law** (preferred), ``alpha0_db_cm_mhz_y`` [dB/(cm MHz^y)] with the
+  exponent ``y``, so ``alpha(f) = alpha0 f^y`` and no frequency is baked into
+  the table;
+* **legacy single frequency**, ``alpha_np_m`` [Np/m], frequency independent.
+  It is the v1 form and stays valid: it is what every stored job and every
+  ``medium_volume`` file on disk carries, and it means "y = 0", the same
+  number at every frequency.
+
+:meth:`Material.alpha_np_m_at` answers both forms at a named frequency, and
+:meth:`Material.at_frequency` bakes a power-law material down to the legacy
+form once a run has chosen its ``f0``.
+
+The rest of the acoustic set is unchanged: ``rho`` [kg/m^3], ``c`` [m/s],
+``beta`` [-] (nonlinearity coefficient, beta = 1 + B/2A). Thermal fields
+(conductivity [W/m/K], specific heat [J/kg/K], perfusion [1/s]) stay optional
+on a material because an acoustic run does not read them; every tissue in
+:data:`TISSUE_LIBRARY` now fills them from the IT'IS database, with the
+source string on the row.
 
 ``breast_default()`` is a verbatim port of the notebook's TISSUE_PROPS table
 (v6-v12, unchanged): the numbers are pinned by tests and must not drift
-silently — they define what the existing dataset means.
+silently, because they define what the existing dataset means.
+``breast_default_power_law()`` is its power-law sibling, built from
+:data:`TISSUE_LIBRARY` rather than from the notebook literals.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from caustica.config.models import CausticaModel
 
+#: 1 dB/cm = 100/(20*log10(e)) Np/m.
+DB_CM_TO_NP_M = 100.0 / 8.685889638065035
+
+
+def db_cm_to_np_m(alpha_db_cm: float) -> float:
+    """Convert an attenuation in dB/cm to Np/m."""
+    return alpha_db_cm * DB_CM_TO_NP_M
+
+
+def np_m_to_db_cm(alpha_np_m: float) -> float:
+    """Convert an attenuation in Np/m to dB/cm."""
+    return alpha_np_m / DB_CM_TO_NP_M
+
+
+class MixedAbsorptionExponentError(ValueError):
+    """A material table carries more than one power-law exponent.
+
+    Its own type because the fix is a decision, never a default: the solvers
+    integrate ONE exponent per run (a single pair of fractional Laplacians),
+    so a table that mixes water (y = 2) with soft tissue (y ~ 1.1) has to be
+    told which exponent the run means.
+    """
+
 
 class Material(CausticaModel):
-    """One acoustic (and later thermal) material."""
+    """One acoustic (and optionally thermal) material.
+
+    Give the absorption in exactly one form::
+
+        Material(alpha0_db_cm_mhz_y=0.5, y=1.1, rho=911, c=1440, beta=6.0)
+        Material(alpha_np_m=6.0, rho=932, c=1450, beta=4.5)   # legacy
+
+    The second form is frequency independent by construction: it is the
+    number a solver applies at every frequency it carries, which is why a
+    file storing it also stores the frequency it was baked at.
+    """
 
     name: str = ""
-    alpha_np_m: float = Field(..., ge=0.0, description="Absorption [Np/m] at f0 (v1 model)")
+    alpha_np_m: float | None = Field(
+        None,
+        ge=0.0,
+        description="Legacy absorption [Np/m], frequency independent (equivalent to y = 0)",
+    )
+    alpha0_db_cm_mhz_y: float | None = Field(
+        None,
+        ge=0.0,
+        description="Power-law absorption prefactor [dB/(cm MHz^y)]; needs y",
+    )
+    y: float | None = Field(
+        None,
+        ge=0.0,
+        le=3.0,
+        description="Power-law absorption exponent [-]; needs alpha0_db_cm_mhz_y",
+    )
     rho: float = Field(..., gt=0.0, description="Density [kg/m^3]")
     c: float = Field(..., gt=0.0, description="Sound speed [m/s]")
     beta: float = Field(..., ge=0.0, description="Nonlinearity coefficient (1 + B/2A)")
-    # --- thermal hooks (declared, unused in v1) ---
-    thermal_conductivity: float | None = Field(None, description="[W/m/K]")
-    specific_heat: float | None = Field(None, description="[J/kg/K]")
-    perfusion_rate: float | None = Field(None, description="[1/s]")
+    # --- thermal fields (optional: an acoustic run does not read them) ---
+    thermal_conductivity: float | None = Field(None, gt=0.0, description="k [W/m/K]")
+    specific_heat: float | None = Field(None, gt=0.0, description="C [J/kg/K]")
+    perfusion_rate: float | None = Field(None, ge=0.0, description="w_b [1/s]")
+    source: str = Field("", description="Where these numbers come from (free text)")
+
+    @model_validator(mode="after")
+    def _one_absorption_form(self) -> Material:
+        legacy = self.alpha_np_m is not None
+        power = self.alpha0_db_cm_mhz_y is not None or self.y is not None
+        if power and (self.alpha0_db_cm_mhz_y is None or self.y is None):
+            raise ValueError(
+                "the power-law absorption form needs BOTH alpha0_db_cm_mhz_y "
+                "[dB/(cm MHz^y)] and y; got "
+                f"alpha0_db_cm_mhz_y={self.alpha0_db_cm_mhz_y!r}, y={self.y!r}"
+            )
+        if legacy and power:
+            raise ValueError(
+                "a material declares its absorption in ONE form: alpha_np_m (legacy, "
+                "frequency independent) or alpha0_db_cm_mhz_y with y (power law). Both "
+                "were given, and nothing can check that they agree, because they agree "
+                "at one frequency only. Keep the power law and call "
+                "material.at_frequency(f0) where a run needs the baked number."
+            )
+        if not legacy and not power:
+            raise ValueError(
+                "a material must declare its absorption: alpha0_db_cm_mhz_y=... with "
+                "y=... (power law) or alpha_np_m=... (legacy, frequency independent). "
+                "A lossless medium is alpha_np_m=0.0 stated explicitly."
+            )
+        return self
+
+    # ---------- absorption ----------
+
+    @property
+    def absorption_model(self) -> str:
+        """``"power_law"`` or ``"single_frequency"``."""
+        return "single_frequency" if self.alpha0_db_cm_mhz_y is None else "power_law"
+
+    @property
+    def y_exponent(self) -> float:
+        """The power-law exponent this material implies; legacy means 0.0."""
+        return 0.0 if self.y is None else float(self.y)
+
+    def alpha_np_m_at(self, f_hz: float) -> float:
+        """Absorption [Np/m] at ``f_hz``.
+
+        The legacy form ignores the frequency by definition and answers at
+        any value, 0 Hz included. The power-law form evaluates
+        ``alpha0 (f / 1 MHz)^y`` and converts dB/cm to Np/m, so it needs a
+        positive frequency and refuses anything else rather than returning
+        the 0 that ``0^y`` would give for a lossy tissue.
+        """
+        if self.alpha0_db_cm_mhz_y is None:
+            return float(self.alpha_np_m)  # type: ignore[arg-type]
+        if not f_hz > 0.0:
+            raise ValueError(
+                f"a power-law material needs a frequency > 0 Hz to answer with, got {f_hz}"
+            )
+        return db_cm_to_np_m(self.alpha0_db_cm_mhz_y * (f_hz / 1e6) ** float(self.y))
+
+    def at_frequency(self, f_hz: float) -> Material:
+        """This material in the legacy form, with alpha baked at ``f_hz``.
+
+        A legacy material is returned unchanged. The power law is dropped
+        from the copy on purpose: carrying both forms would let the two
+        disagree at every frequency but one, and the law itself stays in the
+        job file and in the table this copy was made from.
+        """
+        if self.alpha0_db_cm_mhz_y is None:
+            return self
+        return Material(
+            name=self.name,
+            alpha_np_m=self.alpha_np_m_at(f_hz),
+            rho=self.rho,
+            c=self.c,
+            beta=self.beta,
+            thermal_conductivity=self.thermal_conductivity,
+            specific_heat=self.specific_heat,
+            perfusion_rate=self.perfusion_rate,
+            source=self.source,
+        )
 
 
 class MaterialDB(CausticaModel):
@@ -49,6 +192,36 @@ class MaterialDB(CausticaModel):
     def ids(self) -> tuple[int, ...]:
         return tuple(sorted(self.materials))
 
+    @property
+    def has_power_law(self) -> bool:
+        """True when any material declares its absorption as a power law."""
+        return any(m.absorption_model == "power_law" for m in self.materials.values())
+
+    def y(self) -> float:
+        """The one power-law exponent this table implies.
+
+        Raises :class:`MixedAbsorptionExponentError`, naming every offending
+        material, when the table carries more than one. A legacy material
+        counts as ``y = 0``.
+        """
+        by_y: dict[float, list[str]] = {}
+        for tissue_id in self.ids:
+            m = self.materials[tissue_id]
+            by_y.setdefault(m.y_exponent, []).append(f"id {tissue_id} ({m.name or 'unnamed'})")
+        if len(by_y) == 1:
+            return next(iter(by_y))
+        listing = "; ".join(f"y = {y:g}: {', '.join(names)}" for y, names in sorted(by_y.items()))
+        raise MixedAbsorptionExponentError(
+            f"this material table mixes absorption exponents ({listing}). A run carries "
+            f"ONE exponent, so it has to be named: set the job's absorption.y, or give "
+            f"every material the same y. A legacy material (alpha_np_m only) counts as "
+            f"y = 0, frequency independent."
+        )
+
+    def at_frequency(self, f_hz: float) -> MaterialDB:
+        """This table with every power law baked to Np/m at ``f_hz``."""
+        return MaterialDB(materials={i: m.at_frequency(f_hz) for i, m in self.materials.items()})
+
 
 def water(
     alpha_np_m: float = 0.0,
@@ -59,9 +232,9 @@ def water(
 ) -> Material:
     """Water; defaults are the LINEAR LOSSLESS validation medium.
 
-    Note: beta defaults to 0.0 (linear) on purpose — this is the medium the
-    O'Neil/Rayleigh validation chain assumes. Physical water would be
-    beta=3.5; pass it explicitly when you mean nonlinear water.
+    Note: beta defaults to 0.0 (linear) on purpose, because this is the
+    medium the O'Neil/Rayleigh validation chain assumes. Physical water would
+    be beta=3.5; pass it explicitly when you mean nonlinear water.
     """
     return Material(name=name, alpha_np_m=alpha_np_m, rho=rho, c=c, beta=beta)
 
@@ -70,6 +243,8 @@ def breast_default() -> MaterialDB:
     """The notebook's breast-phantom tissue table (TISSUE_PROPS), verbatim.
 
     ids: 0=PML/matching, 1=skin, 2=fat/glandular, 3=muscle, 4=coupling gel.
+    Legacy form throughout: these five rows ARE what the existing dataset
+    means, and they are pinned to the digit by test.
     """
     t = {
         0: Material(name="PML", alpha_np_m=0.1, rho=1000.0, c=1500.0, beta=3.5),
@@ -81,13 +256,37 @@ def breast_default() -> MaterialDB:
     return MaterialDB(materials=t)
 
 
+def breast_default_power_law(which: str = "mid") -> MaterialDB:
+    """The same five ids as :func:`breast_default`, in power-law form.
+
+    Built from :data:`TISSUE_LIBRARY` (literature values with their sources
+    and their thermal properties), not from the notebook literals: the
+    matching layer and the coupling gel are water, and skin, fat and muscle
+    are the library rows.
+
+    The exponents deliberately differ (water 2.0, skin and muscle 1.0, fat
+    1.1), so :meth:`MaterialDB.y` refuses this table and a run using it has
+    to name its own exponent. That is the state of the literature, not an
+    oversight.
+    """
+    return MaterialDB(
+        materials={
+            0: TISSUE_LIBRARY["water_37c"].to_power_law_material(which),
+            1: TISSUE_LIBRARY["skin"].to_power_law_material(which),
+            2: TISSUE_LIBRARY["fat"].to_power_law_material(which),
+            3: TISSUE_LIBRARY["muscle"].to_power_law_material(which),
+            4: TISSUE_LIBRARY["water_37c"].to_power_law_material(which),
+        }
+    )
+
+
 BACKGROUND_ID = 4
 PML_ID = 0
 
 
 # --------------------------------------------------------------------------
 # Literature acoustic tissue values. MOVED verbatim from the
-# phantom package's tissue table — these numbers are generic soft-tissue
+# phantom package's tissue table: these numbers are generic soft-tissue
 # literature, not that source's (an electromagnetic repository shipping no
 # acoustic values). The source's media-number -> tissue-class mapping and
 # its interpolated sub-group ramp stay with the phantom package; only the
@@ -95,29 +294,31 @@ PML_ID = 0
 # bug (pinned to the digit by test).
 # --------------------------------------------------------------------------
 
-#: 1 dB/cm = 100/(20*log10(e)) Np/m.
-DB_CM_TO_NP_M = 100.0 / 8.685889638065035
 
+def perfusion_ml_min_kg_to_per_s(ml_min_kg: float, rho_kg_m3: float) -> float:
+    """IT'IS heat-transfer rate [mL blood/(min kg tissue)] -> Pennes w_b [1/s].
 
-def db_cm_to_np_m(alpha_db_cm: float) -> float:
-    """Convert an attenuation in dB/cm to Np/m."""
-    return alpha_db_cm * DB_CM_TO_NP_M
-
-
-def np_m_to_db_cm(alpha_np_m: float) -> float:
-    return alpha_np_m / DB_CM_TO_NP_M
+    ``w_b`` is a volume of blood per volume of tissue per second, so the
+    per-kilogram rate is multiplied by the tissue density and divided by
+    1e6 mL/m^3 and by 60 s/min. Skin, for example: 106.3813131 mL/min/kg at
+    1109 kg/m^3 gives 1.9663e-3 1/s.
+    """
+    return ml_min_kg * rho_kg_m3 * 1e-6 / 60.0
 
 
 @dataclass(frozen=True)
 class AcousticTissue:
     """One acoustic tissue: nominal values plus their literature spread.
 
-    Every quantity is a ``(low, high)`` pair — the reported spread, not a
-    guess bracket. The nominal value is the midpoint; per-voxel data (like a
-    repository's ``p``) can blend ``low + p*(high - low)``. Attenuation is
-    stored in power-law form ``alpha0 * f^b`` [dB/(cm MHz^b)] and evaluated
-    at an export frequency — storing only Np/m would silently pin a medium
-    to one frequency.
+    Every acoustic quantity is a ``(low, high)`` pair, the reported spread
+    rather than a guess bracket. The nominal value is the midpoint; per-voxel
+    data (like a repository's ``p``) can blend ``low + p*(high - low)``.
+    Attenuation is stored in power-law form ``alpha0 * f^b``
+    [dB/(cm MHz^b)] and evaluated at an export frequency, because storing
+    only Np/m would silently pin a medium to one frequency.
+
+    The thermal fields are single values (the databases quote one), in the
+    units :class:`Material` uses: k [W/m/K], C [J/kg/K], w_b [1/s].
     """
 
     name: str
@@ -128,6 +329,10 @@ class AcousticTissue:
     bona: tuple[float, float]  # nonlinearity parameter B/A
     source: str
     interpolated: bool = False
+    thermal_conductivity: float | None = None  # k [W/m/K]
+    specific_heat: float | None = None  # C [J/kg/K]
+    perfusion_rate: float | None = None  # w_b [1/s]
+    thermal_source: str = ""
 
     def alpha_np_m(self, f0_hz: float, which: str = "mid") -> float:
         """Absorption [Np/m] at ``f0_hz`` from the power law."""
@@ -149,24 +354,72 @@ class AcousticTissue:
             return 0.5 * (pair[0] + pair[1])
         raise ValueError(f"which must be 'lo', 'mid' or 'hi', got {which!r}")
 
+    def _provenance(self) -> str:
+        if not self.thermal_source:
+            return self.source
+        return f"{self.source}; thermal: {self.thermal_source}"
+
+    def _thermal_fields(self) -> dict[str, float | None]:
+        return {
+            "thermal_conductivity": self.thermal_conductivity,
+            "specific_heat": self.specific_heat,
+            "perfusion_rate": self.perfusion_rate,
+        }
+
     def to_material(self, f0_hz: float, which: str = "mid") -> Material:
+        """A legacy-form material with alpha baked at ``f0_hz``."""
         return Material(
             name=self.name,
             alpha_np_m=self.alpha_np_m(f0_hz, which),
             rho=self._pick(self.rho, which),
             c=self._pick(self.c, which),
             beta=self.beta(which),
+            source=self._provenance(),
+            **self._thermal_fields(),
+        )
+
+    def to_power_law_material(self, which: str = "mid") -> Material:
+        """A power-law material: no frequency is baked in."""
+        return Material(
+            name=self.name,
+            alpha0_db_cm_mhz_y=self._pick(self.alpha0, which),
+            y=self.b,
+            rho=self._pick(self.rho, which),
+            c=self._pick(self.c, which),
+            beta=self.beta(which),
+            source=self._provenance(),
+            **self._thermal_fields(),
         )
 
 
 _DUCK = "Duck, Physical Properties of Tissue (1990)"
 _ITIS = "IT'IS Foundation Tissue Properties Database (acoustic)"
+#: The exact release every thermal number below is quoted from, read from the
+#: shipped ASCII table rather than from a secondary citation.
+ITIS_DB = "IT'IS Tissue Properties Database V4.2 (2024-06-04, DOI 10.13099/VIP21000-04-2)"
 
-#: Literature-anchored tissues (names kept verbatim from the pre-split table
-#: — the name travels inside exported MaterialDB JSON, so renaming would be a
-#: value change). ``fibroglandular`` and ``fat`` are the highest-water and
-#: lowest-water ENDPOINTS the phantom package's sub-group ramp interpolates
-#: between; the interpolated in-between rows are its modelling choice.
+
+def _itis_thermal(
+    tissue: str, k: float, cp: float, htr_ml_min_kg: float, rho: float
+) -> dict[str, object]:
+    """The three thermal values plus the source string for one IT'IS row."""
+    return {
+        "thermal_conductivity": k,
+        "specific_heat": cp,
+        "perfusion_rate": perfusion_ml_min_kg_to_per_s(htr_ml_min_kg, rho),
+        "thermal_source": (
+            f"{ITIS_DB}, row '{tissue}': k = {k:g} W/m/K, C = {cp:g} J/kg/K, heat "
+            f"transfer rate = {htr_ml_min_kg:g} mL/min/kg at rho = {rho:g} kg/m^3"
+        ),
+    }
+
+
+#: Literature-anchored tissues (names kept verbatim from the pre-split table,
+#: because the name travels inside exported MaterialDB JSON and renaming
+#: would be a value change). ``fibroglandular`` and ``fat`` are the
+#: highest-water and lowest-water ENDPOINTS the phantom package's sub-group
+#: ramp interpolates between; the interpolated in-between rows are its
+#: modelling choice.
 TISSUE_LIBRARY: dict[str, AcousticTissue] = {
     # Degassed water at body temperature, the standard HIFU coupling bath.
     # Absorption is tiny but NOT zero.
@@ -184,6 +437,7 @@ TISSUE_LIBRARY: dict[str, AcousticTissue] = {
         b=2.0,
         bona=(5.0, 5.4),
         source=f"{_DUCK}, ch. 4 (water B/A = 5.2; alpha(37 C) ~ 0.0015 f^2 dB/cm)",
+        **_itis_thermal("Water", 0.6045, 4178.0, 0.0, 994.035466),  # type: ignore[arg-type]
     ),
     # Skin (~1.5 mm dermis layer).
     "skin": AcousticTissue(
@@ -194,6 +448,7 @@ TISSUE_LIBRARY: dict[str, AcousticTissue] = {
         b=1.0,
         bona=(7.5, 8.3),
         source=f"{_ITIS} (skin c=1624, rho=1109); {_DUCK} (alpha 2.2-3.5 dB/cm/MHz, B/A 7.9)",
+        **_itis_thermal("Skin", 0.3721835, 3390.5, 106.3813131, 1109.0),  # type: ignore[arg-type]
     ),
     # Pectoral muscle (chest wall).
     "muscle": AcousticTissue(
@@ -205,8 +460,9 @@ TISSUE_LIBRARY: dict[str, AcousticTissue] = {
         bona=(7.0, 7.8),
         source=f"{_ITIS} (c=1588, rho=1090); {_DUCK} "
         "(alpha 0.57 along / 1.09 across fibres, B/A 7.4)",
+        **_itis_thermal("Muscle", 0.49496875, 3421.2, 36.7382931, 1090.4),  # type: ignore[arg-type]
     ),
-    # Fibroconnective/glandular tissue at its HIGHEST water content — the
+    # Fibroconnective/glandular tissue at its HIGHEST water content: the
     # glandular endpoint (literature-anchored).
     "fibroglandular": AcousticTissue(
         name="Fibroglandular-1 (highest water)",
@@ -216,8 +472,9 @@ TISSUE_LIBRARY: dict[str, AcousticTissue] = {
         b=1.1,
         bona=(7.0, 8.0),
         source=f"{_ITIS} breast gland (c=1505, rho=1041); Duric et al. UST breast (c 1500-1580)",
+        **_itis_thermal("Breast Gland", 0.3345, 2960.0, 150.0, 1040.5),  # type: ignore[arg-type]
     ),
-    # Fat at its LOWEST water content, essentially lipid — the fat endpoint
+    # Fat at its LOWEST water content, essentially lipid: the fat endpoint
     # (literature-anchored).
     "fat": AcousticTissue(
         name="Fatty-3 (lowest water, lipid)",
@@ -227,5 +484,48 @@ TISSUE_LIBRARY: dict[str, AcousticTissue] = {
         b=1.1,
         bona=(9.6, 11.3),
         source=f"{_ITIS} breast fat (c=1440, rho=911); {_DUCK} (fat B/A 9.6-11.3, alpha 0.4-0.6)",
+        **_itis_thermal("Breast Fat", 0.209, 2348.333333, 47.0, 911.0),  # type: ignore[arg-type]
+    ),
+    # The three organ rows below are IT'IS V4.2 throughout, acoustic and
+    # thermal: sound speed, density and B/A are the database's min/max
+    # spread, and the attenuation prefactor is its alpha0 [Np/m/MHz^b]
+    # converted to dB/cm (no spread is reported, so the pair is one value
+    # twice).
+    "liver": AcousticTissue(
+        name="Liver",
+        c=(1541.5, 1611.0),
+        rho=(1050.0, 1158.0),
+        alpha0=(np_m_to_db_cm(6.915),) * 2,
+        b=1.0,
+        bona=(6.54, 8.72),
+        source=f"{ITIS_DB}, row 'Liver' (c 1541.5-1611 m/s, rho 1050-1158 kg/m^3, "
+        f"alpha0 6.915 Np/m/MHz, b = 1, B/A 6.54-8.72)",
+        **_itis_thermal("Liver", 0.519111111, 3540.2, 860.456666, 1078.75),  # type: ignore[arg-type]
+    ),
+    "brain": AcousticTissue(
+        name="Brain (average)",
+        c=(1506.0, 1565.0),
+        rho=(1041.0, 1050.0),
+        alpha0=(np_m_to_db_cm(6.8032),) * 2,
+        b=1.3,
+        bona=(6.55, 7.05),
+        source=f"{ITIS_DB}, row 'Brain' (c 1506-1565 m/s, rho 1041-1050 kg/m^3, "
+        f"alpha0 6.8032 Np/m/MHz^1.3, b = 1.3, B/A 6.55-7.05)",
+        **_itis_thermal("Brain", 0.51325, 3630.0, 558.6063123, 1045.5),  # type: ignore[arg-type]
+    ),
+    "blood": AcousticTissue(
+        name="Blood",
+        c=(1559.2, 1590.0),
+        rho=(1025.0, 1060.0),
+        alpha0=(np_m_to_db_cm(2.3676),) * 2,
+        b=1.0498,
+        bona=(6.0, 6.3),
+        source=f"{ITIS_DB}, row 'Blood' (c 1559.2-1590 m/s, rho 1025-1060 kg/m^3, "
+        f"alpha0 2.3676 Np/m/MHz^1.0498, b = 1.0498, B/A 6.0-6.3)",
+        # IT'IS quotes 10000 mL/min/kg for blood itself, the sentinel that
+        # says "this voxel IS the perfusing fluid": in Pennes it pins a blood
+        # voxel to the arterial temperature, which is what a large vessel
+        # does to a nearby focus.
+        **_itis_thermal("Blood", 0.516857143, 3617.0, 10000.0, 1049.75),  # type: ignore[arg-type]
     ),
 }

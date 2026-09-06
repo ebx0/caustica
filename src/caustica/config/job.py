@@ -3,16 +3,16 @@
 This is the contract the whole Colab flow rides on: the user (or,
 later, the GUI) writes a job file, ``python -m caustica validate`` checks it
 without burning GPU time, and the runner executes it. Everything a
-run needs is either IN the file or derived from it — nothing is baked.
+run needs is either IN the file or derived from it; nothing is baked.
 
-One job kind: ``explicit`` — the full tree: medium (medium_volume file |
+One job kind: ``explicit``, the full tree: medium (medium_volume file |
 CSG scene | volume import | homogeneous) + grid + array source (spiral |
 bowl | explicit element table, natural or steered focus) + drive + run
 policy.
 
 The medium and array kinds are NOT a closed union: both are built from the
 registries in :mod:`caustica.config.kinds`, which the kinds below register
-through — the same door a third-party package uses. ``caustica
+through, which is the same door a third-party package uses. ``caustica
 schema`` prints the JSON Schema of whatever is registered right now.
 
 Contract rules (same as every caustica config): pydantic, ``extra="forbid"``
@@ -21,7 +21,7 @@ kPa, voxel counts are always derived, and every model round-trips through
 JSON losslessly.
 
 History (2026-08-22): the ``stored_setup`` job kind and the
-``phantom_dataset`` medium kind were REMOVED — a breaking ``caustica-job/1``
+``phantom_dataset`` medium kind were REMOVED, a breaking ``caustica-job/1``
 change, deliberate and recorded (the format number stays; no stability
 guarantee before v1.0). The library carries no phantom-source-specific code;
 volume media enter through the generic ``medium_volume`` kind, and the
@@ -52,7 +52,13 @@ from caustica.config.models import CausticaModel, GridConfig
 from caustica.core.grid import Grid
 from caustica.core.pml import PMLSpec
 from caustica.geometry.configs import SceneConfig, VolumeImportConfig
-from caustica.materials import Material, MaterialDB, breast_default, water
+from caustica.materials import (
+    Material,
+    MaterialDB,
+    MixedAbsorptionExponentError,
+    breast_default,
+    water,
+)
 from caustica.medium import Medium
 from caustica.solvers.base import (
     CWRunSpec,
@@ -92,6 +98,53 @@ class DriveConfig(CausticaModel):
     @property
     def amplitude_pa(self) -> float:
         return self.amplitude_kpa * 1e3
+
+
+class AbsorptionConfig(CausticaModel):
+    """Which absorption law the run means, and with which exponent.
+
+    ``single_frequency`` (the default, and what every job written before this
+    section existed means) takes each material's ``alpha_np_m`` as it stands:
+    one number, applied at every frequency the run carries. It is refused on
+    a table that declares power-law absorption, because such a table has no
+    ``alpha_np_m`` to take and the model would otherwise describe a run it is
+    not.
+
+    ``power_law`` says the run carries the exponent ``y``. ``y`` names it;
+    ``y: null`` means "take it from the materials", which succeeds only when
+    the whole table agrees on one exponent and otherwise refuses with the
+    offending materials named.
+
+    Two conventions worth stating, because a mixed table makes them visible:
+
+    * the per-voxel ``alpha`` volume is always each material's OWN absorption
+      at ``f0``, so a power-law material is evaluated at its own exponent
+      (``alpha0 f0^y_material``) and a legacy material contributes its
+      ``alpha_np_m`` unchanged. That is the most accurate value at ``f0``;
+    * this ``y`` is the single exponent the RUN carries, the one a solver
+      uses to scale absorption away from ``f0``. It does not re-evaluate the
+      table.
+
+    So on a table mixing water (y = 2) with fat (y = 1.1), ``y: 1.1`` gives a
+    water voxel ``alpha0 f0^2`` and a run exponent of 1.1.
+    """
+
+    model: Literal["single_frequency", "power_law"] = "single_frequency"
+    y: float | None = Field(
+        None,
+        ge=0.0,
+        le=3.0,
+        description="Power-law exponent; null takes the common y from the materials",
+    )
+
+    @model_validator(mode="after")
+    def _check(self) -> AbsorptionConfig:
+        if self.model == "single_frequency" and self.y is not None:
+            raise ValueError(
+                f"absorption model 'single_frequency' carries no exponent, but y={self.y} "
+                f"was given. Set model to 'power_law', or drop y."
+            )
+        return self
 
 
 class RunConfig(CausticaModel):
@@ -214,7 +267,7 @@ class VolumeImportMediumConfig(MediumKindConfig):
 
 @medium_kinds.register
 class MediumVolumeConfig(MediumKindConfig):
-    """A caustica ``medium_volume`` file — the ONE door for volume media.
+    """A caustica ``medium_volume`` file, the ONE door for volume media.
 
     The grid comes FROM the file (shape + dx are the file's); only the PML
     thickness is chosen here, so an explicit job cannot silently run a
@@ -277,12 +330,13 @@ class MediumVolumeConfig(MediumKindConfig):
             "explicit medium_volume job",
         )
         linear = self.linear
+        f0_hz = drive.f0_hz
         return MediumPrep(
             grid=vol.grid(PMLSpec(thickness=self.pml_mm * _MM) if self.pml_mm > 0 else None),
             c_min=vol.c_min(),
             labels=vol.labels,
             water_label=self.water_label,
-            make_medium=lambda: vol.to_medium(linear=linear),
+            make_medium=lambda: vol.to_medium(linear=linear, f0_hz=f0_hz),
         )
 
 
@@ -488,7 +542,7 @@ class ElementsArrayConfig(_ElementArrayConfig):
     """Bring your own element table: explicit centers (+ optional normals).
 
     Positions are ``inline`` in the job or read from ``file`` (``.npz`` with
-    a ``positions`` array, or a 3/6-column ``.csv``) — exactly one of the
+    a ``positions`` array, or a 3/6-column ``.csv``); exactly one of the
     two. Everything is in MILLIMETRES, in the array's own apex frame: apex
     at the origin, beam axis +z, geometric focus at ``(0, 0, roc_mm)``. Omit
     the normals and every element is aimed at that focus.
@@ -576,7 +630,7 @@ class ElementsArrayConfig(_ElementArrayConfig):
         constraint: mirroring it, rotating it, re-scattering all but the
         outermost element or changing every normal leaves the element count,
         the maximum radius and the shell depth untouched while moving the
-        field by tens of per cent (measured). Hence the digest —
+        field by tens of per cent (measured). Hence the digest:
         without it this record would certify nothing.
         """
         arr = arr if arr is not None else self.build()
@@ -588,7 +642,7 @@ class ElementsArrayConfig(_ElementArrayConfig):
             "table_sha256": element_table_digest(arr),
         }
         # An all-on-axis table has no f-number. Recording `inf` would put the
-        # token `Infinity` in run_meta.json — accepted by Python's json, and
+        # token `Infinity` in run_meta.json, accepted by Python's json, and
         # rejected by JSON.parse, jq, Go and serde.
         if r_max_mm > 0.0:
             out["f_number"] = self.roc_mm / (2.0 * r_max_mm)
@@ -739,6 +793,7 @@ class ExplicitJobConfig(CausticaModel):
     )
     source: ArraySourceConfig
     drive: DriveConfig
+    absorption: AbsorptionConfig = Field(default_factory=AbsorptionConfig)
     run: RunConfig = Field(default_factory=RunConfig)
     solver: str = "westervelt"
     backend: str = Field(
@@ -757,7 +812,7 @@ class ExplicitJobConfig(CausticaModel):
         """Refuse a backend nobody registered, at validate time.
 
         Open on purpose: the field used to be a closed Literal, which
-        made a third-party backend unreachable from a job file — the same
+        made a third-party backend unreachable from a job file, the same
         dead end `elements` fixed for arrays. The refusal is kept, it just
         asks the registry instead of a hard-coded list.
         """
@@ -771,7 +826,7 @@ class ExplicitJobConfig(CausticaModel):
         if grid_from_file and self.grid is not None:
             raise ValueError(
                 f"medium '{self.medium.kind}' fixes the grid (shape + dx come from the "
-                f"file); remove the job's grid section — only medium.pml_mm is yours "
+                f"file); remove the job's grid section: only medium.pml_mm is yours "
                 f"to choose."
             )
         if not grid_from_file and self.grid is None:
@@ -779,7 +834,7 @@ class ExplicitJobConfig(CausticaModel):
         return self
 
 
-#: One job kind (``stored_setup`` removed — see the module
+#: One job kind (``stored_setup`` removed; see the module
 #: docstring); the alias survives so consumers keep one import site.
 JobConfig = ExplicitJobConfig
 
@@ -808,7 +863,7 @@ array_kinds.on_change(_rebuild_kind_unions)
 def job_schema() -> dict[str, Any]:
     """The ``caustica-job/1`` JSON Schema, generated from the pydantic models.
 
-    There is no second, hand-written definition of the job format anywhere —
+    There is no second, hand-written definition of the job format anywhere:
     this IS the schema, and it grows a branch the moment a kind registers.
     """
     return {
@@ -829,7 +884,7 @@ def parse_job(data: dict, what: str = "job") -> ExplicitJobConfig:
 
     Exists so a job handed to :func:`caustica.simulate` as a dict is checked
     by exactly the same adapter, with exactly the same format guard, as one
-    read off disk — one parser, not two.
+    read off disk: one parser, not two.
     """
     if data.get("format") != JOB_FORMAT:
         raise JobError(f"{what}: format {data.get('format')!r} != {JOB_FORMAT!r}")
@@ -884,6 +939,16 @@ class BuiltJob:
     #: wrong place (adversarial review, 2026-08-22: `simulate(BuiltJob,
     #: out=<path>)` resolved a medium file against a temp directory).
     base_dir: Path | None = None
+    #: The resolved power-law exponent, or None when the job runs the
+    #: single-frequency absorption model. Resolved once at build time,
+    #: because `absorption.y = null` reads it off the material table.
+    absorption_y: float | None = None
+    #: True when the material table declares power-law absorption, False when
+    #: it is the legacy `alpha_np_m` form throughout, None when the medium
+    #: kind does not expose its table before the medium is built. The
+    #: exponent above says what the RUN carries; this says where the alpha
+    #: volume came from, and the two are independent (see AbsorptionConfig).
+    absorption_from_power_law: bool | None = None
 
 
 def _resolve(path_str: str, base_dir: Path | None) -> str:
@@ -897,7 +962,7 @@ def _check_dataset_f0(job_f0_hz: float, baked_f0_mhz: float | None, what: str) -
     """The alpha guarantee, on EVERY path that can pair a file with a drive.
 
     A volume file whose absorption (alpha) was baked at one frequency must
-    refuse to run at another — anything else silently uses wrong tissue
+    refuse to run at another, because anything else silently uses wrong tissue
     losses (adversarial review, 2026-08-19: this guard was once missing on
     the explicit path).
     """
@@ -910,6 +975,120 @@ def _check_dataset_f0(job_f0_hz: float, baked_f0_mhz: float | None, what: str) -
             f"{float(baked_f0_mhz):g} MHz; running another frequency would silently use "
             f"wrong tissue losses. Rebuild the dataset at the new f0 instead."
         )
+
+
+def medium_material_db(cfg: MediumKindConfig, base_dir: Path | None = None) -> MaterialDB | None:
+    """The material table a medium kind will paint, WITHOUT building volumes.
+
+    Returns None when the kind keeps its table somewhere this function cannot
+    reach (a third-party kind), so the caller can say so instead of guessing.
+    A ``medium_volume`` file answers from one small JSON member of the npz,
+    which is cheap enough to run inside a config check on a multi-GB file.
+    """
+    mats = getattr(cfg, "materials", None)
+    if isinstance(mats, dict):
+        return MaterialDB(materials=mats)
+    if mats == "breast_default":
+        return breast_default()
+    material = getattr(cfg, "material", None)
+    if isinstance(material, Material):
+        return MaterialDB(materials={0: material})
+    file = getattr(cfg, "file", None)
+    if isinstance(file, str):
+        from caustica.io.medium_volume import read_material_db  # noqa: PLC0415
+
+        path = Path(file)
+        if base_dir is not None and not path.is_absolute():
+            path = base_dir / path
+        if not path.exists():
+            raise JobError(f"medium volume file not found: {path}")
+        return read_material_db(path)
+    return None
+
+
+def bake_absorption(cfg: MediumKindConfig, f0_hz: float) -> MediumKindConfig:
+    """A copy of ``cfg`` with every power-law material baked to Np/m at ``f0_hz``.
+
+    The medium builders refuse a power-law material outright, so a power-law
+    table has to be evaluated somewhere before the volumes exist.
+    That happens here, once, at the one place that knows the drive frequency,
+    rather than in each builder.
+
+    Each material is evaluated at its OWN exponent, not at the job's
+    ``absorption.y``: the job's exponent is what the run carries away from
+    ``f0``, while this is the value AT ``f0``, and a material's own law is
+    the accurate answer there. The two differ only on a table that mixes
+    exponents, which is exactly the table that has to name a run exponent.
+    See :class:`AbsorptionConfig`.
+    """
+    update: dict[str, Any] = {}
+    material = getattr(cfg, "material", None)
+    if isinstance(material, Material) and material.absorption_model == "power_law":
+        update["material"] = material.at_frequency(f0_hz)
+    mats = getattr(cfg, "materials", None)
+    if isinstance(mats, dict) and any(m.absorption_model == "power_law" for m in mats.values()):
+        update["materials"] = {i: m.at_frequency(f0_hz) for i, m in mats.items()}
+    return cfg.model_copy(update=update) if update else cfg
+
+
+def resolve_absorption(
+    absorption: AbsorptionConfig, medium_cfg: MediumKindConfig, base_dir: Path | None = None
+) -> tuple[float | None, bool | None]:
+    """``(exponent the run carries, whether the table is a power law)``.
+
+    The exponent is None for the single-frequency model. The flag is True
+    when any material declares ``alpha0_db_cm_mhz_y``, False when the table
+    is the legacy form throughout, and None when the medium kind does not
+    expose its table before the medium is built (so nothing downstream has to
+    guess which of the two it was looking at).
+
+    Two refusals happen here, before anything expensive is built:
+
+    * ``single_frequency`` on a power-law table, which would otherwise be
+      baked at ``f0`` and reported as a form it is not;
+    * ``y: null`` under the power-law model on a table that mixes exponents,
+      with the offenders named.
+
+    The mirror case, ``power_law`` on a legacy table, is allowed and is not a
+    mistake: it is how an existing job asks a solver to scale its baked
+    ``alpha_np_m`` away from ``f0``. The validate summary says so, because
+    nothing in that job's alpha volume came from a power law.
+    """
+    db = medium_material_db(medium_cfg, base_dir)
+    from_power_law = None if db is None else db.has_power_law
+    if absorption.model == "single_frequency":
+        if from_power_law:
+            raise JobError(
+                "absorption model 'single_frequency' takes each material's alpha_np_m as "
+                "it stands, but this material table declares power-law absorption "
+                "(alpha0_db_cm_mhz_y with y) and carries no alpha_np_m to take. Set "
+                "absorption.model to 'power_law' (with absorption.y, or y = null to read "
+                "the common exponent off the table) to run it as the law it is."
+            )
+        return None, from_power_law
+    if absorption.y is not None:
+        return float(absorption.y), from_power_law
+    if db is None:
+        raise JobError(
+            f"absorption model 'power_law' with y = null takes the exponent from the "
+            f"materials, but medium kind '{medium_cfg.kind}' does not expose a material "
+            f"table before the medium is built. Set absorption.y explicitly."
+        )
+    try:
+        return db.y(), from_power_law
+    except MixedAbsorptionExponentError as exc:
+        raise JobError(f"absorption model 'power_law' with y = null: {exc}") from None
+
+
+def resolve_absorption_y(
+    absorption: AbsorptionConfig, medium_cfg: MediumKindConfig, base_dir: Path | None = None
+) -> float | None:
+    """The exponent this job runs with, or None for the single-frequency model.
+
+    The exponent alone, for a caller that does not care which form the table
+    carried; :func:`resolve_absorption` answers both and does the refusing.
+    """
+    return resolve_absorption(absorption, medium_cfg, base_dir)[0]
 
 
 def medium_geometry(cfg: MediumKindConfig) -> str:
@@ -963,6 +1142,13 @@ def _build_explicit(job: ExplicitJobConfig, base_dir: Path | None, with_medium: 
 
     check_solver_geometry(job.solver, medium_cfg)
 
+    # Cheap and decisive: a mixed-exponent table is refused before a grid, a
+    # source or a property volume exists.
+    absorption_y, absorption_from_power_law = resolve_absorption(
+        job.absorption, medium_cfg, base_dir
+    )
+    medium_cfg = bake_absorption(medium_cfg, job.drive.f0_hz)
+
     # The medium build is the EXPENSIVE part (GBs for a full-size volume), so
     # every refusal that only needs geometry/labels runs first.
     labels = None
@@ -983,7 +1169,7 @@ def _build_explicit(job: ExplicitJobConfig, base_dir: Path | None, with_medium: 
     if labels is not None and water_label is not None and labels[focus_vox] == water_label:
         raise JobError(
             f"the focus voxel {focus_vox} lands in the coupling water "
-            f"(label {water_label}), not in tissue — the run would characterize a "
+            f"(label {water_label}), not in tissue: the run would characterize a "
             f"water focus. Move the focus deeper, steer it into the target, or (for "
             f"medium_volume) set water_label to null if label {water_label} is not water."
         )
@@ -1013,6 +1199,8 @@ def _build_explicit(job: ExplicitJobConfig, base_dir: Path | None, with_medium: 
         c_min_hint=c_min,
         derived=derived,
         base_dir=base_dir,
+        absorption_y=absorption_y,
+        absorption_from_power_law=absorption_from_power_law,
     )
 
 
@@ -1053,7 +1241,7 @@ class JobReport:
             lines.append(f"  ! WARNING: {w}")
         for e in self.errors:
             lines.append(f"  X ERROR: {e}")
-        lines.append("OK — job is runnable" if self.ok else "FAILED — fix the errors above")
+        lines.append("OK: job is runnable" if self.ok else "FAILED: fix the errors above")
         return "\n".join(lines)
 
 
@@ -1066,7 +1254,7 @@ def low_ppw_warnings(grid, f0: float, harmonics, c_min: float, approx_label: str
     """The low-resolution warnings (< 3 ppw per recorded harmonic), one text.
 
     Single source for validate, the runner's plan/status/run_meta and the
-    report head: loud in four places, a block in none — the
+    report head: loud in four places, a block in none, because the
     production setting is a deliberate 1.88 ppw at 2f0.
     """
     out = []
@@ -1080,6 +1268,48 @@ def low_ppw_warnings(grid, f0: float, harmonics, c_min: float, approx_label: str
     return out
 
 
+def absorption_summary(
+    absorption: AbsorptionConfig, y: float | None, from_power_law: bool | None = None
+) -> list[str]:
+    """One line saying which absorption law the run uses, and where y came from.
+
+    ``from_power_law`` is :attr:`BuiltJob.absorption_from_power_law`: the
+    line says where the alpha volume came from as well as which exponent the
+    run carries, because those are two different facts and a power-law job on
+    a legacy table has only the second one.
+    """
+    if absorption.model == "single_frequency" or y is None:
+        return ["absorption: single frequency (each material's alpha_np_m as it stands)"]
+    where = "named by the job" if absorption.y is not None else "read off the material table"
+    line = f"absorption: power law, y = {y:g} ({where})"
+    if from_power_law is False:
+        line += (
+            "; the material table is the legacy form, so alpha at f0 is its alpha_np_m "
+            "and y only says how a solver would scale it"
+        )
+    return [line]
+
+
+def absorption_warnings(absorption: AbsorptionConfig, y: float | None, f0: float) -> list[str]:
+    """What a power-law job does NOT get from the solvers yet.
+
+    The per-voxel alpha is one number per material, its absorption at f0, and
+    the solvers apply that single number at every frequency they carry and
+    add no Kramers-Kronig dispersion. Saying so here is the difference
+    between a documented approximation and a silent one. The text does not
+    claim where that number came from: on a legacy table it is the material's
+    own alpha_np_m, and :func:`absorption_summary` is the line that says so.
+    """
+    if absorption.model == "single_frequency" or y is None:
+        return []
+    return [
+        f"absorption model 'power_law' (y = {y:g}): the alpha volume holds one number per "
+        f"material, its absorption at f0 = {f0 / 1e6:g} MHz, and the solvers apply that one "
+        f"value at every frequency they carry and add no dispersion, so a recorded harmonic "
+        f"above f0 is absorbed at alpha(f0), not at alpha(n f0)."
+    ]
+
+
 #: The solver whose physics is the nonlinear one; pairing it with a beta=0
 #: medium is the trap :func:`linear_medium_warnings` exists for.
 _NONLINEAR_SOLVER = "westervelt"
@@ -1089,7 +1319,7 @@ def linear_medium_warnings(solver: str, medium) -> list[str]:
     """The "westervelt on a beta=0 medium" warning.
 
     ``water()`` is beta=0 by design and the engine is right to drop the
-    nonlinear term for it (westervelt at beta=0 IS linear, bit for bit) —
+    nonlinear term for it (westervelt at beta=0 IS linear, bit for bit),
     but a job that ASKS for westervelt is asking for nonlinear physics, and a
     ``harmonics: [1, 2]`` run that quietly gets a linear solve back is left
     wondering why its second harmonic is numerical noise.
@@ -1108,7 +1338,7 @@ def linear_medium_warnings(solver: str, medium) -> list[str]:
         f"solve will be BIT-IDENTICAL to solver 'linear' (there is no nonlinear term "
         f"to apply), so recorded harmonics above f0 will be numerical residue. Set "
         f"medium.material.beta (water in the HIFU literature: 3.5) for a nonlinear "
-        f"run. Intentional? Then this is fine — it is a linear reference run."
+        f"run. Intentional? Then this is fine: it is a linear reference run."
     ]
 
 
@@ -1116,7 +1346,7 @@ def validate_job(path: str | Path, fast: bool = False) -> JobReport:
     """Everything that can be checked WITHOUT solving (and without a GPU).
 
     ``fast=True`` skips medium construction for the explicit scene / volume /
-    homogeneous kinds — with it goes the solver capability check (nonlinear
+    homogeneous kinds; with it goes the solver capability check (nonlinear
     medium vs linear solver). Geometry, files, source-PML clearance, focus
     placement and ppw are always checked.
     """
@@ -1128,7 +1358,7 @@ def validate_job(path: str | Path, fast: bool = False) -> JobReport:
         return report
 
     # A grid-providing kind reads its geometry from a file, so its property
-    # volumes are the expensive part by construction — skip them here for the
+    # volumes are the expensive part by construction, so skip them here for the
     # same reason MediumPrep defers them. Asked of the KIND, not of one class,
     # or a third-party grid-providing kind would materialize GBs inside a
     # command whose whole promise is that it costs nothing.
@@ -1150,9 +1380,13 @@ def validate_job(path: str | Path, fast: bool = False) -> JobReport:
         f"focus voxel {built.focus_vox} ({built.derived.get('focus_mode', '?')}), "
         f"harmonics {built.harmonics}",
     ]
+    report.summary.extend(
+        absorption_summary(job.absorption, built.absorption_y, built.absorption_from_power_law)
+    )
+    report.warnings.extend(absorption_warnings(job.absorption, built.absorption_y, f0))
 
     # Recording cost is a CHOICE the user must see: an explicit job silently
-    # defaults to the full grid — 188 Mvox on a full-size volume is ~1.5 GiB
+    # defaults to the full grid: 188 Mvox on a full-size volume is ~1.5 GiB
     # of complex64 record buffer PER HARMONIC plus a multi-GB result file
     # over Drive.
     rec = built.record_region
@@ -1164,7 +1398,7 @@ def validate_job(path: str | Path, fast: bool = False) -> JobReport:
         rec_txt = "x".join(f"{sl.start}:{sl.stop}" for sl in rec)
     per_h_mib = n_rec * 8 / 2**20  # complex64 record buffer
     report.summary.append(
-        f"record region: {rec_txt} — {n_rec:,} vox, ~{per_h_mib:,.0f} MiB per harmonic"
+        f"record region: {rec_txt}, {n_rec:,} vox, ~{per_h_mib:,.0f} MiB per harmonic"
     )
     if rec is None and n_rec > 10_000_000:
         report.warnings.append(
