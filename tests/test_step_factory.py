@@ -4,9 +4,9 @@ The solver and the planner's calibration probe both need the per-step
 composition: the first to run it, the second to time it so a run can be
 predicted before it starts. They used to hold two copies. When the engine
 fused absorption and the sponge into a single damping volume, the probe's
-copy went on applying both factors separately and over-predicted GPU step
-time by about 8.6 % at 192^3, which is the defect these tests exist to keep
-closed.
+copy went on applying both factors separately and ran about 10 % long at
+192^3 against the closure a real solve uses, which is the defect these tests
+exist to keep closed.
 
 Two things are pinned here. That the damping volume is applied exactly once
 per field per step, which is the arithmetic the drift was made of; and that
@@ -41,7 +41,6 @@ def _quiet_step(shape, *, damp_value, nonlinear=False, backend="numpy"):
     kappa = ops.kappa_sinc(ks, c_ref=1500.0, dt=1e-7, xp=xp)
     deriv = ops.spectral_derivative_factors(ks, kappa, shape, xp)
     step = make_propagation_step(
-        xp=xp,
         fft=fft,
         padded=shape,
         p=p,
@@ -85,12 +84,24 @@ def test_a_unit_damping_volume_leaves_a_quiet_step_untouched():
 
 def test_the_closure_mutates_the_caller_s_arrays_rather_than_copies():
     """The engine keeps its own references to p and u and reads them after
-    every step, so the closure has to write through to those objects."""
+    every step, so the closure has to write through to THOSE objects.
+
+    Identity is not the test: ``id(p)`` is this frame's binding and no
+    implementation of the closure can move it. What has to hold is that the
+    very array objects handed to the factory carry the new field, so the
+    assertions below read through references taken before the step and never
+    through the names the closure was built from.
+    """
     step, p, u = _quiet_step((8, 8, 8), damp_value=0.5)
-    p_id, u_ids = id(p), [id(c) for c in u]
+    p_obj, u_objs = p, list(u)
+    before_p, before_u = p.copy(), [c.copy() for c in u]
     step()
-    assert id(p) == p_id
-    assert [id(c) for c in u] == u_ids
+    np.testing.assert_array_equal(p_obj, (before_p * np.float32(0.5)).astype(np.float32))
+    for got, was in zip(u_objs, before_u, strict=True):
+        np.testing.assert_array_equal(got, (was * np.float32(0.5)).astype(np.float32))
+    # And the list the factory closed over still holds those same objects: a
+    # closure that rebound u[i] would leave the engine reading stale slots.
+    assert [id(c) for c in u] == [id(c) for c in u_objs]
 
 
 def test_2d_is_supported_by_the_same_factory():

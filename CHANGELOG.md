@@ -22,7 +22,11 @@ measured, and how, is [documented here](https://ebx0.github.io/caustica/validati
   192^3, the shared closure reads within 1.8 % and 0.5 %. The probe also
   stops allocating a damping volume the engine does not have. Solver output is
   bit-identical, linear and Westervelt, so the numerics scheme stays
-  `cw-kspace-pstd/4`.
+  `cw-kspace-pstd/4`. A `~/.caustica/calibration.json` written before this
+  change reads 7 to 10 % high and should be re-measured. The probe still
+  times the grid-sized part of a step only; against a whole solve it reads
+  about 15 % low at 128^3 and 10 % low at 192^3, which the planner's next
+  revision has to carry.
 - **`cupy_available()` compiles a kernel before it answers yes.** Counting a
   CUDA device only proves the driver answers; every kernel caustica launches is
   compiled at run time, so a machine with a broken NVRTC used to be told a GPU

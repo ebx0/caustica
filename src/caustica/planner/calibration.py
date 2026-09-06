@@ -3,11 +3,27 @@
 :func:`measure_step_time` builds ``run_cw_kspace_pstd``'s OWN per-step
 closure over synthetic data (timing and memory only, no physics claim), so
 the measured per-step cost pays exactly the FFT mix and elementwise passes of
-a real solve. It is the same object the solver calls, not a copy. A copy is
+a real solve. It is the same DEFINITION the solver runs, built by the same
+factory over this module's own arrays, not a hand-copy of it. A hand-copy is
 what this module used to keep, and when the engine fused its two damping
-passes into one, the copy went on paying for both: measured on an RTX 5050
-against the closure a real solve ran, it read 9.4% high at 128^3 and 10.5%
-high at 192^3, where the shared closure reads within 1.8% and 0.5%.
+passes into one, the copy went on paying for both: paired against the closure
+a real solve ran, on an RTX 5050, it ran about 7% long at 128^3 and about 10%
+long at 192^3, where the shared closure lands within a couple of percent
+(``scripts/dev_step_timing.py closures`` reproduces this).
+
+What the probe times is the GRID-SIZED half of a step and nothing else. A
+real settle step also injects the source, reduces ``abs(p)`` over the
+convergence region and accumulates the harmonic phasors, and those costs are
+roughly fixed per step rather than proportional to the element count, so they
+weigh more on a small grid: paired against a real solve on the same device,
+``t_step_s`` reads LOW by roughly 15% at 128^3 and 10% at 192^3, and by more
+while the device is throttled (``scripts/dev_step_timing.py acceptance``).
+Treat a predicted wall time as a floor, not a bound, until the planner's
+model carries those terms.
+
+A calibration written before the damping fusion (2026-09-04) carries the
+copy's bias and reads about 7 to 10% high; re-run :func:`calibrate` on the
+device rather than trusting a stored entry from before that date.
 
 :func:`calibrate` measures >= 2 grid sizes and persists them to
 ``~/.caustica/calibration.json`` keyed by device name; estimates targeting a
@@ -169,7 +185,7 @@ def measure_step_time(
     mempool high-water mark (``total_bytes``, i.e. what nvidia-smi attributes
     to the process) and ``None`` on the numpy backend.
 
-    ``warmup_s`` (fix A2) is the ONE-TIME cost this measurement pays before
+    ``warmup_s`` is the ONE-TIME cost this measurement pays before
     the per-step clock is meaningful: device allocation, CUDA context and
     module load on a cold process, cuFFT plan creation and kernel compilation
     for this op mix. It is measured as *everything up to the end of the
@@ -202,8 +218,10 @@ def measure_step_time(
     rhoc2_dt = xp.full(padded, coef, dtype=xp.float32)
     # ONE damping volume, because the engine carries one: absorption and the
     # sponge are a single float32 product formed at setup. 0.999 * 0.999 is
-    # what the two separate factors used to multiply to, so the arithmetic the
-    # probe drives is unchanged and only the pass count is.
+    # the total damping the two separate factors used to apply, so the probe
+    # still contracts by the same amount per step; the float32 product differs
+    # from the two multiplies in the last bit, which decides nothing here
+    # because this array exists to be multiplied through, not to be read.
     damp = xp.full(padded, 0.999 * 0.999, dtype=xp.float32)
     beta2_dt = xp.full(padded, coef, dtype=xp.float32) if nonlinear else None
     ks = ops.k_vectors(padded, 1e-3, xp)
@@ -228,7 +246,6 @@ def measure_step_time(
     # injection, which is source-sized rather than grid-sized and so cannot
     # belong to a model fitted against the element count.
     one_step = make_propagation_step(
-        xp=xp,
         fft=fft,
         padded=padded,
         p=p,
@@ -563,7 +580,7 @@ def calibrate(
         # The COLD start, i.e. the largest warmup any of the shapes paid: the
         # first measurement carries the context/module load, the ones after it
         # in the same process do not, and it is the first that a fresh solve
-        # looks like (fix A2). record_warmup() replaces this with what a real
+        # looks like. record_warmup() replaces this with what a real
         # run actually paid once the validation suite has measured one.
         "warmup_s": max(float(r["warmup_s"]) for r in runs),
         "warmup_source": "probe",
@@ -659,7 +676,7 @@ def record_warmup(
     the one-time cost of a real run. ``caustica.validation``'s GPU-gate suite
     measures that number from an actual stamped run and calls this to write it
     back, which is what "the warmup is measured on the device and stored in
-    the calibration" means in practice (fix A2).
+    the calibration" means in practice.
 
     Returns the updated entry, or None when the device has no calibration
     yet (there is nothing to attach to, and inventing one would let the

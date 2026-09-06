@@ -189,7 +189,6 @@ def _guard_finite(peak: float, *, where: str, solver_name: str) -> None:
 
 def make_propagation_step(
     *,
-    xp: Any,
     fft: Any,
     padded: tuple[int, ...],
     p: Any,
@@ -213,9 +212,9 @@ def make_propagation_step(
     because two callers need the same definition: the solve itself and the
     planner's calibration probe, which times this cost to predict what a run
     will take. The probe used to carry a hand-copied replica, and after the
-    two damping passes became one, the copy went on paying for both and
-    over-predicted GPU step time by about 8.6 % at 192^3. One definition
-    cannot drift from itself.
+    two damping passes became one, the copy went on paying for both: paired
+    against this closure on an RTX 5050 it ran about 7 % long at 128^3 and
+    about 10 % long at 192^3. One definition cannot drift from itself.
 
     Every argument is state the closure mutates in place or reads every step;
     none of it is copied. ``p`` and each ``u[i]`` are updated in place, so the
@@ -223,8 +222,10 @@ def make_propagation_step(
 
     Arguments
     ---------
-    xp, fft
-        Array module and dtype-preserving FFT interface of the backend.
+    fft
+        Dtype-preserving FFT interface of the backend. It is the only backend
+        handle the step needs: every other operation here is an array method
+        or an operator on the arrays passed in.
     padded
         Shape of the FFT domain, which is the shape of every array here.
     p, u
@@ -608,7 +609,6 @@ def run_cw_kspace_pstd(
     # factory captures them, not the names. The checkpoint resume above is the
     # only place that rebinds either, and it runs first.
     propagate = make_propagation_step(
-        xp=xp,
         fft=fft,
         padded=padded,
         p=p,
