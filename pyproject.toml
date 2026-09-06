@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "caustica"
 version = "0.1.0.dev0"
-description = "GPU-accelerated nonlinear acoustic simulation library — focused/therapeutic ultrasound (HIFU) first (multi-solver: k-space PSTD Westervelt/linear native, k-Wave adapter; stamped, reproducible runs)"
+description = "GPU-accelerated nonlinear acoustic simulation library, focused and therapeutic ultrasound (HIFU) first (multi-solver: k-space PSTD Westervelt/linear native, k-Wave adapter; stamped, reproducible runs)"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
@@ -75,12 +75,12 @@ caustica = "caustica.__main__:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-# The planner's GPU datasheet ships with the library — without it a wheel
+# The planner's GPU datasheet ships with the library; without it a wheel
 # install (exactly what Colab does) breaks planner.estimate.
 "caustica.planner" = ["gpu_db.json"]
 # PEP 561: downstream type checkers see our annotations only with this marker.
 "caustica" = ["py.typed"]
-# Self-contained example jobs (no external data) — the README quickstart and
+# Self-contained example jobs (no external data): the README quickstart and
 # the clean-env CI leg both run one of these from a wheel install.
 "caustica.examples" = ["*.json"]
 

@@ -13,6 +13,20 @@ measured, and how, is [documented here](https://ebx0.github.io/caustica/validati
 
 ### Changed
 
+- **README and `pyproject` claim only what a report or a test backs.** The
+  Quickstart said GPU support was "not yet verified on real hardware" while an
+  A100 session had already graded the analytic and ITRUSST suites from cupy. It
+  now cites that session's relative L-infinity of 1.5e-6 and names all three
+  gates it failed, the last of them a 640^3 rung at dx 0.3 mm refused for
+  memory against a 26.98 GiB plan on a 39.494 GiB device. The Fubini range is
+  the five stations actually graded, sigma = 0.11 to 0.59, rather than a test
+  docstring's wider figure, and "every solver claim is gated by tests" is
+  narrowed to the gate, test or named report behind each one. Two tests keep
+  the prose honest from here: `test_doc_claims.py` pins the citations, the
+  documented commands and the version, and a gpu-marked `test_backend_parity`
+  runs the parity job on numpy and on cupy in one process, so the parity number
+  stands behind today's engine instead of an August one.
+
 - **The planner times the engine's own step, not a copy of it.** The
   calibration probe kept a hand-written replica of the k-space step, and when
   the engine fused its two damping passes into one the replica went on paying

@@ -5,7 +5,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
 
 **GPU-accelerated, multi-solver acoustic simulation library for HIFU / therapeutic ultrasound.**
-Pure-Python core (NumPy on CPU, CuPy/CUDA on GPU — no precompiled binaries required), designed
+Pure-Python core (NumPy on CPU, CuPy/CUDA on GPU, no precompiled binaries required), designed
 to run identically on a local workstation and on Google Colab (T4/L4/A100/H100).
 
 > Status: pre-alpha, under active development. Formerly developed under the working name
@@ -26,20 +26,26 @@ caustica run water_bowl_mini.json     # seconds on CPU; writes runs/water_bowl_m
 caustica report runs/water_bowl_mini  # local HTML + figures (needs the [report] extra)
 ```
 
-The `example` command *copies* the job out of the install before running —
-outputs resolve next to the job file, so running the packaged copy in place
+The `example` command *copies* the job out of the install before running.
+Outputs resolve next to the job file, so running the packaged copy in place
 would write into `site-packages`. The `[report]` extra pulls matplotlib for
 `caustica report`; everything up to and including `run` needs only the base
-install. GPU (CuPy) support is packaged (`pip install "caustica[gpu]"`) but
-**not yet verified on real hardware** — every solver result above is
-CPU-validated (see [what has been measured](https://ebx0.github.io/caustica/validation/)).
+install. GPU (CuPy) support is packaged (`pip install "caustica[gpu]"`) and has
+been run on real hardware: on an A100 the cupy and numpy fields agree to a
+relative L-infinity of 1.5e-6, and the analytic and ITRUSST suites below were
+graded from cupy runs on an RTX 5050. That A100 session did *not* pass the
+planner's VRAM and wall-time ladder, and it did not pass its largest rung
+either: a 640^3 grid at dx 0.3 mm was refused for memory instead of solving.
+The numbers and the report paths are under [Validation](#validation), and
+[what has been measured](https://ebx0.github.io/caustica/validation/) is the
+same story at length.
 
 Runs identically in a Colab cell (prefix each line with `!`); the same four
 commands are the whole workflow.
 
 ## How to use it
 
-Ten steps from an empty shell to a focal metric — the same ten decisions whether you write a
+Ten steps from an empty shell to a focal metric, the same ten decisions whether you write a
 job file, call `caustica.simulate()` from Python, or run it in a Colab cell.
 
 <picture>
@@ -51,7 +57,7 @@ job file, call `caustica.simulate()` from Python, or run it in a Colab cell.
 <sub>The diagram is generated, not drawn:
 <a href="https://github.com/ebx0/ebx0.github.io/blob/caustica-docs/scripts/make_howto.py"><code>scripts/make_howto.py</code></a>, in the documentation repository, rebuilds it by calling
 this library, and the thumbnails on the left are what
-they claim to be — the real absorbing profile, real constructive geometry, the real spiral element
+they claim to be: the real absorbing profile, real constructive geometry, the real spiral element
 table, a real Rayleigh preview of a steered focus, the real Fubini harmonics, the planner's real
 estimate for this machine and an A100, and the axial line and focal plane of a real solve.
 <code>--schematic</code> writes a drawn stand-in pair (<code>how-to-use.svg</code>) that needs no
@@ -63,7 +69,7 @@ solve.</sub>
 
 [`notebooks/colab_run.ipynb`](notebooks/colab_run.ipynb) is five cells, and **you edit exactly
 one line**: `CONFIG`, the job to run. Every bit of behaviour lives in `caustica.colab`, so
-improvements arrive with `pip install -U` and the notebook's own diff stays zero — pinned by
+improvements arrive with `pip install -U` and the notebook's own diff stays zero, pinned by
 `tests/test_colab.py::test_notebook_cells_match_the_frozen_template`.
 
 ```python
@@ -73,22 +79,22 @@ outdir = run_job("my_job.json")   # a path, or an http(s) URL to a caustica-job/
 show(outdir)                      # the run's metrics + its report figures, inline
 ```
 
-`run_job` prints `env_report()` and then **requires a GPU before it prepares anything** — no
+`run_job` prints `env_report()` and then **requires a GPU before it prepares anything**: no
 download, no folder, no medium build on a runtime that cannot run the job. The refusal names the
 fix for the machine you are on, and keeps the two causes apart, because they have two different
 fixes: a missing `cupy` is not a CPU runtime, and caustica pip-installs neither for you. After
-that it is the ordinary runner — plan first, the VRAM and CPU-time gates, the same output folder,
+that it is the ordinary runner: plan first, the VRAM and CPU-time gates, the same output folder,
 the same exit codes (carried on `SimulationError.exit_code`).
 
 Output defaults to `/content/runs/<job>`, Colab's session disk. **caustica never mounts Google
 Drive**, knows no Drive path and carries no Drive-specific retry logic: if you want a run to
 outlive the session, mount your own storage in a cell and pass that folder as `out=`. `/content`
-survives a runtime restart — so `resume=True` finishes an interrupted run — but not a VM
-teardown.
+survives a runtime restart (so `resume=True` finishes an interrupted run) but
+not a VM teardown.
 
 ## One call, from Python
 
-The same job, the same planner, the same gates — without leaving a notebook:
+The same job, the same planner, the same gates, without leaving a notebook:
 
 ```python
 import caustica
@@ -101,7 +107,7 @@ res = caustica.simulate(
     progress="auto",          # per-period line + a coarse focal preview every 8 periods
 )
 
-res.metrics       # focal metrics (caustica.report.metrics — the definitions REPORT.md quotes)
+res.metrics       # focal metrics (caustica.report.metrics: the definitions REPORT.md quotes)
 res.result.phasor # the complex field, as the solver produced it
 res.preview()     # the <=10 MB caustica-preview/1 package, in memory
 res.save("result.h5")
@@ -109,7 +115,7 @@ res.save("result.h5")
 
 `out=None` writes nothing at all, but it does **not** skip the planner or the
 two pre-run gates: a run that will not fit in VRAM, or that a CPU would take
-hours over, is refused here exactly as `caustica run` refuses it — with the
+hours over, is refused here exactly as `caustica run` refuses it, with the
 same message and the same exit code, carried on `SimulationError.exit_code`.
 Give `out=<path>` and the call delegates to the runner, producing the ordinary
 output folder (job copy, plan, status, result, preview, stamp).
@@ -123,25 +129,25 @@ yourself.
 These pages are the contract, and each is kept honest by a test that runs
 before the site is published:
 
-- **[the job format](https://ebx0.github.io/caustica/job_reference/)** — every field of the job
+- **[the job format](https://ebx0.github.io/caustica/job_reference/)**: every field of the job
   file: each medium kind, each array kind, drive / run / output, with a working
   snippet per kind. `caustica schema` prints the same thing as JSON Schema,
   generated from the models.
-- **[the conventions](https://ebx0.github.io/caustica/conventions/)** — the five things that make a
+- **[the conventions](https://ebx0.github.io/caustica/conventions/)**: the five things that make a
   result *silently* wrong if you assume otherwise: the phasor convention
   `p(t) = Re{P·e^(-iωt)}`, Np/m vs dB/cm, what `amplitude` actually means, the
   `+z` beam-axis frame, and that the PML is inside `grid.size_mm`.
-- **[the extension points](https://ebx0.github.io/caustica/extending/)** — the five extension points
+- **[the extension points](https://ebx0.github.io/caustica/extending/)**: the five extension points
   (solver, medium kind, array kind, backend, report renderer), their frozen
   entry-point group names, and a copy-paste plugin package that uses all five.
-- **[the GUI contract](https://ebx0.github.io/caustica/gui_contract/)** — the surface a GUI (or any
+- **[the GUI contract](https://ebx0.github.io/caustica/gui_contract/)**: the surface a GUI (or any
   other program driving caustica) may rely on: the run folder, the exit codes,
   `status.json`, `error.json`, the `cancel` stop signal, and the progress
   payload. Nothing outside that page is a contract.
 
 Edit the packaged example, or start from the two entry points below.
 
-**Your transducer** — an explicit element table (`.npz`, `.csv` or inline),
+**Your transducer**: an explicit element table (`.npz`, `.csv` or inline),
 millimetres in the apex frame; normals optional (omit them and every element
 aims at the geometric focus):
 
@@ -159,7 +165,7 @@ import numpy as np
 np.savez("my_array.npz", positions=positions_mm)   # (n, 3); optional: normals=...
 ```
 
-**Your medium** — a `medium_volume` `.npz` carrying labels + a material table
+**Your medium**: a `medium_volume` `.npz` carrying labels + a material table
 (or dense per-voxel `c`/`rho`/`alpha`/`beta`). The file fixes shape and `dx`, so
 the job carries no `grid` section:
 
@@ -172,22 +178,22 @@ from caustica.io import write_medium_volume
 write_medium_volume("my_medium.npz", dx=0.5e-3, labels=labels, materials=db)
 ```
 
-`caustica validate my_job.json` checks all of it — schema, files, geometry, PML
-clearance, focus placement, points-per-wavelength — before a GPU is booked.
+`caustica validate my_job.json` checks all of it (schema, files, geometry, PML
+clearance, focus placement, points-per-wavelength) before a GPU is booked.
 
 Neither axis is a closed list: medium kinds and array kinds are registries with
 entry-point groups (`caustica.medium_kinds`, `caustica.array_kinds`), so a
-package can add its own without touching caustica — see the end of the job
+package can add its own without touching caustica; see the end of the job
 reference.
 
 ## Solvers (one API, a registry of engines)
 
 | name | physics | dims | backend | status |
 |---|---|---|---|---|
-| `linear` | linear full-wave k-space PSTD | 1/2/3-D | numpy (cupy: provisional) | ✅ validated |
-| `westervelt` | nonlinear (Westervelt) k-space PSTD, multi-harmonic capture | 1/2/3-D | numpy (cupy: provisional) | ✅ validated |
+| `linear` | linear full-wave k-space PSTD | 1/2/3-D | numpy, cupy | ✅ validated |
+| `westervelt` | nonlinear (Westervelt) k-space PSTD, multi-harmonic capture | 1/2/3-D | numpy, cupy | ✅ validated |
 | `kwave` | [k-Wave](http://www.k-wave.org) kspaceFirstOrder via `k-wave-python` (CPU/OMP binary) | 2/3-D | external | ✅ wrapped + cross-validated |
-| `kzk` | parabolic KZK (z-marching) | planned | — | planned |
+| `kzk` | parabolic KZK (z-marching) | n/a | n/a | planned |
 
 ```python
 import numpy as np
@@ -250,11 +256,11 @@ and a job references it without a `grid` section (the file fixes the grid):
 {"medium": {"kind": "medium_volume", "file": "my_medium.npz", "pml_mm": 5.0}}
 ```
 
-**Anatomical phantoms** (the UWCEM breast repository — nine MRI-derived
+**Anatomical phantoms** (the UWCEM breast repository: nine MRI-derived
 phantoms, the aligned dataset, nine stored run setups and the Phantom Studio
 GUI) live in their own repository, **uwcem-phantom**, which *consumes*
 caustica and emits `medium_volume` files plus explicit `caustica-job/1`
-JSON. caustica itself carries no phantom-source-specific code — enforced by
+JSON. caustica itself carries no phantom-source-specific code, enforced by
 `tests/test_import_direction.py`.
 
 ## Planner (will it fit? how long will it take?)
@@ -276,20 +282,61 @@ sources, always labeled on the result: `db` (datasheet, coarse), `calibrated`
 dx factor that would fit, a smaller record region, the `linear` solver, or a
 larger device.
 
+Both estimates are the part of caustica whose only on-device grading failed.
+That grading had VRAM within 2 % at 256^3 but 18.6 % and 35.3 % under the
+measured peak at 400^3 and 512^3, and wall time 154 % to 308 % over the actual
+at all three. The out-of-memory refusal itself passed.
+[Validation](#validation) has the numbers and the report.
+
 ## Validation
 
-Every solver milestone is gated by tests against **analytic references** (O'Neil 1949 focused
+Every solver claim is backed by a gate, a test in the suite or a named
+validation report, against **analytic references** (O'Neil 1949 focused
 bowl, Rayleigh integral, Fubini nonlinear harmonic growth, exponential absorption, plane-wave
 dispersion) **and cross-validated against k-Wave** running as a registry solver on identical
-grids/media/sources. Current evidence (all automated, `pytest`):
+grids/media/sources. Current evidence, all automated (`pytest`, plus the `caustica.validation`
+suites where a bullet says so):
 
 - plane-wave phase-speed error < 0.1% at 4 ppw; measured absorption within 1% of configured α
 - 3-D focused bowl vs O'Neil: focus within 1 voxel, axial correlation r > 0.99, −6 dB widths < 5%
-- Westervelt vs Fubini: A2/A1 within 5% (measured 0.9–3.2%) across σ = 0.06–0.61
+- Westervelt vs Fubini: A2/A1 within 5% (measured 0.9 to 3.2%) across the five graded
+  stations, σ = 0.11 to 0.59
 - `linear` vs `kwave` (real OMP binary), 2-D water: normalized-field correlation r > 0.99
 - calibrated source amplitude: realized plane amplitude ≈ `source.amplitude` on both the
   native and k-Wave paths, invariant to grid/CFL/remote medium content; one phasor
   convention library-wide (`p(t) = Re{P e^{−iωt}}`, shared with the analytic references)
+- numpy vs cupy on one 3-D job, compared in memory before any file round trip:
+  relative L-infinity 1.5e-6 on the phasor and 1.2e-6 on `p_max`, measured on an
+  A100 on 2026-08-22
+  (`benchmarks/reports/gpu_gates/nvidia-a100-sxm4-40gb-20260822-222519/REPORT.md`,
+  `python -m caustica.validation gpu-gates`). The engine has changed since that
+  session, so `tests/test_backend_parity.py` runs the same in-memory comparison
+  against the same 1e-5 limit on whatever GPU is present, and skips when there
+  is none. The analytic gates above were also graded from cupy runs on an RTX 5050
+  (`benchmarks/reports/analytic/postfix-cupy-20260824/REPORT.md`)
+- ITRUSST PH1 benchmarks 1 and 2 (water, lossless and 1 dB/cm at 500 kHz) with
+  both source conditions, bowl and piston, run with the `linear` solver on cupy
+  at dx 0.5 mm and graded over the paper's own comparison domain against the
+  Rayleigh integral: L-infinity 3.41, 3.82, 3.79 and 5.03 %, peaks 1.031 to
+  1.038 times the reference, landing on the reference's own voxel in three of
+  the four cases and 0.5 mm (one voxel) past it in the fourth. The limits are
+  the spread the intercomparison reported across eleven models (under 10 % for
+  the bowl, under 15 % for the piston), not a tolerance invented here
+  (`benchmarks/reports/itrusst/cupy-20260825-080503/REPORT.md`,
+  `python -m caustica.validation itrusst`)
+
+What has NOT passed: the planner half of the GPU gate ladder, and the ladder's
+largest rung. In the A100 session above, predicted VRAM was 18.6 % and 35.3 %
+below the measured peak at 400³ and 512³, and predicted wall time was 154 % to
+308 % above the actual; separately, the 640³ rung at dx 0.3 mm was refused for
+memory (exit 3) on a 40 GiB device against a 26.98 GiB plan, which is the
+full-size gate and not a planner one. Four causes were found and fixed after
+that session (a diverged run exiting 0, one process shared by every rung so the
+memory pool accumulated, calibration probes small enough to be launch-latency
+bound, and an unrecognized device planned as an A100); the shared memory pool
+is the likeliest reason the 640³ rung found no room. The ladder has not been
+re-run on a real device since, so those three gates have no passing measurement
+behind them. Parity and the out-of-memory refusal passed in the same session.
 
 Figure-based comparison reports live under `benchmarks/reports/`.
 
@@ -302,7 +349,7 @@ src/caustica/
               # + job.py: the caustica-job/1 schema one JSON = one full run
               # + kinds.py: medium/array kind registries (entry-point plugin seam)
   materials.py, medium.py, sources.py, spectral.py
-  analytic/   # Rayleigh, O'Neil, Fubini, cap sampling — the ground-truth layer
+  analytic/   # Rayleigh, O'Neil, Fubini, cap sampling, the ground-truth layer
   arrays/     # transducer geometry (spiral, explicit element tables), DAS phasing,
               # voxelization
   geometry/   # CSG shapes, scenes, label-volume import + dx-resampling
@@ -314,7 +361,7 @@ src/caustica/
               # figures + HTML report rendering
   runner.py   # plan-first job execution: disjoint exit codes, heartbeat, resume
   facade.py   # caustica.simulate(...): one call over the SAME build_job/plan/gates
-  colab.py    # caustica.colab: the Colab bridge — environment verdict BEFORE anything
+  colab.py    # caustica.colab: the Colab bridge, environment verdict BEFORE anything
               # is prepared, output under /content, no Drive anywhere
   progress.py # progress payload presentation (tqdm or plain lines, focal preview)
   __main__.py # the CLI: python -m caustica {validate | run | report | schema | example}
@@ -345,7 +392,7 @@ python -m caustica example                    # list the packaged zero-data exam
 
 On CPU, a native run first prints the plan (wall-time estimate, memory, the
 expected `result.h5` size) and **refuses jobs whose estimate exceeds 5
-minutes** — `--allow-slow-cpu` accepts the wait, a GPU backend avoids it.
+minutes**: `--allow-slow-cpu` accepts the wait, a GPU backend avoids it.
 Warnings (low points-per-wavelength, CPU fallback) are `CausticaWarning`s:
 filter them with `warnings.filterwarnings(..., category=caustica.CausticaWarning)`
 without touching the rest of the ecosystem.
