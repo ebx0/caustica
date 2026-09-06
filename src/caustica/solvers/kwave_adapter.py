@@ -1,10 +1,10 @@
 """k-Wave as a first-class caustica solver (registry name: ``"kwave"``).
 
-User decision (2026-08-10): k-Wave is not only a benchmark target — it is a
+User decision (2026-08-10): k-Wave is not only a benchmark target: it is a
 selectable solver, and the validation chain centers on cross-checking our
 native solvers against it (plus the analytic references). This adapter maps
 caustica's Grid/Medium/CWSource onto k-wave-python's objects, drives the
-precompiled kspaceFirstOrder binary (CPU/OMP by default — the GPU binary is
+precompiled kspaceFirstOrder binary (CPU/OMP by default; the GPU binary is
 known-broken on Colab), and converts the recorded time
 series back into the project's phasor contract via
 :func:`caustica.spectral.single_bin_phasor`.
@@ -16,7 +16,7 @@ Unit conversions (explicit, tested):
 * nonlinearity: caustica beta = 1 + B/2A  =>  k-Wave ``BonA = 2 (beta - 1)``.
 
 Differences from the native solvers (documented, not hidden):
-* No adaptive convergence — k-Wave runs a FIXED schedule of
+* No adaptive convergence: k-Wave runs a FIXED schedule of
   ``tof + min_settle_periods`` settle periods plus the record window. Pick
   ``min_settle_periods`` generously for strongly reverberant media, and more
   so when asking for harmonics: the native engine settles until every
@@ -25,8 +25,8 @@ Differences from the native solvers (documented, not hidden):
   obeyed.
 * k-Wave applies its own PML INSIDE the grid edge (``pml_inside=True``).
   The adapter passes ``pml_size = grid.pml_vox`` so the damped band matches
-  the native sponge (falling back to k-Wave's default — 20 voxels in 2-D,
-  10 in 3-D — when the grid has no PML), and REFUSES sources that sit
+  the native sponge (falling back to k-Wave's default, 20 voxels in 2-D
+  and 10 in 3-D, when the grid has no PML), and REFUSES sources that sit
   inside that band: k-Wave would silently swallow them (review finding,
   2026-08-11).
 * Source amplitude: k-Wave normalizes additive pressure sources internally
@@ -120,23 +120,6 @@ class KWaveSolver(SolverBase):
                     f"got {reference_point} (did you pass meters?)"
                 )
         self.validate(grid, medium, source)
-        try:
-            import kwave
-            from kwave.kgrid import kWaveGrid
-            from kwave.kmedium import kWaveMedium
-            from kwave.ksensor import kSensor
-            from kwave.ksource import kSource
-            from kwave.kspaceFirstOrder2D import kspaceFirstOrder2D
-            from kwave.kspaceFirstOrder3D import kspaceFirstOrder3D
-            from kwave.options.simulation_execution_options import (
-                SimulationExecutionOptions,
-            )
-            from kwave.options.simulation_options import SimulationOptions
-        except ImportError as exc:  # pragma: no cover - depends on extras
-            raise RuntimeError(
-                "solver 'kwave' needs the optional dependency k-wave-python: "
-                "pip install caustica[kwave]"
-            ) from exc
 
         nd = grid.ndim
         dx = grid.dx
@@ -175,7 +158,7 @@ class KWaveSolver(SolverBase):
         # enough to satisfy the peak alone left 2.1 % of the fundamental in
         # the harmonic channel, and it took roughly thirty periods past
         # time-of-flight to clear. So the default is flagged rather than
-        # silently used — the number is the caller's to pick, but not by
+        # silently used: the number is the caller's to pick, but not by
         # accident.
         if max(harmonics) > 1 and spec.min_settle_periods <= CWRunSpec().min_settle_periods:
             warnings.warn(
@@ -193,6 +176,32 @@ class KWaveSolver(SolverBase):
             total_periods = max(total_periods, ceil(spec.t_end_min_us * 1e-6 / period))
         nt = total_periods * spp
         rec_steps = spec.n_record_periods * spp
+
+        # k-wave-python is imported here rather than at the top of run() so
+        # that everything above it, the schedule included, is reachable on a
+        # machine that does not have the optional dependency: the harmonic
+        # warning is about the schedule, not about the binary. One consequence
+        # for callers: a machine without the dependency now reports the scene
+        # errors that need no binary, the temporal-Nyquist refusal above
+        # included, before the missing-dependency error, which is the order a
+        # machine with the dependency already had.
+        try:
+            import kwave
+            from kwave.kgrid import kWaveGrid
+            from kwave.kmedium import kWaveMedium
+            from kwave.ksensor import kSensor
+            from kwave.ksource import kSource
+            from kwave.kspaceFirstOrder2D import kspaceFirstOrder2D
+            from kwave.kspaceFirstOrder3D import kspaceFirstOrder3D
+            from kwave.options.simulation_execution_options import (
+                SimulationExecutionOptions,
+            )
+            from kwave.options.simulation_options import SimulationOptions
+        except ImportError as exc:
+            raise RuntimeError(
+                "solver 'kwave' needs the optional dependency k-wave-python: "
+                "pip install caustica[kwave]"
+            ) from exc
 
         # ---- k-Wave objects ----
         kgrid = kWaveGrid(np.asarray(grid.shape), np.full(nd, dx))
@@ -263,7 +272,7 @@ class KWaveSolver(SolverBase):
         if grid.pml_vox == 0:
             warnings.warn(
                 f"grid has no PML: k-Wave still damps its default inner band "
-                f"({pml_size} voxels) — the field near the edges will differ "
+                f"({pml_size} voxels): the field near the edges will differ "
                 f"from the native (periodic) solvers.",
                 stacklevel=2,
             )

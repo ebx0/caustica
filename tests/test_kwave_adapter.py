@@ -3,10 +3,10 @@
 The live test is the FIRST k-Wave cross-validation of the native solver:
 same grid, same medium, same voxel source -> normalized focal patterns must
 agree. It is skipped, with a visible reason, when k-wave-python or its
-binary is unavailable — the suite stays green without it.
+binary is unavailable; the suite stays green without it.
 """
 
-import contextlib
+import sys
 import warnings
 
 import numpy as np
@@ -133,7 +133,7 @@ def test_the_adapter_asks_kwave_for_the_absorption_law_the_engine_implements():
     It also means neither code is right about tissue, which absorbs roughly
     as ``f^1.1``: both under-absorb 2f0 together, by a factor near ``2^1.1``,
     and no amount of agreement between them will say so. Raising the exponent
-    HERE alone would not fix that -- it would only hide it, by making the two
+    HERE alone would not fix that; it would only hide it, by making the two
     codes disagree at the harmonic for a reason that looks like a numerics
     error. `scripts/dev_nonlinear.py` N5 measures the gap; closing it means
     changing the engine, and this test is what makes that a deliberate act.
@@ -166,33 +166,40 @@ def test_the_adapter_asks_kwave_for_the_absorption_law_the_engine_implements():
     np.testing.assert_allclose(seen["sound_speed"], C0)
 
 
-@pytest.mark.slow
-def test_asking_kwave_for_a_harmonic_at_the_default_settle_is_flagged():
+def test_asking_kwave_for_a_harmonic_at_the_default_settle_is_flagged(monkeypatch):
     """A fixed schedule cannot know when a harmonic has stopped moving.
 
     The native engine grades every requested harmonic against its own
     amplitude and settles until each one stops changing. k-Wave's binary runs
     to a step count decided before it starts, so the caller has to pick that
-    count -- and the default was chosen for a fundamental. Measured on a
+    count, and the default was chosen for a fundamental. Measured on a
     focused bowl in water with beta = 0, where the true 2f0 is zero: a settle
     short enough to satisfy the peak alone left 2.1 % of the fundamental in
     the harmonic channel.
 
-    The warning fires before any binary runs, so this needs neither k-Wave nor
-    a GPU -- which is the point of raising it where the schedule is computed.
+    The warning is raised where the schedule is computed, which is above the
+    point where the adapter imports k-wave-python, so hiding the package from
+    the import machinery stops the run at that boundary. No binary starts and
+    the assertion is the same with and without the optional dependency
+    installed.
     """
     grid = Grid(shape=(48, 48), dx=DX, pml=PMLSpec(thickness=6 * DX))
     med = Medium.homogeneous(grid.shape, water(c=C0, beta=3.5))
     src = _disc_source((24, 8), 3, ndim=2)
+    # ``None`` in sys.modules makes ``import kwave`` raise ImportError, which
+    # the adapter turns into its missing-dependency RuntimeError. That error
+    # is the sentinel: reaching it proves the run stopped at the k-Wave
+    # boundary, and a warning caught in the same block was raised before it.
+    monkeypatch.setitem(sys.modules, "kwave", None)
 
     with pytest.warns(CausticaWarning, match="fixed schedule"):
-        with contextlib.suppress(Exception):
+        with pytest.raises(RuntimeError, match="k-wave-python"):
             solvers.get("kwave")().run(grid, med, src, CWRunSpec(), harmonics=(1, 2))
 
     # Ask for the fundamental alone, or settle deliberately, and it stays quiet.
     for spec, harmonics in ((CWRunSpec(), (1,)), (CWRunSpec(min_settle_periods=30), (1, 2))):
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
-            with contextlib.suppress(Exception):
+            with pytest.raises(RuntimeError, match="k-wave-python"):
                 solvers.get("kwave")().run(grid, med, src, spec, harmonics=harmonics)
         assert not [w for w in caught if "fixed schedule" in str(w.message)]
