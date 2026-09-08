@@ -1,0 +1,28 @@
+{
+  "source": "calibrated",
+  "spp": 20,
+  "dt_s": 1e-07,
+  "t_step_s": 0.028014720173997764,
+  "warmup_s": 0.349,
+  "steps_expected": 260,
+  "steps_worst": 260,
+  "t_expected_s": 7.6,
+  "t_worst_s": 7.6,
+  "vram_gib": 1.544,
+  "vram_breakdown_bytes": {
+    "state (p + u)": 250000000,
+    "property maps": 187500000,
+    "damping volume": 62500000,
+    "spectral factors (i*k*kappa)": 189000000,
+    "record buffers": 187500000,
+    "step temporaries": 439000000,
+    "fft workspace": 126000000
+  },
+  "result_size_mb_expected": 89.4,
+  "gpu": "unknown:NVIDIA GeForce RTX 5050 Laptop GPU",
+  "gpu_t_expected_s": 7.6,
+  "gpu_fits": true,
+  "warnings": [],
+  "advice": [],
+  "ppw_warnings": []
+}

@@ -1,0 +1,8 @@
+........                                                                 [100%]
+============================== warnings summary ===============================
+.venv\Lib\site-packages\cupy\_environment.py:286
+  C:\Users\bulbu\Desktop\hifusim\.venv\Lib\site-packages\cupy\_environment.py:286: UserWarning: CUDA path could not be detected. Set CUDA_PATH environment variable if CuPy fails to load.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+8 passed, 966 deselected, 1 warning in 2.05s

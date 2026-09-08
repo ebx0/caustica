@@ -1,0 +1,35 @@
+{
+  "source": "calibrated",
+  "spp": 20,
+  "dt_s": 1e-07,
+  "t_step_s": 0.30486553725792054,
+  "warmup_s": 0.929,
+  "steps_expected": 380,
+  "steps_worst": 380,
+  "t_expected_s": 116.8,
+  "t_worst_s": 116.8,
+  "vram_gib": 7.957,
+  "vram_breakdown_bytes": {
+    "state (p + u)": 1289945088,
+    "property maps": 967458816,
+    "damping volume": 322486272,
+    "spectral factors (i*k*kappa)": 971937792,
+    "record buffers": 967458816,
+    "step temporaries": 2261882880,
+    "fft workspace": 647958528
+  },
+  "result_size_mb_expected": 461.3,
+  "gpu": "unknown:NVIDIA GeForce RTX 5050 Laptop GPU",
+  "gpu_t_expected_s": 116.8,
+  "gpu_fits": false,
+  "warnings": [
+    "this plan is 11x larger than the biggest grid the calibration measured (7,077,888 elements) \u2014 the step cost is extrapolated, not measured; recalibrate nearer this size"
+  ],
+  "advice": [
+    "increase dx by >= x1.05 (same physical extent at grid ~(410, 410, 410); voxel count scales 1/m^3)",
+    "shrink the record region (AOI): record buffers are 0.90 GiB \u2014 pass record_region=... to run()",
+    "the 'linear' solver drops the beta map and nonlinear temporaries (~0.90 GiB) \u2014 valid only if harmonics are not needed",
+    "or pick a larger device: A100-40GB, A100-80GB, H100-PCIe, H100-SXM, L4, T4, V100"
+  ],
+  "ppw_warnings": []
+}

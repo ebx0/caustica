@@ -1,0 +1,189 @@
+C:\Users\bulbu\Desktop\hifusim\.venv\Lib\site-packages\cupy\_environment.py:286: UserWarning: CUDA path could not be detected. Set CUDA_PATH environment variable if CuPy fails to load.
+  warnings.warn(
+--- environment ----------------------------------------------
+  caustica: 0.1.0.dev0
+  python: 3.12.10
+  platform: Windows-11-10.0.26200-SP0
+  numpy: 2.2.6
+  scipy: 1.15.3
+  pydantic: 2.13.4
+  h5py: 3.16.0
+  resolved_backend: cupy
+  gpu_name: NVIDIA GeForce RTX 5050 Laptop GPU
+  driver_version: 13020
+  cuda_runtime_version: 12090
+  cupy_version: 14.2.0
+  vram_total_gib: 7.96
+  vram_free_gib: 6.9
+
+report folder: benchmarks\reports\gpu_gates\nvidia-geforce-rtx-5050-laptop-gpu-20260906-204256
+
+calibrating NVIDIA GeForce RTX 5050 Laptop GPU (datasheet key: unknown:NVIDIA GeForce RTX 5050 Laptop GPU) ...
+  a=0.000e+00  b=1.315e-09  warmup=0.23755194968543947
+
+ladder (6.9 GiB free):
+  vram-1.587gib-250      (250, 250, 250)  plan   1.54 GiB  full result  
+  vram-3.809gib-324      (324, 324, 324)  plan   3.36 GiB  full result  
+  oom-432                (432, 432, 432)  plan   7.96 GiB  preview-only  MUST BE REFUSED
+
+=== rung vram-1.587gib-250 (250, 250, 250) ===
+C:\Users\bulbu\Desktop\hifusim\.venv\Lib\site-packages\cupy\_environment.py:286: UserWarning: CUDA path could not be detected. Set CUDA_PATH environment variable if CuPy fails to load.
+  warnings.warn(
+--- planner ------------------------------------------------------
+this machine [calibrated]: t_step=31.61 ms, expected 9 s (260-260 steps, spp=20)
+memory for this run: 1.54 GiB
+expected result.h5 size: ~89.4 MB (float16-quantized, 1 harmonic; --preview-only skips it)
+planner [calibrated] westervelt on unknown:NVIDIA GeForce RTX 5050 Laptop GPU: FITS (1.54 GiB needed / 6.84 GiB usable)
+  t_step=31.61 ms, spp=20, warmup=0.4 s (one-time), expected=8.6 s (260 steps), worst-case=8.6 s
+
+solving (westervelt, cupy) -> benchmarks\reports\gpu_gates\nvidia-geforce-rtx-5050-laptop-gpu-20260906-204256\rungs\vram-1.587gib-250
+[settle] period 1/13  step 20/260  peak 35.1 kPa  d=--  eta 7s
+[settle] period 2/13  step 40/260  peak 0.154 MPa  d=3.38e+00  eta 6s
+[settle] period 3/13  step 60/260  peak 0.249 MPa  d=6.19e-01  eta 5s
+[settle] period 4/13  step 80/260  peak 0.282 MPa  d=1.35e-01  eta 5s
+[settle] period 5/13  step 100/260  peak 0.339 MPa  d=2.00e-01  eta 4s
+[settle] period 6/13  step 120/260  peak 0.511 MPa  d=5.07e-01  eta 4s
+[settle] period 7/13  step 140/260  peak 0.768 MPa  d=5.04e-01  eta 3s
+[settle] period 8/13  step 160/260  peak 1.166 MPa  d=5.18e-01  eta 3s
+  preview @ period 8 — |p| through the focus (beam left to right), peak 1.166 MPa
+  |                                                  |
+  |                                                  |
+  |                                                  |
+  |                                                  |
+  |  .                                               |
+  | ...::....                                        |
+  | ...:::::::::....                                 |
+  | .:::-::=--=*#*=-.                                |
+  | ..:::::----+*+=:.                                |
+  | ...::::::.....                                   |
+  | ......                                           |
+  |                                                  |
+  |                                                  |
+  |                                                  |
+  |                                                  |
+  |                                                  |
+INFO caustica: checkpoint written: checkpoint.npz (stage settle, period 8, 160 steps)
+[settle] period 9/13  step 180/260  peak 1.402 MPa  d=2.03e-01  eta 2s
+[settle] period 10/13  step 200/260  peak 1.418 MPa  d=1.15e-02  eta 2s
+[settle] period 11/13  step 220/260  peak 1.421 MPa  d=1.78e-03  eta 1s
+[settle] period 12/13  step 240/260  peak 1.420 MPa  d=8.68e-04  eta 1s
+[record] period 12/13  step 240/260  peak 1.420 MPa  d=8.68e-04  eta 1s
+  preview @ period 12 — |p| through the focus (beam left to right), peak 1.420 MPa
+  |                                                  |
+  |                                                  |
+  |                                                  |
+  |                                                  |
+  |                                                  |
+  | .......                                          |
+  | .....:::::............                           |
+  | ..::-::-:--+*###***++=-:.                        |
+  | ...::::::--=+****++++=-:.                        |
+  | .....:.:....... ......                           |
+  | .....                                            |
+  |                                                  |
+  |                                                  |
+  |                                                  |
+  |                                                  |
+  |                                                  |
+INFO caustica: checkpoint written: checkpoint.npz (stage record, period 12, 240 steps)
+done in 8.0 s — 260 steps, converged at period 12; peak |P| = 1.399 MPa
+result: benchmarks\reports\gpu_gates\nvidia-geforce-rtx-5050-laptop-gpu-20260906-204256\rungs\vram-1.587gib-250\result.h5
+
+=== rung vram-3.809gib-324 (324, 324, 324) ===
+C:\Users\bulbu\Desktop\hifusim\.venv\Lib\site-packages\cupy\_environment.py:286: UserWarning: CUDA path could not be detected. Set CUDA_PATH environment variable if CuPy fails to load.
+  warnings.warn(
+--- planner ------------------------------------------------------
+this machine [calibrated]: t_step=105.07 ms, expected 34 s (320-320 steps, spp=20)
+memory for this run: 3.36 GiB
+expected result.h5 size: ~194.6 MB (float16-quantized, 1 harmonic; --preview-only skips it)
+planner [calibrated] westervelt on unknown:NVIDIA GeForce RTX 5050 Laptop GPU: FITS (3.36 GiB needed / 6.84 GiB usable)
+  t_step=105.07 ms, spp=20, warmup=0.5 s (one-time), expected=34.1 s (320 steps), worst-case=34.1 s
+
+solving (westervelt, cupy) -> benchmarks\reports\gpu_gates\nvidia-geforce-rtx-5050-laptop-gpu-20260906-204256\rungs\vram-3.809gib-324
+[settle] period 1/16  step 20/320  peak 35.0 kPa  d=--  eta 20s
+[settle] period 2/16  step 40/320  peak 0.153 MPa  d=3.36e+00  eta 18s
+[settle] period 3/16  step 60/320  peak 0.248 MPa  d=6.22e-01  eta 17s
+[settle] period 4/16  step 80/320  peak 0.269 MPa  d=8.69e-02  eta 15s
+[settle] period 5/16  step 100/320  peak 0.306 MPa  d=1.35e-01  eta 14s
+[settle] period 6/16  step 120/320  peak 0.355 MPa  d=1.60e-01  eta 13s
+[settle] period 7/16  step 140/320  peak 0.479 MPa  d=3.52e-01  eta 12s
+[settle] period 8/16  step 160/320  peak 0.654 MPa  d=3.64e-01  eta 10s
+  preview @ period 8 — |p| through the focus (beam left to right), peak 0.654 MPa
+  |                                                      |
+  |                                                      |
+  |                                                      |
+  |                                                      |
+  | ....                                                 |
+  | ::----:......                                        |
+  | :::----==++=-:.                                      |
+  | ==--=-+=+#+*+=:                                      |
+  | :-----===++*+-.                                      |
+  | ::-------:::...                                      |
+  | ::::...                                              |
+  |                                                      |
+  |                                                      |
+  |                                                      |
+  |                                                      |
+  |                                                      |
+INFO caustica: checkpoint written: checkpoint.npz (stage settle, period 8, 160 steps)
+[settle] period 9/16  step 180/320  peak 0.931 MPa  d=4.24e-01  eta 10s
+[settle] period 10/16  step 200/320  peak 1.380 MPa  d=4.82e-01  eta 8s
+[settle] period 11/16  step 220/320  peak 1.698 MPa  d=2.30e-01  eta 7s
+[settle] period 12/16  step 240/320  peak 1.794 MPa  d=5.68e-02  eta 5s
+[settle] period 13/16  step 260/320  peak 1.795 MPa  d=6.22e-04  eta 4s
+[settle] period 14/16  step 280/320  peak 1.795 MPa  d=4.51e-05  eta 3s
+[settle] period 15/16  step 300/320  peak 1.794 MPa  d=3.68e-04  eta 1s
+[record] period 15/16  step 300/320  peak 1.794 MPa  d=3.68e-04  eta 1s
+  preview @ period 15 — |p| through the focus (beam left to right), peak 1.794 MPa
+  |                                                      |
+  |                                                      |
+  |                                                      |
+  |                                                      |
+  |                                                      |
+  | ........                                             |
+  | ........::::.............                            |
+  | ::..:.:::-:--+*####*+++=-:                           |
+  | .......::::-----=====---:.                           |
+  | .............                                        |
+  | ....                                                 |
+  |                                                      |
+  |                                                      |
+  |                                                      |
+  |                                                      |
+  |                                                      |
+INFO caustica: checkpoint written: checkpoint.npz (stage record, period 15, 300 steps)
+done in 23.4 s — 320 steps, converged at period 15; peak |P| = 1.743 MPa
+result: benchmarks\reports\gpu_gates\nvidia-geforce-rtx-5050-laptop-gpu-20260906-204256\rungs\vram-3.809gib-324\result.h5
+
+=== rung oom-432 (432, 432, 432) ===
+C:\Users\bulbu\Desktop\hifusim\.venv\Lib\site-packages\cupy\_environment.py:286: UserWarning: CUDA path could not be detected. Set CUDA_PATH environment variable if CuPy fails to load.
+  warnings.warn(
+REFUSED before solving: this run needs 7.96 GiB but free device VRAM (NVIDIA GeForce RTX 5050 Laptop GPU) is 6.90 GiB.
+  -> increase dx by >= x1.05 (same physical extent at grid ~(410, 410, 410); voxel count scales 1/m^3)
+  -> shrink the record region (AOI): record buffers are 0.90 GiB — pass record_region=... to run()
+  -> the 'linear' solver drops the beta map and nonlinear temporaries (~0.90 GiB) — valid only if harmonics are not needed
+  -> or pick a larger device: A100-40GB, A100-80GB, H100-PCIe, H100-SXM, L4, T4, V100
+--- planner ------------------------------------------------------
+this machine [calibrated]: t_step=398.33 ms, expected 152 s (380-380 steps, spp=20)
+memory for this run: 7.96 GiB
+expected result.h5 size: ~461.3 MB (float16-quantized, 1 harmonic; --preview-only skips it)
+planner [calibrated] westervelt on unknown:NVIDIA GeForce RTX 5050 Laptop GPU: DOES NOT FIT (7.96 GiB needed / 6.84 GiB usable)
+  t_step=398.33 ms, spp=20, warmup=0.9 s (one-time), expected=2.5 min (380 steps), worst-case=2.5 min
+  ! this plan is 11x larger than the biggest grid the calibration measured (7,077,888 elements) — the step cost is extrapolated, not measured; recalibrate nearer this size
+  -> increase dx by >= x1.05 (same physical extent at grid ~(410, 410, 410); voxel count scales 1/m^3)
+  -> shrink the record region (AOI): record buffers are 0.90 GiB — pass record_region=... to run()
+  -> the 'linear' solver drops the beta map and nonlinear temporaries (~0.90 GiB) — valid only if harmonics are not needed
+  -> or pick a larger device: A100-40GB, A100-80GB, H100-PCIe, H100-SXM, L4, T4, V100
+
+=== parity: the same mini 3-D job on numpy and on cupy ===
+
+--- verdict --------------------------------------------------
+  PASS        parity: numpy vs cupy on a mini 3-D scenario: field relative error < 1e-05
+  INCOMPLETE  fullsize: a full-size run (dx=0.30 mm, 512^3 FFT class) completes without OOM
+  PASS        vram: VRAM prediction within +/-10% of the mempool peak measured in the rung's OWN process, on at least 2 grid sizes
+  FAIL        time: post-calibration wall-time prediction within +/-25% of actual, on at least 2 scenarios (same device); a plan whose source is not 'calibrated' does not count
+  PASS        oom: a run larger than the device is REFUSED before solving (exit 3) with advice
+
+overall: FAIL
+report: benchmarks\reports\gpu_gates\nvidia-geforce-rtx-5050-laptop-gpu-20260906-204256\REPORT.md
+json:   benchmarks\reports\gpu_gates\nvidia-geforce-rtx-5050-laptop-gpu-20260906-204256\gpu_gates.json

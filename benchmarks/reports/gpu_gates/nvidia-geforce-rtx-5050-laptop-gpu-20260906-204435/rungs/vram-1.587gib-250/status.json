@@ -1,0 +1,16 @@
+{
+  "job": "vram-1.587gib-250",
+  "solver": "westervelt",
+  "backend": "cupy",
+  "pid": 14416,
+  "ppw_warnings": [],
+  "state": "done",
+  "periods_done": 13,
+  "steps_done": 260,
+  "steps_expected": 260,
+  "steps_worst": 260,
+  "eta_s": 0.0,
+  "elapsed_s": 11.3,
+  "written_at": "2026-09-06T20:44:48+00:00",
+  "result": "benchmarks\\reports\\gpu_gates\\nvidia-geforce-rtx-5050-laptop-gpu-20260906-204435\\rungs\\vram-1.587gib-250\\result.h5"
+}

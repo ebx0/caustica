@@ -1,0 +1,6 @@
+--- planner ------------------------------------------------------
+this machine [calibrated]: t_step=28.01 ms, expected 8 s (260-260 steps, spp=20)
+memory for this run: 1.54 GiB
+expected result.h5 size: ~89.4 MB (float16-quantized, 1 harmonic; --preview-only skips it)
+planner [calibrated] westervelt on unknown:NVIDIA GeForce RTX 5050 Laptop GPU: FITS (1.54 GiB needed / 6.84 GiB usable)
+  t_step=28.01 ms, spp=20, warmup=0.3 s (one-time), expected=7.6 s (260 steps), worst-case=7.6 s

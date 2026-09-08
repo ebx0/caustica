@@ -1,0 +1,83 @@
+{
+  "format": "caustica-job/1",
+  "kind": "explicit",
+  "name": "vram-1.587gib-250",
+  "medium": {
+    "kind": "homogeneous",
+    "material": {
+      "name": "water",
+      "alpha_np_m": 0.5,
+      "alpha0_db_cm_mhz_y": null,
+      "y": null,
+      "rho": 1000.0,
+      "c": 1500.0,
+      "beta": 3.5,
+      "thermal_conductivity": null,
+      "specific_heat": null,
+      "perfusion_rate": null,
+      "source": ""
+    }
+  },
+  "grid": {
+    "ndim": 3,
+    "dx_mm": 0.3,
+    "size_mm": [
+      75.0,
+      75.0,
+      75.0
+    ],
+    "pml": {
+      "thickness_mm": 3.0,
+      "edge": 2.0
+    }
+  },
+  "source": {
+    "kind": "array",
+    "array": {
+      "kind": "bowl",
+      "d_outer_mm": 22.5,
+      "roc_mm": 22.5
+    },
+    "apex_mm": [
+      37.5,
+      37.5,
+      4.5
+    ],
+    "focus": {
+      "mode": "natural",
+      "target_mm": null
+    },
+    "phases_rad": null
+  },
+  "drive": {
+    "f0_mhz": 0.5,
+    "amplitude_kpa": 200.0,
+    "ramp_periods": 3.0
+  },
+  "absorption": {
+    "model": "single_frequency",
+    "y": null
+  },
+  "run": {
+    "spec": {
+      "cfl": 0.48,
+      "cfl_hard_max": 0.5,
+      "min_settle_periods": 2,
+      "max_settle_periods": 2,
+      "convergence_tol": 0.01,
+      "n_record_periods": 1,
+      "t_end_min_us": null
+    },
+    "harmonics": [
+      1
+    ],
+    "record_region_vox": null
+  },
+  "solver": "westervelt",
+  "backend": "auto",
+  "output": {
+    "folder": null,
+    "quantize": true,
+    "max_norm_err": 0.001
+  }
+}

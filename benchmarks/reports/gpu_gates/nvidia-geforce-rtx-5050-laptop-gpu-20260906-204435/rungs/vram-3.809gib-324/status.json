@@ -1,0 +1,16 @@
+{
+  "job": "vram-3.809gib-324",
+  "solver": "westervelt",
+  "backend": "cupy",
+  "pid": 22128,
+  "ppw_warnings": [],
+  "state": "done",
+  "periods_done": 16,
+  "steps_done": 320,
+  "steps_expected": 320,
+  "steps_worst": 320,
+  "eta_s": 0.0,
+  "elapsed_s": 30.1,
+  "written_at": "2026-09-06T20:45:21+00:00",
+  "result": "benchmarks\\reports\\gpu_gates\\nvidia-geforce-rtx-5050-laptop-gpu-20260906-204435\\rungs\\vram-3.809gib-324\\result.h5"
+}

@@ -1,0 +1,56 @@
+name: GPU (self-hosted)
+
+# DORMANT. There is no self-hosted CUDA runner on this repository yet, so the
+# one job here is guarded by `if: false` and this workflow can never consume a
+# minute or report a status. To wake it when a runner labelled
+# `[self-hosted, gpu]` exists: drop the `if: false`, and add the weekly
+# schedule it is meant to run on (a ladder run books the whole device for
+# minutes, so it belongs on a cron, not on every push):
+#
+#   schedule:
+#     - cron: "0 3 * * 1"
+#
+# What it runs is exactly what a developer runs by hand
+# (scripts/run_gpu_local.sh), so the local evidence and the CI evidence cannot
+# drift apart: the gpu-marked tests, then the on-device gate suite, both landing
+# in benchmarks/reports/gpu_gates/<device>-<date>/ and uploaded as an artifact.
+#
+# Exit codes the script passes through: 0 both legs green, 1 a gpu-marked test
+# failed, 2 no usable GPU, 4 a gate failed or is incomplete, 69 no in-tree
+# interpreter. A runner with less than about 15 GiB of free VRAM cannot close
+# the `fullsize` criterion and will report 4 for that reason alone, which is why
+# this is not a required check until the runner's card is known.
+#
+# Two things the runner has to satisfy before this job can produce evidence
+# rather than a skip. The install below asks for the `[gpu]` extra, so the
+# runner's CUDA has to match the `cupy-cuda12x` wheel; without a working CuPy
+# every gpu-marked test skips and the gate suite exits 2. And the steps use
+# `.venv/bin/python` and `bash`, so the runner is a Linux box.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  gpu-gates:
+    if: false
+    runs-on: [self-hosted, gpu]
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install into an in-tree venv (the script runs .venv, never a bare python)
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install -e ".[dev,gpu]"
+      - name: The gpu-marked tests and the on-device gate suite
+        run: bash scripts/run_gpu_local.sh
+      - name: Keep the stamped folder
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gpu-gates
+          # The reports and logs, not the fields: one ladder leaves a couple of
+          # hundred MB of result.h5 and fields.npz that nothing reads twice.
+          path: |
+            benchmarks/reports/gpu_gates/
+            !benchmarks/reports/gpu_gates/**/*.h5
+            !benchmarks/reports/gpu_gates/**/*.npz

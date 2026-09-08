@@ -1,0 +1,392 @@
+{
+  "format": "caustica-gpu-gates/1",
+  "generated": "2026-09-06T20:42:56+00:00",
+  "caustica": "0.1.0.dev0",
+  "git_commit": "dfd19414eea5069f5520002ca06390deaddb6fba",
+  "device": "NVIDIA GeForce RTX 5050 Laptop GPU",
+  "gpu_key": "unknown:NVIDIA GeForce RTX 5050 Laptop GPU",
+  "free_vram_gib_at_start": 6.9,
+  "environment": {
+    "caustica": "0.1.0.dev0",
+    "python": "3.12.10",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "numpy": "2.2.6",
+    "scipy": "1.15.3",
+    "pydantic": "2.13.4",
+    "h5py": "3.16.0",
+    "resolved_backend": "cupy",
+    "gpu_name": "NVIDIA GeForce RTX 5050 Laptop GPU",
+    "driver_version": 13020,
+    "cuda_runtime_version": 12090,
+    "cupy_version": "14.2.0",
+    "vram_total_gib": 7.96,
+    "vram_free_gib": 6.9
+  },
+  "calibration": {
+    "a": 0.0,
+    "b": 1.3150462447381668e-09,
+    "fit_mode": "interpolated",
+    "global_fit_mode": "throughput-anchored",
+    "fit_max_rel_residual": 0.5993103930558483,
+    "interp_loo_rel_err": null,
+    "p_max_probe": 7077888,
+    "warmup_context_s": 0.21095317403160152,
+    "warmup_per_elem_s": 8.907876148645788e-09,
+    "warmup_s": 0.23755194968543947,
+    "warmup_source": "probe",
+    "backend": "cupy",
+    "n_steps": 20,
+    "nonlinear": false,
+    "samples": [
+      [
+        2985984,
+        0.0024552501272410154
+      ],
+      [
+        7077888,
+        0.009307750035077333
+      ]
+    ],
+    "shapes": [
+      "144x144x144",
+      "192x192x192"
+    ],
+    "vram_peak_bytes_by_shape": {
+      "144x144x144": 222626816,
+      "192x192x192": 749192192
+    },
+    "calibrated_at": "2026-09-06T23:42:56+03:00"
+  },
+  "rungs": [
+    {
+      "name": "vram-1.587gib-250",
+      "shape": [
+        250,
+        250,
+        250
+      ],
+      "dx_mm": 0.3,
+      "solver": "westervelt",
+      "target_gib": 1.587,
+      "predicted_gib": 1.5438767150044441,
+      "preview_only": false,
+      "expect_fit": true,
+      "note": "",
+      "exit_code": 0,
+      "plan": {
+        "source": "calibrated",
+        "spp": 20,
+        "t_step_s": 0.03161415531051901,
+        "warmup_s": 0.35,
+        "steps_expected": 260,
+        "steps_worst": 260,
+        "t_expected_s": 8.6,
+        "vram_gib": 1.544
+      },
+      "actual": {
+        "elapsed_solve_s": 8.04,
+        "steps_total": 260,
+        "t_step_measured_s": 0.030941,
+        "t_step_steady_s": 0.02655,
+        "warmup_s": 1.142,
+        "steady_samples": 13,
+        "vram_pool_peak_gib": 1.431,
+        "converged_period": 12
+      },
+      "error": {
+        "stage": null,
+        "error_class": null,
+        "message": null,
+        "advice": null
+      }
+    },
+    {
+      "name": "vram-3.809gib-324",
+      "shape": [
+        324,
+        324,
+        324
+      ],
+      "dx_mm": 0.3,
+      "solver": "westervelt",
+      "target_gib": 3.809,
+      "predicted_gib": 3.3585536601021886,
+      "preview_only": false,
+      "expect_fit": true,
+      "note": "",
+      "exit_code": 0,
+      "plan": {
+        "source": "calibrated",
+        "spp": 20,
+        "t_step_s": 0.10507453066117897,
+        "warmup_s": 0.514,
+        "steps_expected": 320,
+        "steps_worst": 320,
+        "t_expected_s": 34.1,
+        "vram_gib": 3.359
+      },
+      "actual": {
+        "elapsed_solve_s": 23.37,
+        "steps_total": 320,
+        "t_step_measured_s": 0.073028,
+        "t_step_steady_s": 0.0664,
+        "warmup_s": 2.121,
+        "steady_samples": 16,
+        "vram_pool_peak_gib": 3.113,
+        "converged_period": 15
+      },
+      "error": {
+        "stage": null,
+        "error_class": null,
+        "message": null,
+        "advice": null
+      }
+    },
+    {
+      "name": "oom-432",
+      "shape": [
+        432,
+        432,
+        432
+      ],
+      "dx_mm": 0.3,
+      "solver": "westervelt",
+      "target_gib": 6.9,
+      "predicted_gib": 7.956752014346421,
+      "preview_only": true,
+      "expect_fit": false,
+      "note": "8.0 GiB against 6.9 GiB free: must be REFUSED (exit 3)",
+      "exit_code": 3,
+      "plan": {
+        "source": "calibrated",
+        "spp": 20,
+        "t_step_s": 0.3983331293200327,
+        "warmup_s": 0.929,
+        "steps_expected": 380,
+        "steps_worst": 380,
+        "t_expected_s": 152.3,
+        "vram_gib": 7.957
+      },
+      "actual": {
+        "elapsed_solve_s": null,
+        "steps_total": null,
+        "t_step_measured_s": null,
+        "t_step_steady_s": null,
+        "warmup_s": null,
+        "steady_samples": null,
+        "vram_pool_peak_gib": null,
+        "converged_period": null
+      },
+      "error": {
+        "stage": "gate",
+        "error_class": "VramRefusal",
+        "message": "REFUSED before solving: this run needs 7.96 GiB but free device VRAM (NVIDIA GeForce RTX 5050 Laptop GPU) is 6.90 GiB.",
+        "advice": [
+          "increase dx by >= x1.05 (same physical extent at grid ~(410, 410, 410); voxel count scales 1/m^3)",
+          "shrink the record region (AOI): record buffers are 0.90 GiB \u2014 pass record_region=... to run()",
+          "the 'linear' solver drops the beta map and nonlinear temporaries (~0.90 GiB) \u2014 valid only if harmonics are not needed",
+          "or pick a larger device: A100-40GB, A100-80GB, H100-PCIe, H100-SXM, L4, T4, V100"
+        ]
+      }
+    }
+  ],
+  "parity": {
+    "backends": [
+      "numpy",
+      "cupy"
+    ],
+    "measured_on": "in-memory fp32 SolverResult fields, same process, no result.h5 round trip",
+    "phasor": {
+      "rel_l2": 2.2615607177180296e-06,
+      "rel_linf": 1.3272632726365634e-06
+    },
+    "p_max": {
+      "rel_l2": 1.6910376429784875e-06,
+      "rel_linf": 1.3379638969001276e-06
+    },
+    "stored_float16_reference": {
+      "note": "INFORMATIONAL, not gated: the same two fields after the store's float16 quantization. ~4.9e-4 relative L-infinity is one float16 ULP and is what comparing two result.h5 files looks like when the solvers agree exactly.",
+      "phasor": {
+        "rel_l2": 2.832272815165068e-05,
+        "rel_linf": 0.0002346440793890565
+      },
+      "p_max": {
+        "rel_l2": 3.4063506380674956e-05,
+        "rel_linf": 0.00024391945043003455
+      }
+    }
+  },
+  "gates": [
+    {
+      "id": "parity",
+      "criterion": "numpy vs cupy on a mini 3-D scenario: field relative error < 1e-05",
+      "required": 4,
+      "verdict": "PASS",
+      "n_pass": 4,
+      "checks": [
+        {
+          "name": "parity phasor: relative L2",
+          "verdict": "PASS",
+          "detail": "2.262e-06 (limit 1.000e-05)",
+          "value": 2.2615607177180296e-06,
+          "limit": 1e-05,
+          "unit": ""
+        },
+        {
+          "name": "parity phasor: relative Linf",
+          "verdict": "PASS",
+          "detail": "1.327e-06 (limit 1.000e-05)",
+          "value": 1.3272632726365634e-06,
+          "limit": 1e-05,
+          "unit": ""
+        },
+        {
+          "name": "parity p_max: relative L2",
+          "verdict": "PASS",
+          "detail": "1.691e-06 (limit 1.000e-05)",
+          "value": 1.6910376429784875e-06,
+          "limit": 1e-05,
+          "unit": ""
+        },
+        {
+          "name": "parity p_max: relative Linf",
+          "verdict": "PASS",
+          "detail": "1.338e-06 (limit 1.000e-05)",
+          "value": 1.3379638969001276e-06,
+          "limit": 1e-05,
+          "unit": ""
+        }
+      ]
+    },
+    {
+      "id": "fullsize",
+      "criterion": "a full-size run (dx=0.30 mm, 512^3 FFT class) completes without OOM",
+      "required": 1,
+      "verdict": "INCOMPLETE",
+      "n_pass": 0,
+      "checks": []
+    },
+    {
+      "id": "vram",
+      "criterion": "VRAM prediction within +/-10% of the mempool peak measured in the rung's OWN process, on at least 2 grid sizes",
+      "required": 2,
+      "verdict": "PASS",
+      "n_pass": 2,
+      "checks": [
+        {
+          "name": "vram-1.587gib-250: VRAM",
+          "verdict": "PASS",
+          "detail": "predicted 1.544 GiB vs actual 1.431 GiB (+7.9%, tolerance +/-10%)",
+          "predicted": 1.544,
+          "actual": 1.431,
+          "tol_pct": 10.0,
+          "unit": " GiB",
+          "deviation_pct": 7.896575821104122
+        },
+        {
+          "name": "vram-3.809gib-324: VRAM",
+          "verdict": "PASS",
+          "detail": "predicted 3.359 GiB vs actual 3.113 GiB (+7.9%, tolerance +/-10%)",
+          "predicted": 3.359,
+          "actual": 3.113,
+          "tol_pct": 10.0,
+          "unit": " GiB",
+          "deviation_pct": 7.902345004818503
+        }
+      ]
+    },
+    {
+      "id": "time",
+      "criterion": "post-calibration wall-time prediction within +/-25% of actual, on at least 2 scenarios (same device); a plan whose source is not 'calibrated' does not count",
+      "required": 2,
+      "verdict": "FAIL",
+      "n_pass": 1,
+      "checks": [
+        {
+          "name": "vram-1.587gib-250: wall time",
+          "verdict": "PASS",
+          "detail": "predicted 8.6 s vs actual 8.04 s (+7.0%, tolerance +/-25%)",
+          "predicted": 8.6,
+          "actual": 8.04,
+          "tol_pct": 25.0,
+          "unit": " s",
+          "deviation_pct": 6.96517412935324
+        },
+        {
+          "name": "vram-3.809gib-324: wall time",
+          "verdict": "FAIL",
+          "detail": "predicted 34.1 s vs actual 23.37 s (+45.9%, tolerance +/-25%)",
+          "predicted": 34.1,
+          "actual": 23.37,
+          "tol_pct": 25.0,
+          "unit": " s",
+          "deviation_pct": 45.91356439880188
+        }
+      ]
+    },
+    {
+      "id": "oom",
+      "criterion": "a run larger than the device is REFUSED before solving (exit 3) with advice",
+      "required": 2,
+      "verdict": "PASS",
+      "n_pass": 2,
+      "checks": [
+        {
+          "name": "oom-432: refused with exit 3",
+          "verdict": "PASS",
+          "detail": "a 8.0 GiB run on this device exited 3",
+          "observed": 3,
+          "expected": 3
+        },
+        {
+          "name": "oom-432: refusal carries advice",
+          "verdict": "PASS",
+          "detail": "increase dx by >= x1.05 (same physical extent at grid ~(410, 410, 410); voxel count scales 1/m^3); shrink the record region (AOI): record buffers are 0.90 GiB \u2014 pass record_region=... to run(); the 'linear' solver drops the beta map and nonlinear temporaries (~0.90 GiB) \u2014 valid only if harmonics are not needed; or pick a larger device: A100-40GB, A100-80GB, H100-PCIe, H100-SXM, L4, T4, V100",
+          "observed": true,
+          "expected": true
+        }
+      ]
+    }
+  ],
+  "step_time_baseline": [
+    {
+      "shape": [
+        250,
+        250,
+        250
+      ],
+      "voxels": 15625000,
+      "solver": "westervelt",
+      "t_step_steady_s": 0.02655,
+      "t_step_measured_s": 0.030941,
+      "warmup_s": 1.142
+    },
+    {
+      "shape": [
+        324,
+        324,
+        324
+      ],
+      "voxels": 34012224,
+      "solver": "westervelt",
+      "t_step_steady_s": 0.0664,
+      "t_step_measured_s": 0.073028,
+      "warmup_s": 2.121
+    }
+  ],
+  "verdict": "FAIL",
+  "notes": [
+    "recorded 2 warmup sample(s) into the calibration for NVIDIA GeForce RTX 5050 Laptop GPU; it applies to the NEXT plan, not to the numbers graded above"
+  ],
+  "recorded_warmup_s": 2.121,
+  "recorded_warmup_samples": [
+    [
+      15625000,
+      1.142
+    ],
+    [
+      34012224,
+      2.121
+    ]
+  ]
+}

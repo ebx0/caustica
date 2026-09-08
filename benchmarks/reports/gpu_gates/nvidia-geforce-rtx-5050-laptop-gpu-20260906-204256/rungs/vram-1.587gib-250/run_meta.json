@@ -1,0 +1,87 @@
+{
+  "format": "caustica-run-meta/1",
+  "job": "vram-1.587gib-250",
+  "job_kind": "explicit",
+  "solver": "westervelt",
+  "backend": "cupy",
+  "generated": "2026-09-06T20:43:09+00:00",
+  "git_commit": "dfd19414eea5069f5520002ca06390deaddb6fba",
+  "environment": {
+    "caustica": "0.1.0.dev0",
+    "python": "3.12.10",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "numpy": "2.2.6",
+    "scipy": "1.15.3",
+    "pydantic": "2.13.4",
+    "h5py": "3.16.0",
+    "resolved_backend": "cupy",
+    "gpu_name": "NVIDIA GeForce RTX 5050 Laptop GPU",
+    "driver_version": 13020,
+    "cuda_runtime_version": 12090,
+    "cupy_version": "14.2.0",
+    "vram_total_gib": 7.96,
+    "vram_free_gib": 5.434
+  },
+  "ppw_warnings": [],
+  "planner": {
+    "source": "calibrated",
+    "spp": 20,
+    "dt_s": 1e-07,
+    "t_step_s": 0.03161415531051901,
+    "warmup_s": 0.35,
+    "steps_expected": 260,
+    "steps_worst": 260,
+    "t_expected_s": 8.6,
+    "t_worst_s": 8.6,
+    "vram_gib": 1.544,
+    "vram_breakdown_bytes": {
+      "state (p + u)": 250000000,
+      "property maps": 187500000,
+      "damping volume": 62500000,
+      "spectral factors (i*k*kappa)": 189000000,
+      "record buffers": 187500000,
+      "step temporaries": 439000000,
+      "fft workspace": 126000000
+    },
+    "result_size_mb_expected": 89.4,
+    "gpu": "unknown:NVIDIA GeForce RTX 5050 Laptop GPU",
+    "gpu_t_expected_s": 8.6,
+    "gpu_fits": true,
+    "warnings": [],
+    "advice": [],
+    "ppw_warnings": []
+  },
+  "actual": {
+    "elapsed_solve_s": 8.04,
+    "elapsed_total_s": 12.11,
+    "steps_total": 260,
+    "t_step_measured_s": 0.030941,
+    "warmup_s": 1.142,
+    "t_step_steady_s": 0.02655,
+    "steady_samples": 13,
+    "converged_period": 12,
+    "settle_capped": false,
+    "resumed_from_period": null,
+    "vram_pool_peak_gib": 1.431,
+    "preview_only": false
+  },
+  "derived": {
+    "apex_vox": [
+      125,
+      125,
+      15
+    ],
+    "focus_vox": [
+      125,
+      125,
+      90
+    ],
+    "focus_mode": "natural",
+    "aperture_radius_mm": 11.25,
+    "roc_mm": 22.5,
+    "f_number": 1.0,
+    "half_angle_deg": 30.000000000000004,
+    "source_voxels": 32317,
+    "drive_area_grid_squares": 4735.05322265625
+  }
+}

@@ -107,6 +107,17 @@ measured, and how, is [documented here](https://ebx0.github.io/caustica/validati
 
 ### Added
 
+- **One command for a machine's GPU evidence.** `scripts/run_gpu_local.ps1`
+  and its `.sh` twin run the `gpu`-marked tests and
+  `python -m caustica.validation gpu-gates` together and leave both logs, a
+  `SUMMARY.md` and the suite's own `REPORT.md` in one stamped folder under
+  `benchmarks/reports/gpu_gates/<device>-<date>/`. On an RTX 5050 Laptop the
+  run takes 54 s and closes the parity, VRAM and refusal gates every time.
+  The `fullsize` gate stays incomplete on that card by design, because its
+  criterion needs a 512-cubed run and the device has 8 GiB, and the `time`
+  gate passed 11 of 12 idle runs. A dormant self-hosted CI job is included
+  for anyone who wants the same evidence on their own runner.
+
 - **Power-law absorption in the material schema.** `Material` carries
   `alpha0_db_cm_mhz_y` and `y` beside the legacy single-frequency
   `alpha_np_m`, plus thermal conductivity, specific heat, perfusion and a

@@ -1,0 +1,55 @@
+{
+  "format": "caustica-job/1",
+  "kind": "explicit",
+  "name": "oom-432",
+  "medium": {
+    "kind": "homogeneous",
+    "material": {
+      "name": "water",
+      "alpha_np_m": 0.5,
+      "rho": 1000.0,
+      "c": 1500.0,
+      "beta": 3.5
+    }
+  },
+  "grid": {
+    "ndim": 3,
+    "dx_mm": 0.3,
+    "size_mm": [
+      129.6,
+      129.6,
+      129.6
+    ],
+    "pml": {
+      "thickness_mm": 3.0
+    }
+  },
+  "source": {
+    "kind": "array",
+    "array": {
+      "kind": "bowl",
+      "d_outer_mm": 38.88,
+      "roc_mm": 38.88
+    },
+    "apex_mm": [
+      64.8,
+      64.8,
+      7.776
+    ]
+  },
+  "drive": {
+    "f0_mhz": 0.5,
+    "amplitude_kpa": 200.0
+  },
+  "run": {
+    "spec": {
+      "min_settle_periods": 2,
+      "max_settle_periods": 2,
+      "n_record_periods": 1
+    },
+    "harmonics": [
+      1
+    ]
+  },
+  "solver": "westervelt"
+}

@@ -1,0 +1,55 @@
+{
+  "format": "caustica-job/1",
+  "kind": "explicit",
+  "name": "vram-3.809gib-324",
+  "medium": {
+    "kind": "homogeneous",
+    "material": {
+      "name": "water",
+      "alpha_np_m": 0.5,
+      "rho": 1000.0,
+      "c": 1500.0,
+      "beta": 3.5
+    }
+  },
+  "grid": {
+    "ndim": 3,
+    "dx_mm": 0.3,
+    "size_mm": [
+      97.2,
+      97.2,
+      97.2
+    ],
+    "pml": {
+      "thickness_mm": 3.0
+    }
+  },
+  "source": {
+    "kind": "array",
+    "array": {
+      "kind": "bowl",
+      "d_outer_mm": 29.16,
+      "roc_mm": 29.16
+    },
+    "apex_mm": [
+      48.6,
+      48.6,
+      5.832
+    ]
+  },
+  "drive": {
+    "f0_mhz": 0.5,
+    "amplitude_kpa": 200.0
+  },
+  "run": {
+    "spec": {
+      "min_settle_periods": 2,
+      "max_settle_periods": 2,
+      "n_record_periods": 1
+    },
+    "harmonics": [
+      1
+    ]
+  },
+  "solver": "westervelt"
+}

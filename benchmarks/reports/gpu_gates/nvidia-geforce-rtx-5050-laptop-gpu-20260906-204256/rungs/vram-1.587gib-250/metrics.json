@@ -1,0 +1,72 @@
+{
+  "format": "caustica-metrics/1",
+  "job": "vram-1.587gib-250",
+  "generated": "2026-09-06T20:43:09+00:00",
+  "peak": {
+    "p_pa": 1398616.8,
+    "p_mpa": 1.3986,
+    "voxel_grid": [
+      125,
+      125,
+      78
+    ],
+    "position_mm_from_apex": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 18.9
+    },
+    "gain_vs_source": 6.99,
+    "isppa_w_cm2": 65.2,
+    "p_max_time_domain_pa": 1418542.0
+  },
+  "target": {
+    "voxel_grid": [
+      125,
+      125,
+      90
+    ],
+    "p_pa": 1261343.2,
+    "hit_ratio": 0.9019,
+    "displacement_mm": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": -3.6
+    },
+    "displacement_norm_mm": 3.6
+  },
+  "focal_spot": {
+    "axial_6db": {
+      "left_mm": 12.659,
+      "right_mm": 30.775,
+      "width_mm": 18.116,
+      "truncated": false
+    },
+    "lateral_x_6db": {
+      "left_mm": -1.799,
+      "right_mm": 1.799,
+      "width_mm": 3.598,
+      "truncated": false
+    },
+    "lateral_y_6db": {
+      "left_mm": -1.799,
+      "right_mm": 1.799,
+      "width_mm": 3.598,
+      "truncated": false
+    },
+    "volume_above_6db_mm3": 163.836
+  },
+  "run": {
+    "solver": "westervelt",
+    "dt_s": 1e-07,
+    "steps_per_period": 20,
+    "steps_total": 260,
+    "t_end_us": 26.0,
+    "tof_periods": 8,
+    "converged_period": 12,
+    "settle_capped": false,
+    "harmonics_recorded": [
+      1
+    ]
+  },
+  "warnings": []
+}
