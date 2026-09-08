@@ -107,6 +107,26 @@ measured, and how, is [documented here](https://ebx0.github.io/caustica/validati
 
 ### Added
 
+- **The k-Wave parity harness.** `caustica.parity` runs a mirrored k-Wave
+  example through every native solver that can express it plus the k-Wave
+  reference, at matched CFL, and writes one `metrics.json` per example
+  against a fixed thirty-metric registry. Each example declares the subset
+  that applies to it: four mirrors from three of k-Wave's own categories
+  emit 11, 15, 10 and 14 values out of 30, and no two subsets are the same.
+  Every cell is a value, a stated "not applicable" or a stated "not
+  computed", each absence carrying its own reason; the data classes refuse
+  a blank, a dash, a placeholder string, a boolean and a non-finite number,
+  so a metric cannot silently become a zero. Measured on the four pages
+  against k-Wave and against closed forms: whole-field correlation
+  0.99999918 (heat diffusion against the exact Pennes solution), 0.99999934
+  and 0.99892 (against k-Wave), and 0.99154 (against the compiled
+  `kspaceFirstOrder` binary in 3-D), with focal peak ratios of +0.195 %,
+  +1.42 %, +0.045 % and +2.22 %. The realized CFL is recorded per engine
+  rather than assumed, because the two codes round the period to a whole
+  number of steps in opposite directions. Timing and memory ratios report
+  "not computed" until a run carries a load regime, since a measurement
+  taken while other work shares the machine is not one.
+
 - **One command for a machine's GPU evidence.** `scripts/run_gpu_local.ps1`
   and its `.sh` twin run the `gpu`-marked tests and
   `python -m caustica.validation gpu-gates` together and leave both logs, a
