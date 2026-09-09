@@ -4,9 +4,9 @@ Why a parallel container instead of four more volumes on
 :class:`~caustica.medium.Medium`
 --------------------------------------------------------
 ``Medium`` is documented as *the four property volumes the solvers consume*
-(alpha, rho, c, beta) and every acoustic path — the k-space engine, the
+(alpha, rho, c, beta) and every acoustic path (the k-space engine, the
 k-Wave adapter, the checkpoint fingerprint that hashes exactly those four
-arrays, the planner's VRAM inventory — is built on that being the whole set.
+arrays, the planner's VRAM inventory) is built on that being the whole set.
 Bolting optional thermal volumes onto it would put four maps that no
 acoustic solver reads inside every acoustic run's memory budget, and would
 make ``Medium`` half-valid whenever the material table has no thermal
@@ -14,15 +14,17 @@ fields (which is the normal case: they are ``Optional`` on ``Material`` and
 most tables leave them empty).
 
 So the thermal solve gets its own container, built the same way, with the
-same two constructors and the same refusal-to-guess rule — plus a third,
+same two constructors and the same refusal-to-guess rule, plus two more:
 :meth:`ThermalMedium.from_medium`, which reuses the id map an acoustic
-``Medium`` already carries so the two media cannot describe different
-tissue layouts.
+``Medium`` already carries so the two media cannot describe different tissue
+layouts, and :meth:`ThermalMedium.from_labels`, which builds both halves out
+of the shipped tissue library so a segmentation reaches a thermal run without
+a hand-typed table.
 
 One deliberate difference from ``Medium``: a ``ThermalMedium`` carries
 ``dx``. The acoustic solvers always receive a ``Grid`` next to the medium,
-but the Pennes solver's public API is ``solve(T0, Q, medium, dt, n_steps)``
-— a finite-difference stencil cannot be built without the spacing, so the
+but the Pennes solver's public API is ``solve(T0, Q, medium, dt, n_steps)``,
+and a finite-difference stencil cannot be built without the spacing, so the
 spacing belongs to the object that owns the stencil's coefficients.
 
 Units: k [W/m/K], rho [kg/m^3], specific heat [J/kg/K], perfusion [1/s]
@@ -31,9 +33,11 @@ Units: k [W/m/K], rho [kg/m^3], specific heat [J/kg/K], perfusion [1/s]
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 import numpy as np
 
-from caustica.materials import Material, MaterialDB
+from caustica.materials import Material, MaterialDB, tissue_db
 
 #: The three ``Material`` fields a thermal solve needs, and what they mean.
 REQUIRED_THERMAL_FIELDS: dict[str, str] = {
@@ -70,7 +74,7 @@ def _require_thermal(material: Material, tissue_id: int | None = None) -> None:
     fields = ", ".join(f"{name} ({REQUIRED_THERMAL_FIELDS[name]})" for name in missing)
     raise ThermalPropertyError(
         f"material {where}{material.name!r} is missing the thermal field(s): {fields}. "
-        f"They are Optional on Material because an acoustic run does not read them — "
+        f"They are Optional on Material because an acoustic run does not read them: "
         f"a thermal run does, and guessing them would decide the temperature this "
         f"solve exists to compute (k sets how fast the focus spreads, C how much "
         f"energy one degree costs, w_b how much blood carries away). Set them on the "
@@ -150,7 +154,7 @@ class ThermalMedium:
         """Dense thermal volumes from an integer tissue-id map.
 
         Unknown ids and materials without thermal fields are both refused,
-        with every offender named — a thermal run that quietly defaulted one
+        with every offender named, because a thermal run that quietly defaulted one
         tissue would put a cold (or a boiling) island in the dose map.
         """
         id_map = np.asarray(id_map)
@@ -198,24 +202,87 @@ class ThermalMedium:
         )
 
     @classmethod
+    def from_labels(
+        cls,
+        labels: np.ndarray,
+        names: Mapping[int, str],
+        dx: float,
+        *,
+        which: str = "mid",
+    ) -> ThermalMedium:
+        """Thermal volumes from a label volume and the shipped tissue library.
+
+        The short path from a segmentation to a thermal run, when there is no
+        acoustic medium yet::
+
+            names = {0: "water_37c", 1: "skin", 2: "liver"}
+            tmed = ThermalMedium.from_labels(labels, names, grid.dx)
+
+        Both halves come out of :data:`caustica.materials.TISSUE_LIBRARY`, so
+        no number in either is typed by hand. What this constructor CANNOT
+        check is that they came out of the same end of it: ``which`` picks
+        low, mid or high in each library row's reported spread, and a
+        ``tissue_db(names, which="lo")`` acoustic medium beside a default
+        ``which="mid"`` thermal one runs the two solves on different tissue
+        (liver rho 1050 against 1104, 5.1 % apart) with nothing raised,
+        because this constructor never sees the acoustic medium. Pass the
+        SAME ``which`` to both, or build the pair the checked way::
+
+            db = tissue_db(names, which="lo", f0_hz=1e6)
+            medium = Medium.from_id_map(labels, db)
+            tmed = ThermalMedium.from_medium(medium, db, grid.dx)
+
+        :meth:`from_medium` compares its density against the medium's and
+        refuses a mismatch, which is the guard this path has no way to run.
+
+        Every label present in ``labels`` has to be named: a segmentation
+        usually carries a background id, and silently giving it the properties
+        of whatever is next to it is how a cold island appears in a dose map.
+        """
+        labels = np.asarray(labels)
+        if not np.issubdtype(labels.dtype, np.integer):
+            raise TypeError(f"labels must be integer-typed, got {labels.dtype}")
+        present = [int(i) for i in np.unique(labels)]
+        unnamed = [i for i in present if i not in names]
+        if unnamed:
+            raise ValueError(
+                f"the label volume contains ids {unnamed} that 'names' does not name "
+                f"(named: {sorted(int(i) for i in names)}). Name every label with a "
+                f"tissue from caustica.materials.TISSUE_LIBRARY, or crop the volume to "
+                f"the region you meant to model."
+            )
+        db = tissue_db({i: names[i] for i in present}, which=which)
+        return cls.from_id_map(labels, db, dx)
+
+    @classmethod
     def from_medium(cls, medium, db: MaterialDB, dx: float) -> ThermalMedium:
         """The thermal twin of an acoustic :class:`~caustica.medium.Medium`.
 
         Uses the medium's own ``id_map``, so the two media cannot disagree
-        about where the tissues are.
+        about where the tissues are, and compares the density this table gives
+        against the medium's own, so they cannot disagree about what the
+        tissues are either. That second check is why this is the constructor
+        to prefer when an acoustic medium already exists:
+        :meth:`from_labels` builds a valid thermal medium from the same
+        library but has nothing to compare it with.
         """
         if getattr(medium, "id_map", None) is None:
             raise ValueError(
                 "this Medium carries no id_map (it was built from raw volumes or with "
-                "Medium.homogeneous), so its tissue layout cannot be reused. Build the "
-                "thermal medium with ThermalMedium.from_id_map(id_map, db, dx) or "
+                "Medium.homogeneous), so its tissue layout cannot be reused and there "
+                "is nothing to look a thermal property up by. A dense medium needs the "
+                "caller's own per-voxel thermal volumes: "
+                "ThermalMedium(k=..., rho=..., specific_heat=..., perfusion=..., dx=dx) "
+                "with four arrays of the medium's shape. From a label volume instead, "
+                "use ThermalMedium.from_id_map(id_map, db, dx) or "
+                "ThermalMedium.from_labels(labels, names, dx); one uniform tissue is "
                 "ThermalMedium.homogeneous(shape, material, dx)."
             )
         thermal = cls.from_id_map(medium.id_map, db, dx)
         if not np.allclose(thermal.rho, medium.rho):
             raise ValueError(
                 "the density this MaterialDB gives disagrees with the acoustic "
-                "Medium's rho — the two were built from different tables, and the "
+                "Medium's rho: the two were built from different tables, and the "
                 "thermal solve would run on a different phantom than the acoustic one."
             )
         return thermal
@@ -232,7 +299,7 @@ class ThermalMedium:
 
     @property
     def volumetric_heat_capacity(self) -> np.ndarray:
-        """``rho * C`` [J/m^3/K] — the energy one degree costs per voxel."""
+        """``rho * C`` [J/m^3/K], the energy one degree costs per voxel."""
         return (self.rho.astype(np.float64) * self.specific_heat).astype(np.float32)
 
     @property

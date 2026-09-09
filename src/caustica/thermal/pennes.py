@@ -22,7 +22,7 @@ sibling is not. Four reasons, in the order they decided it:
    plus correction terms (what MATLAB's ``kWaveDiffusion`` does) or an outer
    iteration. The conservative real-space stencil handles it directly, and
    with harmonic-mean face conductivities its steady state is EXACT at cell
-   centres for layered media — which is the fat/muscle/bone interface case
+   centres for layered media, which is the fat/muscle/bone interface case
    HIFU planning is made of, not a corner case.
 2. **An FFT imposes periodic boundaries.** Heat leaving the top of the block
    would re-enter at the bottom. A thermal domain is not periodic; getting
@@ -44,7 +44,7 @@ The honest cost of the choice: explicit stepping is conditionally stable, so
 ~0.1 s (a 60 s sonication is ~600 steps, cheap); on a 0.1 mm grid it is
 ~12 ms (~5000 steps). Media that need much finer grids want an implicit or
 ADI scheme, which trades a linear solve per step for unconditional
-stability. One lives in ``tests/_thermal_reference.py`` — an assembled
+stability. One lives in ``tests/_thermal_reference.py``: an assembled
 backward-Euler scipy.sparse solver that exists ONLY to cross-check this one
 (the independent-implementation criterion), deliberately not shipped as a
 second library solver.
@@ -59,7 +59,7 @@ faces, so energy is conserved to round-off::
 
 Boundaries are ``"insulated"`` (zero flux, the default: a block of tissue
 with no modelled surroundings) or ``"dirichlet"`` (walls held at
-``boundary_temperature_c``, default ``T_a`` — a body-temperature bath half a
+``boundary_temperature_c``, default ``T_a``, a body-temperature bath half a
 cell outside the domain). Time integration is forward Euler; states are
 float32 on the backend chosen through
 :func:`~caustica.core.backend.get_backend`, and the host property maps are
@@ -72,7 +72,7 @@ arterial temperature) and adds the reference back on output. This is not
 cosmetic. Conduction differences neighbouring cells, and in float32 the
 spacing of representable numbers near 37 is 3.8e-6 K: a temperature field
 carried in absolute degrees loses that much off every difference, which is
-0.01% of a 0.04 K gradient — and the two face fluxes of a cell nearly
+0.01% of a 0.04 K gradient, and the two face fluxes of a cell nearly
 cancel, so the error lands amplified in ``dT/dt``. Measured on the two-layer
 steady state of ``tests/test_thermal.py``, whose analytic profile spans
 0.039 K on a 37 C base: carried in absolute degrees the solve loses 8.4% of
@@ -85,7 +85,7 @@ caveat. Subtracting a nearby float is exact, so nothing is lost going in.
 Guards (the same discipline as the acoustic engine)
 ---------------------------------------------------
 * A ``dt`` above the stability bound is REFUSED with the number it must not
-  exceed, or sub-stepped if the caller asked for that — never silently
+  exceed, or sub-stepped if the caller asked for that, never silently
   integrated (an unstable diffusion step does not diverge quietly; it
   produces a plausible-looking checkerboard first).
 * A state that stops being finite raises :class:`ThermalDivergedError`
@@ -94,7 +94,7 @@ Guards (the same discipline as the acoustic engine)
   wearing the shape of an answer.
 * CEM43 dose is accumulated DURING the integration, sub-step by sub-step. A
   dose computed from the final temperature is a different (and for any
-  transient, wrong) number — see :mod:`caustica.thermal.dose`.
+  transient, wrong) number: see :mod:`caustica.thermal.dose`.
 """
 
 from __future__ import annotations
@@ -118,7 +118,7 @@ log = logging.getLogger("caustica")
 BLOOD_DENSITY = 1050.0
 #: Blood specific heat [J/kg/K] (IT'IS tissue database, whole blood).
 BLOOD_SPECIFIC_HEAT = 3617.0
-#: Arterial (body core) temperature [C] — the perfusion sink.
+#: Arterial (body core) temperature [C]: the perfusion sink.
 ARTERIAL_TEMPERATURE_C = 37.0
 
 #: Bumped when the numerics change; recorded in ``ThermalResult.meta``.
@@ -144,6 +144,57 @@ def _ax(arr: Any, axis: int, sl: slice) -> Any:
     return arr[tuple(idx)]
 
 
+def _point_indices(
+    points: Any, shape: tuple[int, ...]
+) -> tuple[np.ndarray | None, np.ndarray | None]:
+    """Validate the point sensor's voxels; return ``(rows, flat)``.
+
+    ``rows`` is the ``(n, ndim)`` integer array as the caller meant it and
+    ``flat`` the same voxels as offsets into the raveled field, which is what
+    the step loop indexes with. Both are ``None`` when no points were asked
+    for.
+
+    An index outside the grid is refused with the offending row rather than
+    clipped or wrapped: a sensor silently moved to the face of the domain
+    reports a temperature that is not the one the caller asked about, and
+    nothing downstream can tell that it moved.
+    """
+    if points is None:
+        return None, None
+    rows = np.asarray(points)
+    if rows.size == 0:
+        raise ValueError("points= was given but names no voxel; pass None to record none")
+    if not np.issubdtype(rows.dtype, np.integer):
+        raise TypeError(
+            f"points must be integer voxel indices, got dtype {rows.dtype}. A physical "
+            f"position becomes an index through the grid: round(x / dx)."
+        )
+    if rows.ndim == 1:
+        # One index tuple for an ndim-dimensional medium, or a list of scalar
+        # indices into a 1-D one. The two are distinguishable by length only
+        # when ndim != 1, so a 1-D medium takes the second reading.
+        rows = rows.reshape(-1, 1) if len(shape) == 1 else rows.reshape(1, -1)
+    if rows.ndim != 2 or rows.shape[1] != len(shape):
+        raise ValueError(
+            f"points must have shape (n, {len(shape)}) for a {len(shape)}-D medium, "
+            f"got {rows.shape}."
+        )
+    bad = [
+        (i, tuple(int(v) for v in row))
+        for i, row in enumerate(rows)
+        if any(v < 0 or v >= n for v, n in zip(row, shape, strict=True))
+    ]
+    if bad:
+        raise ValueError(
+            f"point(s) outside the {shape} grid: "
+            f"{', '.join(f'row {i} = {r}' for i, r in bad)}. Negative and wrapped "
+            f"indices are refused because a sensor that quietly moved reports a "
+            f"temperature from somewhere the caller never asked about."
+        )
+    flat = np.ravel_multi_index(tuple(rows.T), shape).astype(np.int64).reshape(-1)
+    return rows.astype(np.int64), flat
+
+
 @dataclass
 class ThermalResult:
     """What a Pennes solve returns.
@@ -154,7 +205,7 @@ class ThermalResult:
         Final temperature field [C], float32, shape of the medium.
     temperature_max:
         Per-voxel maximum over the whole history INCLUDING the initial state
-        and every internal sub-step — the map a thermal-safety check reads,
+        and every internal sub-step: the map a thermal-safety check reads,
         because the peak of a sonication is not its endpoint.
     dose_cem43:
         Accumulated CEM43 dose [equivalent minutes] when ``dose=True`` was
@@ -163,6 +214,13 @@ class ThermalResult:
         ``T`` at the recorded steps and their times [s] (empty when
         ``record_every`` was not given). The initial state and the final
         state are always among them when recording is on.
+    points, point_temperature, point_times:
+        The point sensor: the voxel indices that were watched ``(n, ndim)``,
+        their temperature history [C] ``(n, n_steps + 1)`` starting at
+        ``t = 0``, and the times [s] of its columns. All three are ``None``
+        when ``points=`` was not given. This is the cheap history: one float
+        per point per step against a whole volume per sample, which is what
+        ``record_every`` costs.
     dt, n_steps, t_end_s:
         The OUTER step the caller asked for, how many were taken, and the
         physical time covered.
@@ -183,6 +241,9 @@ class ThermalResult:
     t_end_s: float
     substeps: int
     meta: dict[str, Any] = field(default_factory=dict)
+    points: np.ndarray | None = None
+    point_temperature: np.ndarray | None = None
+    point_times: np.ndarray | None = None
 
     @property
     def peak_temperature_c(self) -> float:
@@ -204,8 +265,8 @@ class ThermalResult:
     def chain(results: Sequence[ThermalResult]) -> ThermalResult:
         """One result for a multi-phase exposure (source on, then off, ...).
 
-        A sonication is at least two solves — heat-up with ``Q``, cool-down
-        without it — and reading the LAST one alone is the trap this exists
+        A sonication is at least two solves (heat-up with ``Q``, cool-down
+        without it) and reading the LAST one alone is the trap this exists
         to close. The cooling phase's ``temperature_max`` starts the moment
         the source went off, so ITS peak is the temperature at switch-off,
         while the exposure's real peak may have happened earlier; a safety
@@ -214,7 +275,7 @@ class ThermalResult:
 
         The chained result therefore takes the ELEMENTWISE MAXIMUM of every
         phase's ``temperature_max``, keeps the final temperature, and carries
-        the last phase's dose — which is the whole exposure's dose only if
+        the last phase's dose, which is the whole exposure's dose only if
         each phase was handed the previous one's ``dose_cem43`` as ``dose0``.
         That is the other silent failure (a cooling phase started with
         ``dose0=None`` throws away the sonication's dose), so it is checked
@@ -264,6 +325,8 @@ class ThermalResult:
                 samples.append(s)
             offset += r.t_end_s
 
+        points, point_temperature, point_times = ThermalResult._chain_points(results)
+
         last = results[-1]
         meta = dict(last.meta)
         meta["q"] = " -> ".join(str(r.meta.get("q")) for r in results)
@@ -283,7 +346,49 @@ class ThermalResult:
             t_end_s=float(sum(r.t_end_s for r in results)),
             substeps=max(r.substeps for r in results),
             meta=meta,
+            points=points,
+            point_temperature=point_temperature,
+            point_times=point_times,
         )
+
+    @staticmethod
+    def _chain_points(
+        results: Sequence[ThermalResult],
+    ) -> tuple[np.ndarray | None, np.ndarray | None, np.ndarray | None]:
+        """Join the phases' point histories into one continuous record.
+
+        The join is refused rather than half-done: a chain in which one phase
+        watched the focus and another did not would return a history with a
+        hole in it that no axis label could show, and the ordinary use of the
+        sensor is exactly the two-phase heat-then-cool measurement.
+        """
+        watched = [r.point_temperature is not None for r in results]
+        if not any(watched):
+            return None, None, None
+        if not all(watched):
+            raise ValueError(
+                f"phases {[i for i, w in enumerate(watched) if not w]} recorded no point "
+                f"history while others did, so the chained history would have a gap in "
+                f"time that nothing downstream could see. Pass the same points= to every "
+                f"phase of the exposure."
+            )
+        first = results[0].points
+        for i, r in enumerate(results[1:], start=1):
+            if not np.array_equal(r.points, first):
+                raise ValueError(
+                    f"phase {i} watched different voxels than phase 0, so the rows of a "
+                    f"chained history would not be one point each. Pass the same points= "
+                    f"to every phase of the exposure."
+                )
+        columns = [results[0].point_temperature]
+        times = [results[0].point_times]
+        offset = results[0].t_end_s
+        for r in results[1:]:
+            # A later phase's t = 0 column IS the previous phase's last one.
+            columns.append(r.point_temperature[:, 1:])
+            times.append(r.point_times[1:] + offset)
+            offset += r.t_end_s
+        return first, np.concatenate(columns, axis=1), np.concatenate(times)
 
 
 class PennesSolver:
@@ -299,25 +404,25 @@ class PennesSolver:
         (:data:`BLOOD_DENSITY`, :data:`BLOOD_SPECIFIC_HEAT`,
         :data:`ARTERIAL_TEMPERATURE_C`); they are parameters because a
         phantom study, a hypothermia protocol or another tissue database
-        will want different ones — and changing them must be a visible act,
+        will want different ones, and changing them must be a visible act,
         not an edit to a constant.
     boundary:
         ``"insulated"`` (zero flux) or ``"dirichlet"`` (walls held at
         ``boundary_temperature_c``, default ``arterial_temperature_c``).
     reference_temperature_c:
         The offset the float32 state is carried relative to (default:
-        ``arterial_temperature_c``). See the module docstring — this is a
+        ``arterial_temperature_c``). See the module docstring: this is a
         precision decision, not a physical one; the physics is identical for
         any value, but a reference far from the field's own level throws
         away significant digits in every neighbour difference.
     on_unstable:
-        ``"refuse"`` (default) or ``"substep"`` — what to do when the
+        ``"refuse"`` (default) or ``"substep"``: what to do when the
         requested ``dt`` exceeds the stability bound. There is no third
         option: this solver does not integrate unstably.
     finite_check_every:
         Outer steps between finite-state checks (the final state is always
         checked). Each check is a device-to-host reduction, which is why it
-        is not every step — the same reasoning as the acoustic engine's
+        is not every step, the same reasoning as the acoustic engine's
         once-per-period guard.
     """
 
@@ -377,7 +482,7 @@ class PennesSolver:
         """Largest time step [s] this medium can be integrated with.
 
         The bound is ``1 / max_i (sum_faces k_face/dx^2 + w_b rho_b C_b)_i /
-        (rho C)_i`` — Gershgorin over the ASSEMBLED coefficients, so it uses
+        (rho C)_i``, Gershgorin over the ASSEMBLED coefficients, so it uses
         the real per-voxel conductivities, the real perfusion, and the real
         boundary condition (insulated faces contribute nothing; Dirichlet
         walls contribute a half-cell face). For a uniform medium with no
@@ -457,6 +562,7 @@ class PennesSolver:
         n_steps: int,
         *,
         record_every: int | None = None,
+        points: Any = None,
         dose: bool = False,
         dose0: Any = None,
     ) -> ThermalResult:
@@ -472,7 +578,7 @@ class PennesSolver:
             shape, a scalar, or ``None`` for a pure diffusion/perfusion run
             (cooling phases and the analytic gates).
         medium:
-            :class:`~caustica.thermal.properties.ThermalMedium` — carries
+            :class:`~caustica.thermal.properties.ThermalMedium`, which carries
             ``dx``.
         dt, n_steps:
             Outer step [s] and how many. ``dt`` is the SAMPLING step: if it
@@ -481,11 +587,25 @@ class PennesSolver:
             stay exactly on the caller's grid.
         record_every:
             Keep ``T`` every this many outer steps (plus the first and last).
-            ``None`` records nothing but the final state.
+            ``None`` records nothing but the final state. Each sample is a
+            WHOLE FIELD, so a long history is a stack of volumes; when the
+            question is a thermocouple trace, use ``points`` instead.
+        points:
+            Voxels to watch, ``(n, ndim)`` integer indices (a single index
+            tuple is accepted for one point). Their temperature is recorded
+            at EVERY outer step, into ``result.point_temperature`` of shape
+            ``(n, n_steps + 1)`` starting at ``t = 0``. The cost is one
+            float32 per point per step and one device-to-host transfer for
+            the whole run, against a volume per sample for ``record_every``:
+            the ordinary thermal measurement is a point history, and it
+            should not have to pay for a field it will not read. Measured on
+            a 64^3 grid over 200 steps: 804 B against 201 MiB, and a wall
+            cost of 1.00x an unrecorded solve on numpy and 1.07x on cupy,
+            where ``record_every=1`` costs 1.25x and 4.26x.
         dose:
             Accumulate CEM43 during the integration.
         dose0:
-            Dose already accumulated before this solve — the way to chain a
+            Dose already accumulated before this solve: the way to chain a
             sonication and its cooling phase, or a duty cycle, into one dose
             map: pass the previous result's ``dose_cem43`` together with its
             ``temperature`` as the new ``temperature0``.
@@ -494,7 +614,7 @@ class PennesSolver:
             raise TypeError(
                 f"medium must be a caustica.thermal.ThermalMedium, got "
                 f"{type(medium).__name__}. Build one with ThermalMedium.homogeneous / "
-                f".from_id_map / .from_medium — the acoustic Medium has no k, C or w_b."
+                f".from_id_map / .from_medium; the acoustic Medium has no k, C or w_b."
             )
         if not (np.isfinite(dt) and dt > 0):
             raise ValueError(f"dt must be a positive finite number of seconds, got {dt}")
@@ -511,6 +631,8 @@ class PennesSolver:
                 "be dropped and this solve would report no dose at all. Pass dose=True "
                 "to continue accumulating, or drop dose0 to start fresh."
             )
+
+        point_rows, point_flat = _point_indices(points, medium.shape)
 
         b = get_backend(self.backend)
         xp = b.xp
@@ -602,6 +724,25 @@ class PennesSolver:
             samples.append(np.array(b.to_numpy(theta), dtype=np.float32, copy=True) + t_ref)
             times.append(step_idx * dt)
 
+        # The point history stays ON THE DEVICE for the whole run and comes
+        # back in one transfer: a per-step copy to the host would synchronise
+        # the GPU once per step, which for a 600-step sonication costs more
+        # than the arithmetic it is watching.
+        #
+        # It is stored step-major, (n_steps + 1, n), and transposed once at
+        # the end, so each step writes into a CONTIGUOUS row and the gather is
+        # a single take() with out= instead of a take followed by a strided
+        # column write. On a GPU the step is dispatch bound at these sizes and
+        # the second launch is measurable: 31.8 us a step for the two-kernel
+        # form against 16.0 us for this one, on a step that takes 383 us
+        # (RTX 5050 Laptop, 64^3, medians of alternating rounds).
+        point_hist = None
+        theta_flat = theta.reshape(-1)
+        if point_flat is not None:
+            flat_idx = b.asarray(point_flat, xp.int64)
+            point_hist = xp.empty((n_steps + 1, len(point_flat)), dtype=xp.float32)
+            xp.take(theta_flat, flat_idx, out=point_hist[0])
+
         if record_every is not None:
             _record(0)
 
@@ -648,6 +789,8 @@ class PennesSolver:
                     dose_map += increment
                     rate = new_rate
 
+            if point_hist is not None:
+                xp.take(theta_flat, flat_idx, out=point_hist[step])
             if record_every is not None and step % record_every == 0:
                 _record(step)
             if step % self.finite_check_every == 0 and step != n_steps:
@@ -671,6 +814,15 @@ class PennesSolver:
             n_steps=n_steps,
             t_end_s=float(dt * n_steps),
             substeps=n_sub,
+            points=point_rows,
+            point_temperature=(
+                None
+                if point_hist is None
+                else np.ascontiguousarray(b.to_numpy(point_hist).T, dtype=np.float32) + t_ref
+            ),
+            point_times=(
+                None if point_hist is None else np.arange(n_steps + 1, dtype=np.float64) * dt
+            ),
             meta={
                 "scheme": SCHEME,
                 "backend": b.name,
@@ -744,8 +896,8 @@ class PennesSolver:
                 if medium.is_perfused
                 else ""
             )
-            + f"). An explicit diffusion step past this limit does not fail loudly — it "
-            f"grows a checkerboard that still looks like a temperature field — so it is "
+            + f"). An explicit diffusion step past this limit does not fail loudly: it "
+            f"grows a checkerboard that still looks like a temperature field, so it is "
             f"refused. Fix it in one of three ways: pass dt <= {dt_stable:.6g} s (and "
             f"{int(ceil(dt / dt_stable))}x more steps for the same duration), construct "
             f"the solver with PennesSolver(on_unstable='substep') to have it split the "

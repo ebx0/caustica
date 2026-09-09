@@ -123,7 +123,7 @@ def test_an_instantaneous_point_source_spreads_as_the_greens_function():
     Away from the singular first steps only: one voxel of energy is a BOX,
     not a delta, and a box carries an extra variance dx^2/12 per axis. At
     t = 30 s that is 1.0% of 2 D t and the peak (which scales as
-    variance^-3/2) is 1.5% low — visible against a 2% bar. The test
+    variance^-3/2) is 1.5% low, visible against a 2% bar. The test
     therefore grades the delta form from t = 60 s on, and separately checks
     that correcting the analytic variance for the box removes most of the
     residual, which is what proves the gap is the initial condition's shape
@@ -186,7 +186,7 @@ def test_perfusion_alone_relaxes_exponentially_towards_arterial_temperature():
 
 
 def test_constant_heating_against_perfusion_settles_at_the_analytic_steady_state():
-    """T_ss = T_a + Q / (w_b rho_b C_b) — the classic perfusion-limited rise.
+    """T_ss = T_a + Q / (w_b rho_b C_b), the classic perfusion-limited rise.
 
     Run for eight time constants, which leaves exp(-8) = 0.03% of the
     approach outstanding, so what the 2% bar actually grades is the scheme.
@@ -248,7 +248,7 @@ def test_a_conductivity_jump_obeys_the_series_resistance_of_the_two_layers():
 def test_the_reference_offset_is_what_keeps_that_profile_accurate():
     """The same solve with a deliberately distant reference loses precision.
 
-    Not a physics test — a pin on the float32 design decision. If someone
+    Not a physics test but a pin on the float32 design decision. If someone
     removes the rise-above-reference state, the gate above fails; if someone
     removes the PARAMETER, this one does.
     """
@@ -278,7 +278,7 @@ def test_insulated_walls_conserve_the_deposited_energy():
     """No source, no perfusion, zero-flux walls: sum(rho C T) cannot change.
 
     The conduction term is assembled as face fluxes precisely so that what
-    leaves one cell enters its neighbour — this is that guarantee, measured.
+    leaves one cell enters its neighbour: this is that guarantee, measured.
     """
     n = 24
     med = ThermalMedium.homogeneous((n,) * 3, TISSUE, 1e-3)
@@ -323,7 +323,7 @@ def test_an_unstable_time_step_is_refused_with_the_number_it_must_not_exceed():
 
 def test_sub_stepping_reproduces_the_small_step_solution():
     """``on_unstable='substep'`` splits the step internally and keeps the
-    caller's sampling times — the answer must be the small-step answer.
+    caller's sampling times: the answer must be the small-step answer.
 
     The initial condition is a resolved Gaussian, not a single hot voxel: a
     one-voxel spike excites the modes at the grid's Nyquist, where two
@@ -404,7 +404,7 @@ def test_the_cem43_rate_is_elementwise_and_dtype_preserving():
 
 def test_dose_accumulated_during_a_transient_matches_the_analytic_integral():
     """Cooling from 47 C with perfusion has a closed-form T(t), so its dose
-    has a closed-form integral — the solver's running sum must match it."""
+    has a closed-form integral, and the solver's running sum must match it."""
     w_b = 0.002
     tissue = TISSUE.model_copy(update={"perfusion_rate": w_b})
     med = ThermalMedium.homogeneous((4, 4, 4), tissue, 1e-3)
@@ -430,7 +430,7 @@ def test_dose_from_the_final_temperature_is_a_different_and_wrong_number():
     A voxel heated from 37 C to 43.3 C over two minutes accrued a fraction
     of a CEM43 minute; judging it by its final temperature held for the
     whole run claims seven times more. Neither is a rounding error of the
-    other — dose is an integral over the history.
+    other: dose is an integral over the history.
     """
     med = ThermalMedium.homogeneous((4, 4, 4), TISSUE, 1e-3)
     dt, n_steps = 0.5, 240
@@ -502,13 +502,28 @@ def test_the_itrusst_thresholds_are_recorded_with_their_source():
 
 def test_a_material_without_thermal_fields_is_refused_by_name():
     """``Material``'s thermal fields are Optional because acoustics does not
-    read them. A thermal solve does, and guessing them decides the answer."""
+    read them. A thermal solve does, and guessing them decides the answer.
+
+    The hand-typed water below is what a user writes in a script; the shipped
+    ``water()`` carries the IT'IS values and is accepted, which is the test
+    right after this one.
+    """
+    hand_typed = Material(name="water", alpha_np_m=0.0, rho=1000.0, c=1500.0, beta=0.0)
     with pytest.raises(ThermalPropertyError) as exc:
-        ThermalMedium.homogeneous((4, 4), water(), 1e-3)
+        ThermalMedium.homogeneous((4, 4), hand_typed, 1e-3)
     msg = str(exc.value)
     assert "'water'" in msg
     assert "thermal_conductivity" in msg and "specific_heat" in msg
     assert "perfusion_rate=0.0" in msg  # the fix for a non-perfused medium
+
+
+def test_the_shipped_water_is_thermally_complete():
+    """The other half of the refusal above: the coupling bath caustica ships
+    can be a thermal medium, with its perfusion 0.0 stated rather than absent."""
+    tm = ThermalMedium.homogeneous((4, 4), water(), 1e-3)
+    assert float(tm.k.max()) == pytest.approx(0.6045, rel=1e-6)
+    assert float(tm.specific_heat.max()) == pytest.approx(4178.0, rel=1e-6)
+    assert not tm.is_perfused
 
 
 def test_an_id_map_with_one_incomplete_tissue_names_every_offender():
@@ -676,7 +691,7 @@ def _dose_setup():
 
 
 def test_the_named_cpu_backend_and_auto_agree_bit_for_bit(no_gpu):
-    """The solver never touches numpy for state maths — it uses backend.xp.
+    """The solver never touches numpy for state maths: it uses backend.xp.
 
     With no CUDA device ``auto`` resolves to numpy, so the two runs are the
     same arithmetic on the same library and must agree to the last bit. The
@@ -699,7 +714,7 @@ def test_cupy_matches_numpy_exactly_on_state_and_to_the_last_bit_of_pow_on_dose(
 
     The temperature field is bit-identical: the update is add/multiply on
     float32, and IEEE 754 pins those on both libraries. CEM43 is not, and
-    cannot be — it accumulates ``R ** (43 - T)``, and ``pow`` is a
+    cannot be: it accumulates ``R ** (43 - T)``, and ``pow`` is a
     transcendental whose last bit is a libm-versus-CUDA implementation
     choice, not a contract. Measured here (RTX 5050, cupy 14.2): the peak
     dose agrees to 1092.270142 CEM43 minutes on both, max relative
@@ -727,7 +742,7 @@ def test_a_real_solve_feeds_a_real_sonication_end_to_end():
     Every other test here builds its Q by hand. This one is the only place
     where ``SolverResult.region``, the acoustic ``Medium``, the material
     table and ``ThermalMedium`` have to agree about shapes, spacing and
-    tissue layout — an interface mistake between the two halves
+    tissue layout, and an interface mistake between the two halves
     would show up nowhere else. Two hand-checks pin the physics across the
     join: Q at the focus is 2 alpha I of the recorded phasor, and the
     initial heating rate is Q/(rho C).
@@ -791,3 +806,150 @@ def test_the_result_carries_the_provenance_of_the_run():
     assert res.meta["q"] == "none"
     assert res.meta["dt_stable_s"] == pytest.approx(1e-6 / (4 * D_TISSUE), rel=1e-4)
     assert res.temperature.dtype == np.float32
+
+
+# --------------------------------------------------------------------------
+# The point sensor
+# --------------------------------------------------------------------------
+
+
+def _point_setup():
+    """A perfused block with one hot voxel, and two voxels worth watching."""
+    material = TISSUE.model_copy(update={"perfusion_rate": 0.002})
+    med = ThermalMedium.homogeneous((16, 16, 16), material, 3e-4)
+    t0 = np.full(med.shape, ARTERIAL_TEMPERATURE_C, np.float32)
+    q = np.zeros(med.shape, np.float32)
+    q[8, 8, 8] = 3.0e6
+    return med, t0, q
+
+
+def test_the_point_history_is_the_field_history_at_those_voxels():
+    """The sensor is not a second integration: the same solve is read two ways
+    and the two readings are identical to the bit.
+
+    A cheap history that quietly differed from the field would be worse than
+    no history, so the equality asserted here is exact rather than close.
+    """
+    med, t0, q = _point_setup()
+    solver = PennesSolver(backend="numpy")
+    dt = 0.5 * solver.stable_dt(med)
+    points = [[8, 8, 8], [8, 8, 12], [0, 0, 0]]
+    res = solver.solve(t0, q, med, dt, 24, points=points, record_every=1)
+
+    assert res.points.shape == (3, 3)
+    assert res.point_temperature.shape == (3, 25)
+    assert res.point_times[0] == 0.0
+    assert res.point_times[-1] == pytest.approx(24 * dt)
+    fields = np.stack(res.samples)  # (25, 16, 16, 16), t = 0 .. 24
+    for row, (i, j, k) in enumerate(points):
+        assert np.array_equal(res.point_temperature[row], fields[:, i, j, k])
+    # And it is a real history, not a constant: the driven voxel heats, the
+    # far corner does not move on this timescale.
+    assert res.point_temperature[0, -1] > res.point_temperature[0, 0] + 0.1
+    assert res.point_temperature[2, -1] == pytest.approx(ARTERIAL_TEMPERATURE_C, abs=1e-4)
+
+
+def test_a_point_history_costs_one_float_per_step_not_a_volume():
+    """The defect the sensor closes: a single-point trace over a sonication
+    used to cost a temperature field per sample.
+
+    The ratio measured here is the whole argument, and it is the grid size:
+    one point costs 4 bytes a step against 4 bytes per voxel a step.
+    """
+    med, t0, q = _point_setup()
+    solver = PennesSolver(backend="numpy")
+    dt = 0.5 * solver.stable_dt(med)
+    n_steps = 60
+
+    by_point = solver.solve(t0, q, med, dt, n_steps, points=[[8, 8, 8]])
+    by_field = solver.solve(t0, q, med, dt, n_steps, record_every=1)
+    point_bytes = by_point.point_temperature.nbytes
+    field_bytes = sum(s.nbytes for s in by_field.samples)
+
+    voxels = int(np.prod(med.shape))
+    assert by_point.point_temperature.shape == (1, n_steps + 1)
+    assert point_bytes == 4 * (n_steps + 1)
+    assert field_bytes == 4 * voxels * (n_steps + 1)
+    assert field_bytes / point_bytes == voxels
+    # The traces agree, so the cheap one is not a cheaper answer.
+    assert np.array_equal(
+        by_point.point_temperature[0], np.array([s[8, 8, 8] for s in by_field.samples])
+    )
+    print(
+        f"\npoint sensor: {point_bytes} B for {n_steps + 1} samples of one voxel against "
+        f"{field_bytes / 2**20:.2f} MiB of fields, ratio {voxels}x on a {med.shape} grid"
+    )
+
+
+def test_the_point_sensor_survives_a_chain_and_refuses_a_gap_in_it():
+    """A sonication is heat-then-cool, and the trace has to cross the join
+    once, not twice, and never with a hole in it."""
+    med, t0, q = _point_setup()
+    solver = PennesSolver(backend="numpy")
+    dt = 0.5 * solver.stable_dt(med)
+    points = [[8, 8, 8]]
+    hot = solver.solve(t0, q, med, dt, 10, points=points)
+    cool = solver.solve(hot.temperature, None, med, dt, 10, points=points)
+
+    both = ThermalResult.chain([hot, cool])
+    assert both.point_temperature.shape == (1, 21)  # 11 + 11 minus the shared instant
+    assert np.array_equal(both.point_temperature[0, :11], hot.point_temperature[0])
+    assert np.array_equal(both.point_temperature[0, 11:], cool.point_temperature[0, 1:])
+    assert both.point_times[-1] == pytest.approx(both.t_end_s)
+    assert np.all(np.diff(both.point_times) > 0)
+    # Peak, then cooling: the trace shows the shape the endpoint alone hides.
+    assert both.point_temperature[0].argmax() == 10
+
+    blind = solver.solve(hot.temperature, None, med, dt, 10)
+    with pytest.raises(ValueError, match="recorded no point history"):
+        ThermalResult.chain([hot, blind])
+    elsewhere = solver.solve(hot.temperature, None, med, dt, 10, points=[[1, 1, 1]])
+    with pytest.raises(ValueError, match="watched different voxels"):
+        ThermalResult.chain([hot, elsewhere])
+
+
+def test_a_point_outside_the_grid_is_refused_by_row():
+    med, t0, q = _point_setup()
+    solver = PennesSolver(backend="numpy")
+    dt = 0.5 * solver.stable_dt(med)
+    with pytest.raises(ValueError, match=r"row 1 = \(8, 8, 16\)"):
+        solver.solve(t0, q, med, dt, 2, points=[[8, 8, 8], [8, 8, 16]])
+    with pytest.raises(ValueError, match=r"row 0 = \(-1, 0, 0\)"):
+        solver.solve(t0, q, med, dt, 2, points=[[-1, 0, 0]])
+    with pytest.raises(TypeError, match="integer voxel indices"):
+        solver.solve(t0, q, med, dt, 2, points=[[8.0, 8.0, 8.0]])
+    with pytest.raises(ValueError, match=r"shape \(n, 3\)"):
+        solver.solve(t0, q, med, dt, 2, points=[[8, 8]])
+    with pytest.raises(ValueError, match="names no voxel"):
+        solver.solve(t0, q, med, dt, 2, points=[])
+    # One index tuple is the common case and is accepted as itself.
+    one = solver.solve(t0, q, med, dt, 2, points=(8, 8, 8))
+    assert one.points.tolist() == [[8, 8, 8]]
+
+
+def test_no_points_means_no_point_arrays():
+    """The three attributes are None together, so nothing downstream has to
+    guess whether an empty history means "not asked for" or "nothing happened".
+    """
+    med, t0, q = _point_setup()
+    solver = PennesSolver(backend="numpy")
+    res = solver.solve(t0, q, med, 0.5 * solver.stable_dt(med), 2)
+    assert res.points is None
+    assert res.point_temperature is None
+    assert res.point_times is None
+    assert ThermalResult.chain([res, res]).point_temperature is None
+
+
+@pytest.mark.gpu
+@pytest.mark.skipif(not cupy_available(), reason="needs a CUDA device to compare against")
+def test_the_point_sensor_reads_the_same_on_cupy_as_on_numpy():
+    """The history is gathered on the device and comes back in one transfer,
+    so it is the same arithmetic path as the field: bit-identical, like the
+    temperature it samples."""
+    med, t0, q = _point_setup()
+    points = [[8, 8, 8], [4, 5, 6]]
+    dt = 0.5 * PennesSolver(backend="numpy").stable_dt(med)
+    cpu = PennesSolver(backend="numpy").solve(t0, q, med, dt, 30, points=points)
+    gpu = PennesSolver(backend="cupy").solve(t0, q, med, dt, 30, points=points)
+    assert np.array_equal(cpu.point_temperature, np.asarray(gpu.point_temperature))
+    assert np.array_equal(cpu.points, np.asarray(gpu.points))

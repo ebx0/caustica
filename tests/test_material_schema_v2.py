@@ -311,6 +311,7 @@ def test_absorption_section_round_trips_and_reaches_the_schema(tmp_path):
         "thermal_conductivity",
         "specific_heat",
         "perfusion_rate",
+        "absorbed_fraction",
         "source",
     }
 

@@ -107,6 +107,34 @@ measured, and how, is [documented here](https://ebx0.github.io/caustica/validati
 
 ### Added
 
+- **Every shipped material answers a thermal solve.** `water()`, all five
+  `breast_default()` rows, `breast_default_power_law()` and the whole
+  `TISSUE_LIBRARY` now carry IT'IS V4.2 conductivity, heat capacity and
+  perfusion with the database row cited in `source`, plus an
+  `absorbed_fraction` that states whether its value is measured or assumed.
+  The two shortest paths into the library were the two that could not feed
+  a thermal run, and that is fixed. `tissue_db(names)` builds one
+  `MaterialDB` from library keys, and `ThermalMedium.from_medium` and
+  `.from_labels` build the thermal twin from the same table, so a label
+  volume reaches a dose with no hand-typed property anywhere in the chain;
+  a dense medium is refused by naming the four volumes it must supply
+  instead. Checked at a voxel through the whole bridge for all eight
+  tissues, worst relative error 4.4e-8, and end to end on a Westervelt run:
+  `Q` matches `2 alpha I` to 5.9e-8 and the first Pennes step matches
+  `Q dt / (rho C)` to 5.8e-6.
+- **The tissue table carries a version.** `TISSUE_LIBRARY_VERSION` and
+  `tissue_library_digest()` stamp the table as `caustica-tissue-library/1`,
+  and a test fails if any number or any citation changes without the
+  version moving with it.
+- **A point sensor for the Pennes solver.** `PennesSolver.solve(...,
+  points=)` records a temperature history at named voxels instead of a
+  stack of whole fields: on a 64-cubed grid over 200 steps one point costs
+  804 bytes against 201 MiB, and the solve itself costs 1.004 times an
+  unrecorded one against 1.407 for `record_every=1`. The history is
+  bit-identical to the field history at the same voxels, and the
+  temperature, maximum and dose trajectories are bit-identical with and
+  without it, so no scheme moves.
+
 - **The k-Wave parity harness.** `caustica.parity` runs a mirrored k-Wave
   example through every native solver that can express it plus the k-Wave
   reference, at matched CFL, and writes one `metrics.json` per example
